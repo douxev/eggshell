@@ -1,4 +1,4 @@
-# Eggshell
+# eggshell
 
 Native transition tracking app — built for, and with, trans people.
 
