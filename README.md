@@ -1,4 +1,5 @@
-# eggshell
+<img width="512" height="250" alt="feature-graphic-512x250" src="https://github.com/user-attachments/assets/5a57ba2b-e8b9-4d98-9194-26390c84c945" />
+
 
 Native transition tracking app — built for, and with, trans people.
 
