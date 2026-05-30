@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App entry-point theme. Compose owns the actual color scheme via EggshellTheme.
+         Parented on AppCompat so AppCompatDelegate.setApplicationLocales can recreate
+         the activity on pre-Android 13. -->
+    <style name="Theme.Eggshell" parent="Theme.AppCompat.Light.NoActionBar"/>
+</resources>

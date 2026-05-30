@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Privacy-first: forbid Android Auto Backup and Device-to-Device transfer to ever
+    move our encrypted DB or media files. Backup/restore is handled exclusively via
+    the explicit user-driven export in Phase 8.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root"/>
+        <exclude domain="database"/>
+        <exclude domain="sharedpref"/>
+        <exclude domain="external"/>
+        <exclude domain="file"/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root"/>
+        <exclude domain="database"/>
+        <exclude domain="sharedpref"/>
+        <exclude domain="external"/>
+        <exclude domain="file"/>
+    </device-transfer>
+</data-extraction-rules>

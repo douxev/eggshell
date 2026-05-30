@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Setting `android:configure=""` (empty string) tells the launcher to start
+    a configuration activity with no class name, which crashes the launcher
+    process on first add. Omit the attribute entirely when the widget needs
+    no configuration step. Same for previewLayout: if the launcher can't
+    rasterise it the picker can crash, so we fall back to the system default.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_transition"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_description"/>

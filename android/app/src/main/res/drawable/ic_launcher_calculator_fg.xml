@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Calculator disguise: 3x3 key grid with a small screen above. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Screen -->
+    <path
+        android:fillColor="#B2DFDB"
+        android:pathData="M36,32 H72 V42 H36 Z"/>
+    <!-- Keys (3 rows × 3) -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M36,46 H44 V52 H36 Z"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M50,46 H58 V52 H50 Z"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M64,46 H72 V52 H64 Z"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M36,56 H44 V62 H36 Z"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M50,56 H58 V62 H50 Z"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M64,56 H72 V62 H64 Z"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M36,66 H44 V72 H36 Z"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M50,66 H58 V72 H50 Z"/>
+    <!-- "=" key tinted -->
+    <path android:fillColor="#FF8A65"
+        android:pathData="M64,66 H72 V72 H64 Z"/>
+</vector>

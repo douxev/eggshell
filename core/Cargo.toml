@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = [
+    "transition-core",
+    "transition-uniffi",
+    "transition-cli",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.82"
+license = "GPL-3.0-or-later"
+authors = ["douxev"]
+
+[workspace.dependencies]
+transition-core = { path = "transition-core" }
+uniffi = { version = "0.28" }
+thiserror = "2"
+zeroize = { version = "1", features = ["derive"] }
+argon2 = "0.5"
+aes-gcm = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+panic = "abort"
+opt-level = "z"

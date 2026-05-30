@@ -1,0 +1,3 @@
+# Copy to local.properties and edit. local.properties is git-ignored.
+sdk.dir=/path/to/Android/Sdk
+# ndk.dir is optional; cargo-ndk picks up ANDROID_NDK_HOME env var

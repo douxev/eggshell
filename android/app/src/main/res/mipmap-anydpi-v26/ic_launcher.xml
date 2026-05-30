@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icon (API 26+). The foreground PNG already includes its own
+     rounded-corner cream backdrop; the background color uses the same cream
+     so the icon reads cleanly under every launcher mask (circle, squircle,
+     square). No <monochrome> slot: the foreground is a full-color photo, so
+     themed-icon mode (Android 13+) falls back to the regular icon — better
+     than a confusing rounded-square silhouette derived from its alpha. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background"/>
+    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+</adaptive-icon>

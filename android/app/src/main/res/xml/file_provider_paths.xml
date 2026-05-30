@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the precise subdirectories that genuinely need to be shared via
+     content:// URIs are listed here. A wildcard `cache-path path="."` would
+     also expose anything we ever drop in cacheDir (decrypted thumbnails,
+     decoded OCR pages, etc.) to whichever app holds a Uri grant. -->
+<paths>
+    <cache-path name="backup_share" path="backup_share/"/>
+    <cache-path name="pdf_export"   path="pdf_export/"/>
+    <cache-path name="photo_export" path="photo_export/"/>
+    <cache-path name="voice_share"  path="voice_share/"/>
+</paths>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notes disguise: stylised lined notepad with a folded corner. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Notepad body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,30 L66,30 L72,36 L72,78 L36,78 Z"/>
+    <!-- Folded corner -->
+    <path
+        android:fillColor="#FFE082"
+        android:pathData="M66,30 L72,36 L66,36 Z"/>
+    <!-- Lines -->
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M42,46 L66,46 L66,48 L42,48 Z"/>
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M42,54 L66,54 L66,56 L42,56 Z"/>
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M42,62 L60,62 L60,64 L42,64 Z"/>
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M42,70 L54,70 L54,72 L42,72 Z"/>
+</vector>

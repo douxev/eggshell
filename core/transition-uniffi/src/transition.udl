@@ -1,0 +1,316 @@
+namespace transition {
+    string hello(string name);
+
+    // Generate OWASP-recommended Argon2id parameters with a fresh random salt.
+    // The native side stores this alongside the wrapped key blob so unlock
+    // can re-derive the KEK.
+    FreshKdfMaterial fresh_kdf_material();
+
+    // Cheap key validation that does not open the full DB. Use during unlock
+    // before swapping out any persisted state.
+    [Throws=TransitionError]
+    void vault_verify_key(string db_path, VaultKey key);
+
+    // Standard injection sites known to the rotation algorithm. Returned as
+    // their canonical snake_case identifiers (the UI maps them to labels).
+    sequence<string> standard_injection_sites();
+
+    // Hormone unit conversion. Returns null when no conversion is defined.
+    double? convert_hormone_value(double value, string from_unit, string to_unit, string hormone);
+
+    // Restore a vault from an exported `.transition.enc` bundle. Returns the
+    // 32-byte master key embedded in the bundle so the native side can
+    // re-wrap it under the local Keystore (otherwise the previous
+    // wrapped_key would no longer match the restored DB and unlock would
+    // fail with "file is not in database").
+    [Throws=TransitionError]
+    ImportedVault import_encrypted(bytes bundle, string passphrase, string target_db_path);
+};
+
+[Error]
+enum TransitionError {
+    "Unimplemented",
+    "Crypto",
+    "Database",
+    "Migration",
+    "WrongKey",
+    "VaultBusy",
+};
+
+dictionary ImportedVault {
+    bytes master_key;
+};
+
+dictionary FreshKdfMaterial {
+    bytes salt;
+    u32 m_cost_kib;
+    u32 t_cost;
+    u32 p_cost;
+};
+
+// -- Medication --------------------------------------------------------------
+
+dictionary Medication {
+    i64 id;
+    string name;
+    string kind;
+    string route;
+    f64? default_dose;
+    string? default_dose_unit;
+    i64? color;
+    string? notes;
+    boolean archived;
+    i64 created_at_ms;
+};
+
+dictionary NewMedication {
+    string name;
+    string kind;
+    string route;
+    f64? default_dose;
+    string? default_dose_unit;
+    i64? color;
+    string? notes;
+};
+
+dictionary DoseEvent {
+    i64 id;
+    i64 medication_id;
+    i64 taken_at_ms;
+    f64? dose;
+    string? dose_unit;
+    string? route;
+    string? injection_site;
+    string? notes;
+};
+
+dictionary NewDoseEvent {
+    i64 medication_id;
+    i64 taken_at_ms;
+    f64? dose;
+    string? dose_unit;
+    string? route;
+    string? injection_site;
+    string? notes;
+};
+
+// -- VaultKey ----------------------------------------------------------------
+
+interface VaultKey {
+    [Name=random]
+    constructor();
+
+    [Name=from_raw, Throws=TransitionError]
+    constructor(bytes raw);
+
+    [Name=derive_from_passphrase, Throws=TransitionError]
+    constructor(string passphrase, bytes salt, u32 m_cost_kib, u32 t_cost, u32 p_cost);
+
+    [Name=unwrap_with_passphrase, Throws=TransitionError]
+    constructor(bytes wrapped, string passphrase, bytes salt, u32 m_cost_kib, u32 t_cost, u32 p_cost);
+
+    bytes export_raw();
+
+    [Throws=TransitionError]
+    bytes wrap_with_passphrase(string passphrase, bytes salt, u32 m_cost_kib, u32 t_cost, u32 p_cost);
+};
+
+// -- Vault -------------------------------------------------------------------
+
+interface Vault {
+    [Throws=TransitionError]
+    constructor(string db_path, VaultKey key);
+
+    [Throws=TransitionError]
+    u32 schema_version();
+
+    // Medication CRUD
+    [Throws=TransitionError]
+    Medication add_medication(NewMedication med, i64 now_ms);
+
+    [Throws=TransitionError]
+    Medication? get_medication(i64 id);
+
+    [Throws=TransitionError]
+    sequence<Medication> list_medications(boolean include_archived);
+
+    [Throws=TransitionError]
+    void set_medication_archived(i64 id, boolean archived);
+
+    // Dose log
+    [Throws=TransitionError]
+    DoseEvent log_dose(NewDoseEvent dose);
+
+    [Throws=TransitionError]
+    sequence<DoseEvent> list_doses(i64 medication_id, i64 offset, i64 limit);
+
+    [Throws=TransitionError]
+    string? suggest_next_injection_site(i64 medication_id, i64 history_depth);
+
+    // Schedules
+    [Throws=TransitionError]
+    DoseSchedule add_schedule(NewDoseSchedule schedule, i64 now_ms);
+
+    [Throws=TransitionError]
+    sequence<DoseSchedule> list_active_schedules();
+
+    [Throws=TransitionError]
+    sequence<DoseSchedule> list_schedules_for_medication(i64 medication_id, boolean include_inactive);
+
+    [Throws=TransitionError]
+    void set_schedule_active(i64 id, boolean active);
+
+    [Throws=TransitionError]
+    void set_schedule_next_due(i64 id, i64 next_due_at_ms);
+
+    // Journal
+    [Throws=TransitionError]
+    JournalEntry add_journal_entry(NewJournalEntry entry);
+
+    [Throws=TransitionError]
+    sequence<JournalEntry> list_journal_entries(i64 offset, i64 limit);
+
+    [Throws=TransitionError]
+    JournalEntry? get_journal_entry(i64 id);
+
+    [Throws=TransitionError]
+    void delete_journal_entry(i64 id);
+
+    // Hormones
+    [Throws=TransitionError]
+    HormoneMeasurement add_hormone_measurement(NewHormoneMeasurement m);
+
+    [Throws=TransitionError]
+    sequence<HormoneMeasurement> list_hormone_measurements(string hormone, i64 offset, i64 limit);
+
+    [Throws=TransitionError]
+    sequence<string> distinct_hormones();
+
+    [Throws=TransitionError]
+    void delete_hormone_measurement(i64 id);
+
+    // Photos
+    [Throws=TransitionError]
+    PhotoRecord add_photo_record(NewPhotoRecord photo);
+
+    [Throws=TransitionError]
+    sequence<PhotoRecord> list_photo_records(i64 offset, i64 limit);
+
+    [Throws=TransitionError]
+    void delete_photo_record(i64 id);
+
+    // Voice clips
+    [Throws=TransitionError]
+    VoiceClip add_voice_clip(NewVoiceClip clip);
+
+    [Throws=TransitionError]
+    sequence<VoiceClip> list_voice_clips(i64 offset, i64 limit);
+
+    [Throws=TransitionError]
+    void delete_voice_clip(string id);
+
+    // Generic blob encryption (photos, future audio).
+    [Throws=TransitionError]
+    bytes encrypt_blob(bytes plaintext);
+
+    [Throws=TransitionError]
+    bytes decrypt_blob(bytes ciphertext);
+
+    // Backup
+    [Throws=TransitionError]
+    bytes export_encrypted(string passphrase);
+};
+
+dictionary HormoneMeasurement {
+    i64 id;
+    i64 at_ms;
+    string hormone;
+    f64 value;
+    string unit;
+    string? lab_name;
+    string? notes;
+};
+
+dictionary NewHormoneMeasurement {
+    i64 at_ms;
+    string hormone;
+    f64 value;
+    string unit;
+    string? lab_name;
+    string? notes;
+};
+
+dictionary PhotoRecord {
+    i64 id;
+    i64 at_ms;
+    string? category;
+    string file_path;
+    string? notes;
+};
+
+dictionary NewPhotoRecord {
+    i64 at_ms;
+    string? category;
+    string file_path;
+    string? notes;
+};
+
+dictionary VoiceClip {
+    string id;
+    i64 at_ms;
+    i64 duration_ms;
+    string file_path;
+    i32? pitch_hz;
+};
+
+dictionary NewVoiceClip {
+    string id;
+    i64 at_ms;
+    i64 duration_ms;
+    string file_path;
+    i32? pitch_hz;
+};
+
+dictionary JournalEntry {
+    i64 id;
+    i64 at_ms;
+    u32? mood;
+    u32? dysphoria;
+    u32? euphoria;
+    u32? libido;
+    u32? energy;
+    string? free_text;
+    string? side_effects;
+};
+
+dictionary NewJournalEntry {
+    i64 at_ms;
+    u32? mood;
+    u32? dysphoria;
+    u32? euphoria;
+    u32? libido;
+    u32? energy;
+    string? free_text;
+    string? side_effects;
+};
+
+dictionary DoseSchedule {
+    i64 id;
+    i64 medication_id;
+    string kind;
+    u32? interval_minutes;
+    u32? daily_hour;
+    u32? daily_minute;
+    i64 next_due_at_ms;
+    boolean active;
+    i64 created_at_ms;
+};
+
+dictionary NewDoseSchedule {
+    i64 medication_id;
+    string kind;
+    u32? interval_minutes;
+    u32? daily_hour;
+    u32? daily_minute;
+    i64 next_due_at_ms;
+};

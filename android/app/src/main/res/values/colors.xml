@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same cream-yellow as the Egg artwork's own backdrop. With the
+         foreground PNG including a rounded-corner cream backdrop too, the
+         two layers blend seamlessly under any launcher mask shape (circle,
+         squircle, square…). -->
+    <color name="ic_launcher_background">#FCF6C1</color>
+    <!-- Alternative launcher backgrounds for the masking aliases. -->
+    <color name="ic_launcher_notes_bg">#FFC107</color>
+    <color name="ic_launcher_calculator_bg">#263238</color>
+    <color name="ic_launcher_weather_bg">#4FC3F7</color>
+
+    <!-- Widget surface colours. Keeps the widget on-brand without depending
+         on Material 3 theme tokens (widgets can't import them). -->
+    <color name="widget_bg">#F4EDF4</color>
+    <color name="widget_on_bg">#1D1B20</color>
+    <color name="widget_accent">#6A4FA3</color>
+    <color name="widget_accent_container">#EADDFF</color>
+    <color name="widget_on_accent">#FFFFFF</color>
+    <color name="widget_muted">#7B7689</color>
+</resources>

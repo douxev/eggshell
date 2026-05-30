@@ -1,0 +1,520 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Identité app -->
+    <string name="app_name">Eggshell</string>
+
+    <!-- Écran d'accueil (Phase 0 smoke) -->
+    <string name="hello_name_label">Ton prénom</string>
+    <string name="hello_button">Saluer depuis Rust</string>
+
+    <!-- Actions communes -->
+    <string name="action_start">Commencer</string>
+    <string name="action_back">Retour</string>
+    <string name="action_cancel">Annuler</string>
+    <string name="action_create">Créer le coffre</string>
+    <string name="action_unlock">Déverrouiller</string>
+    <string name="action_save">Enregistrer</string>
+    <string name="action_ok">OK</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title">Configuration initiale</string>
+    <string name="onboarding_welcome_title">Bienvenue</string>
+    <string name="onboarding_welcome_body">Toutes tes données restent sur ton téléphone, chiffrées en local. Aucun envoi vers un serveur. Choisis dans un instant comment tu veux protéger l\'ouverture de l\'app.</string>
+    <string name="onboarding_pick_mode_title">Mode de sécurité</string>
+    <string name="onboarding_pick_mode_body">Tu peux changer plus tard depuis les réglages.</string>
+    <string name="onboarding_creating">Création du coffre chiffré…</string>
+    <string name="onboarding_error_prefix">Erreur : %1$s</string>
+
+    <!-- Modes -->
+    <string name="mode_keystore_only_title">Clé matérielle seule</string>
+    <string name="mode_keystore_only_body">Le téléphone stocke la clé dans son module sécurisé. Aucun mot de passe à saisir, l\'app s\'ouvre instantanément. Quelqu\'un qui déverrouille ton téléphone peut ouvrir l\'app.</string>
+    <string name="mode_keystore_biometric_title">Clé matérielle + empreinte/visage</string>
+    <string name="mode_keystore_biometric_body">Tu valides biométriquement à chaque ouverture. Bon compromis sécurité/ergonomie.</string>
+    <string name="mode_keystore_passphrase_title">Mot de passe + clé matérielle</string>
+    <string name="mode_keystore_passphrase_body">Deux facteurs : il faut le mot de passe ET le téléphone. Recommandé si tu redoutes un accès physique au téléphone.</string>
+    <string name="mode_paranoid_title">Mode parano (mot de passe seul)</string>
+    <string name="mode_paranoid_body">Aucune clé persistée. Le mot de passe redérive la clé à chaque démarrage. Friction maximale, protection maximale.</string>
+
+    <!-- One-line "is this for me?" pitch shown under each mode. -->
+    <string name="mode_keystore_only_for">Pour toi si ton téléphone est un appareil de confiance.</string>
+    <string name="mode_keystore_biometric_for">Pour toi si tu veux ouvrir avec ton empreinte ou ton visage.</string>
+    <string name="mode_keystore_passphrase_for">Pour toi s\'il faut une sécurité renforcée sur l\'appareil.</string>
+    <string name="mode_paranoid_for">Pour toi si tu vis dans un contexte hostile et tu redoutes une saisie de l\'appareil.</string>
+    <string name="mode_for_label">Pour toi si&#8230;</string>
+
+    <!-- Étape passphrase -->
+    <string name="passphrase_step_title_passphrase">Choisis un mot de passe</string>
+    <string name="passphrase_step_title_paranoid">Mot de passe (mode parano)</string>
+    <string name="passphrase_step_body">Au moins %1$d caractères. Choisis quelque chose qu\'un proche ne devinerait pas.</string>
+    <string name="passphrase_label">Mot de passe</string>
+    <string name="passphrase_confirm_label">Confirmer</string>
+    <string name="passphrase_too_short">Trop court (%1$d caractères minimum).</string>
+    <string name="passphrase_mismatch">Les mots de passe ne correspondent pas.</string>
+
+    <!-- Unlock -->
+    <string name="unlock_title">Déverrouiller</string>
+    <string name="unlock_in_progress">Déverrouillage en cours…</string>
+    <string name="unlock_not_initialized">Coffre non initialisé.</string>
+    <string name="unlock_error_prefix">Échec : %1$s</string>
+    <string name="unlock_prompt_pin">Saisis ton code</string>
+    <string name="unlock_prompt_auto">Déverrouillage en cours…</string>
+    <string name="unlock_biometric_cd">Empreinte ou visage</string>
+    <string name="unlock_delete_cd">Effacer un chiffre</string>
+
+    <!-- Biométrie -->
+    <string name="biometric_setup_title">Confirme l\'enregistrement</string>
+    <string name="biometric_setup_subtitle">Pour lier le coffre à ton empreinte ou ton visage.</string>
+    <string name="biometric_unlock_title">Déverrouiller le coffre</string>
+    <string name="biometric_unlock_subtitle">Confirme avec ton empreinte ou ton visage.</string>
+
+    <!-- ===== Phase 2 : Médication ===== -->
+
+    <!-- Liste -->
+    <string name="med_list_title">Médications</string>
+    <string name="med_list_empty">Aucune médication enregistrée. Ajoute-en une avec le bouton ci-dessous.</string>
+    <string name="med_add">Ajouter</string>
+
+    <!-- Création -->
+    <string name="med_add_title">Nouvelle médication</string>
+    <string name="med_field_name">Nom</string>
+    <string name="med_field_kind">Type</string>
+    <string name="med_field_route">Voie</string>
+    <string name="med_field_default_dose">Dose habituelle</string>
+    <string name="med_field_dose_unit">Unité</string>
+    <string name="med_field_dose">Dose</string>
+    <string name="med_field_notes">Notes (facultatif)</string>
+    <string name="med_field_notes_optional">Notes (facultatif)</string>
+    <string name="med_create">Créer</string>
+    <string name="med_error_prefix">Erreur : %1$s</string>
+
+    <!-- Détail -->
+    <string name="med_detail_loading">Chargement…</string>
+    <string name="med_log_dose">Logger une prise</string>
+    <string name="med_history">Historique</string>
+    <string name="med_history_empty">Aucune prise enregistrée pour cette médication.</string>
+    <string name="med_default_dose_fmt">Dose habituelle : %1$s %2$s</string>
+
+    <!-- Log dose -->
+    <string name="med_log_dose_title">Logger une prise</string>
+    <string name="med_save_dose">Enregistrer</string>
+    <string name="med_injection_site">Site d\'injection</string>
+    <string name="med_injection_suggested">Suggéré : %1$s</string>
+
+    <!-- Kinds -->
+    <string name="kind_estrogen">Œstrogène</string>
+    <string name="kind_progesterone">Progestérone</string>
+    <string name="kind_testosterone">Testostérone</string>
+    <string name="kind_anti_androgen">Anti-androgène</string>
+    <string name="kind_gnrh_agonist">Agoniste GnRH</string>
+    <string name="kind_supplement">Supplément</string>
+    <string name="kind_other">Autre</string>
+
+    <!-- Routes -->
+    <string name="route_oral">Oral</string>
+    <string name="route_sublingual">Sublingual</string>
+    <string name="route_topical">Topique (gel/crème)</string>
+    <string name="route_transdermal">Patch</string>
+    <string name="route_injection_im">Injection IM</string>
+    <string name="route_injection_sc">Injection SC</string>
+    <string name="route_suppository">Suppositoire</string>
+    <string name="route_other">Autre</string>
+
+    <!-- Sites d'injection -->
+    <string name="site_thigh_left">Cuisse gauche</string>
+    <string name="site_thigh_right">Cuisse droite</string>
+    <string name="site_abdomen_left_upper">Ventre haut gauche</string>
+    <string name="site_abdomen_right_upper">Ventre haut droit</string>
+    <string name="site_abdomen_left_lower">Ventre bas gauche</string>
+    <string name="site_abdomen_right_lower">Ventre bas droit</string>
+    <string name="site_glute_left">Fesse gauche</string>
+    <string name="site_glute_right">Fesse droite</string>
+    <string name="site_deltoid_left">Épaule gauche</string>
+    <string name="site_deltoid_right">Épaule droite</string>
+    <string name="site_other">Autre</string>
+
+    <!-- ===== Quick log sheet (FAB) ===== -->
+    <string name="quicklog_title">Noter rapidement</string>
+    <string name="quicklog_feel">Ressenti</string>
+    <string name="quicklog_dose">Prise</string>
+    <string name="quicklog_injection">Injection</string>
+    <string name="quicklog_lab">Taux labo</string>
+    <string name="quicklog_photo">Photo</string>
+    <string name="quicklog_voice">Voix</string>
+    <string name="quicklog_fab">Noter</string>
+
+    <!-- ===== Rappels (Phase 2 suite) ===== -->
+    <string name="reminder_title">C\'est l\'heure</string>
+    <string name="reminder_body">Une prise est due. Ouvre l\'app pour voir laquelle.</string>
+    <string name="reminder_channel_name">Rappels de médication</string>
+    <string name="reminder_channel_description">Notifications quand une prise programmée arrive.</string>
+    <string name="reminder_channel_default_name">Rappels (discret)</string>
+    <string name="reminder_channel_default_description">Notification silencieuse dans la barre d\'état.</string>
+    <string name="reminder_channel_priority_name">Rappels prioritaires</string>
+    <string name="reminder_channel_priority_description">Bandeau en haut, vibration, son.</string>
+    <string name="reminder_action_mark_taken">Pris</string>
+    <string name="lab_reminder_title">Analyse à prévoir</string>
+    <!-- Generic, content-free copy shown on the lockscreen and on the
+         paired watch when the user hasn't unlocked the device. Hides the
+         specific lab / dose details from anyone glancing at the screen. -->
+    <string name="reminder_public_title">Eggshell</string>
+    <string name="reminder_public_body">Rappel — déverrouille pour voir les détails.</string>
+    <string name="reminder_locked_toast">Déverrouille l\'app pour enregistrer la prise.</string>
+    <string name="unlock_throttled_fmt">Trop d\'erreurs — patiente %1$d s avant le prochain essai.</string>
+    <string name="settings_decoy_pin_warning">Le PIN décoy te protège d\'un regard opportuniste (partenaire, contrôle rapide). En mode Keystore-seul / biométrique, il ne remplace pas la passphrase : quelqu\'un avec root + accès au Keystore peut ouvrir le coffre sans saisir le PIN. Pour une protection plus forte, choisis le mode Paranoid (passphrase obligatoire à chaque démarrage).</string>
+
+    <string name="schedule_list_title">Rappels</string>
+    <string name="schedule_add">Ajouter un rappel</string>
+    <string name="schedule_add_title">Nouveau rappel</string>
+    <string name="schedule_none">Aucun rappel programmé pour cette médication.</string>
+    <string name="schedule_kind_interval">Toutes les N heures</string>
+    <string name="schedule_kind_daily">Chaque jour à HH:MM</string>
+    <string name="schedule_field_interval_hours">Intervalle (heures)</string>
+    <string name="schedule_field_hour">Heure (0-23)</string>
+    <string name="schedule_field_minute">Minute (0-59)</string>
+    <string name="schedule_save">Programmer</string>
+    <string name="schedule_next_due_fmt">Prochain : %1$s</string>
+    <string name="schedule_interval_fmt">Toutes les %1$d h</string>
+    <string name="schedule_daily_fmt">Tous les jours à %1$02d:%2$02d</string>
+    <string name="schedule_pause">Désactiver</string>
+    <string name="schedule_resume">Réactiver</string>
+
+    <string name="permission_post_notifications_rationale">Active les notifications pour recevoir tes rappels.</string>
+    <string name="permission_exact_alarm_rationale">Pour des rappels précis à la minute, autorise les alarmes exactes dans les réglages système.</string>
+    <string name="action_open_settings">Ouvrir les réglages</string>
+
+    <!-- ===== Navigation bottom bar ===== -->
+    <string name="nav_today">Accueil</string>
+    <string name="nav_medications">Médics</string>
+    <string name="nav_journal">Journal</string>
+    <string name="nav_hormones">Courbes</string>
+    <string name="nav_photos">Photos</string>
+    <string name="nav_voice">Voix</string>
+    <string name="nav_settings">Réglages</string>
+
+    <!-- ===== Today ===== -->
+    <string name="today_greeting">Bonjour</string>
+    <string name="today_local_pill">LOCAL</string>
+    <string name="today_section_today">Aujourd\'hui</string>
+    <string name="today_section_feel">Ton ressenti</string>
+    <string name="today_section_reminders">Rappels</string>
+    <string name="today_next_dose_label">Prochaine prise</string>
+    <string name="today_ring_label">PRISES</string>
+    <string name="today_mark_taken">Marquer comme pris</string>
+    <string name="today_all_taken">Tout est pris ✓</string>
+    <string name="today_feel_title">Comment tu te sens ?</string>
+    <string name="today_feel_sub">Glisse 4 curseurs · 10 secondes</string>
+    <string name="today_feel_trend_label">Humeur · 14 jours</string>
+    <string name="today_feel_trend_rising">En hausse</string>
+    <string name="today_reminder_lab_title">Analyse sanguine</string>
+    <string name="today_reminder_lab_sub">Œstradiol + testostérone</string>
+    <string name="today_reminder_lab_when">à venir</string>
+    <string name="today_reminder_injection_title">Injection hebdomadaire</string>
+    <string name="today_reminder_injection_sub">Site conseillé selon la rotation</string>
+    <string name="today_reminder_injection_when">Lun.</string>
+    <string name="today_reminders_empty">Aucun rappel programmé. Configure-en depuis Réglages → Rappels.</string>
+
+    <!-- ===== Phase 3 : Journal ===== -->
+    <string name="journal_title">Journal</string>
+    <string name="journal_new">Nouvelle entrée</string>
+    <string name="journal_empty">Aucune entrée pour le moment.</string>
+    <string name="journal_add_title">Comment tu vas ?</string>
+    <string name="journal_save">Enregistrer</string>
+    <string name="journal_error">Une erreur s\'est produite.</string>
+    <string name="journal_field_text">Note libre (facultatif)</string>
+    <string name="journal_field_side_effects">Effets secondaires</string>
+    <string name="journal_field_side_effects_hint">Sépare par des virgules.</string>
+    <string name="journal_side_effects_prefix">Effets : %1$s</string>
+    <string name="gauge_mood">Humeur</string>
+    <string name="gauge_dysphoria">Dysphorie</string>
+    <string name="gauge_euphoria">Euphorie</string>
+    <string name="gauge_libido">Libido</string>
+    <string name="gauge_energy">Énergie</string>
+    <string name="journal_history">Historique</string>
+    <string name="journal_edit_title">Modifier l\'entrée</string>
+    <string name="journal_empty_for_date">Pas d\'entrée ce jour-là.</string>
+    <string name="journal_prev_month">Mois précédent</string>
+    <string name="journal_next_month">Mois suivant</string>
+
+    <!-- ===== Phase 4 : Hormones ===== -->
+    <string name="hormones_title">Courbes</string>
+    <string name="hormones_tab_hormones">Hormones</string>
+    <string name="hormones_tab_weight">Poids</string>
+    <string name="weight_kind">Poids</string>
+    <string name="weight_add_title">Nouvelle pesée</string>
+    <string name="weight_save">Enregistrer</string>
+    <string name="weight_unit_kg">kg</string>
+    <string name="weight_unit_lb">lb</string>
+    <string name="weight_empty">Saisis ton poids pour voir l\'évolution dans le temps.</string>
+    <string name="weight_add_fab">Saisir un poids</string>
+    <string name="weight_last_measure_fmt">dernière pesée · %1$s</string>
+    <string name="weight_value_label">Poids</string>
+
+    <!-- ===== OCR lab-result import ===== -->
+    <string name="import_lab_entry">Importer un PDF ou une photo</string>
+    <string name="import_lab_title">Importer un résultat</string>
+    <string name="import_lab_intro_title">Importe ton bilan (PDF ou photo)</string>
+    <string name="import_lab_intro_sub">Tout est analysé localement (ML Kit on-device). Le fichier ne quitte jamais ton téléphone.</string>
+    <string name="import_lab_supported_hint">Reconnaît : œstradiol, testostérone, progestérone, LH, FSH, prolactine, SHBG.</string>
+    <string name="import_lab_pick">Choisir un fichier</string>
+    <string name="import_lab_processing">Lecture du document…</string>
+    <string name="import_lab_review_title">Valeurs détectées</string>
+    <string name="import_lab_review_sub">Décoche celles qui ne correspondent pas.</string>
+    <string name="import_lab_date_label">DATE DU PRÉLÈVEMENT</string>
+    <string name="import_lab_date_auto">Détectée automatiquement dans le document.</string>
+    <string name="import_lab_date_manual">Date saisie manuellement.</string>
+    <string name="import_lab_date_change">Modifier</string>
+    <string name="import_lab_no_match">Aucune valeur n\'a pu être extraite. Essaie une photo plus lisible ou saisis manuellement.</string>
+    <string name="import_lab_retry">Recommencer</string>
+    <string name="import_lab_save_fmt">Enregistrer (%1$d)</string>
+    <string name="import_lab_done_title">Importé</string>
+    <string name="import_lab_done_fmt">%1$d valeur(s) ajoutée(s).</string>
+    <string name="import_lab_close">Fermer</string>
+    <string name="import_lab_error_title">Échec de la lecture</string>
+    <string name="hormones_new">Ajouter un résultat</string>
+    <string name="hormones_empty">Saisis tes résultats de labo pour voir l\'évolution.</string>
+    <string name="hormones_add_title">Nouveau résultat</string>
+    <string name="hormones_field_hormone">Hormone</string>
+    <string name="hormones_field_value">Valeur</string>
+    <string name="hormones_field_unit">Unité</string>
+    <string name="hormones_field_lab">Laboratoire (facultatif)</string>
+    <string name="hormones_field_at">Date (epoch ms)</string>
+    <string name="hormones_save">Enregistrer</string>
+    <string name="hormones_unit_pgml">pg/mL</string>
+    <string name="hormones_unit_pmoll">pmol/L</string>
+    <string name="hormones_unit_ngdl">ng/dL</string>
+    <string name="hormones_unit_nmoll">nmol/L</string>
+    <string name="hormones_unit_miuml">mIU/mL</string>
+    <string name="hormones_unit_other">Autre</string>
+    <string name="hormones_history">Historique</string>
+    <string name="hormones_edit_title">Modifier la mesure</string>
+    <string name="hormones_date_pick_fmt">Date : %1$s</string>
+    <string name="hormones_delete_confirm">Cette mesure sera définitivement supprimée.</string>
+    <string name="weight_edit_title">Modifier la pesée</string>
+    <string name="hormones_last_measure_fmt">dernière mesure · %1$s</string>
+    <string name="hormones_vs_previous">vs préc.</string>
+
+    <!-- Hormone kinds -->
+    <string name="hormone_estradiol">Œstradiol</string>
+    <string name="hormone_progesterone">Progestérone</string>
+    <string name="hormone_testosterone">Testostérone</string>
+    <string name="hormone_lh">LH</string>
+    <string name="hormone_fsh">FSH</string>
+    <string name="hormone_prolactin">Prolactine</string>
+    <string name="hormone_shbg">SHBG</string>
+    <string name="hormone_other">Autre</string>
+
+    <!-- ===== Phase 5 : Photos ===== -->
+    <string name="photos_title">Photos d\'évolution</string>
+    <string name="photos_add">Ajouter</string>
+    <string name="photos_empty">Aucune photo. Tape sur \"Ajouter\" pour en sélectionner depuis ta galerie ; elle sera chiffrée localement.</string>
+    <string name="photos_locked">Une photo chiffrée</string>
+
+    <!-- ===== Phase 7 : Réglages / Masquage / Phase 8 Backup ===== -->
+    <string name="settings_title">Réglages</string>
+    <string name="settings_section_language">Langue</string>
+    <string name="settings_language_system">Système</string>
+    <string name="settings_language_fr">Français</string>
+    <string name="settings_language_en">English</string>
+
+    <string name="settings_section_privacy">Confidentialité</string>
+    <string name="settings_block_screenshots">Bloquer les captures d\'écran</string>
+    <string name="settings_block_screenshots_sub">Empêche les screenshots, l\'enregistrement d\'écran et l\'aperçu dans les apps récentes.</string>
+    <string name="settings_section_security">Mode de sécurité</string>
+    <string name="settings_current_mode_fmt">Actuel : %1$s</string>
+    <string name="settings_change_mode_to">Passer en : %1$s</string>
+    <string name="settings_current_passphrase">Mot de passe actuel</string>
+    <string name="settings_new_passphrase">Nouveau mot de passe</string>
+    <string name="settings_decoy_requires_passphrase">Le PIN de leurre exige un mode avec mot de passe (Keystore + passphrase ou Parano).</string>
+    <string name="settings_switch_to_passphrase">Passer en mode passphrase</string>
+    <string name="settings_section_masking">Masquage de l\'app</string>
+    <string name="settings_section_backup">Sauvegarde</string>
+    <string name="settings_current_icon">Icône active</string>
+    <string name="settings_pick_icon">Choisir une icône / un nom</string>
+    <string name="settings_decoy_pin">Code d\'accès + PIN de leurre (facultatif)</string>
+    <string name="settings_decoy_pin_hint">À l\'ouverture, un clavier 4 chiffres remplace la saisie de ton mot de passe. Le \"code d\'accès\" ouvre ton vrai mot de passe ; le \"PIN de leurre\" ouvre une calculatrice factice. Les deux doivent être différents.</string>
+    <string name="settings_access_pin_label">Code d\'accès (4 chiffres)</string>
+    <string name="settings_access_pin_hint">Mène à la saisie du mot de passe.</string>
+    <string name="settings_decoy_pin_label">PIN de leurre (4 chiffres)</string>
+    <string name="settings_decoy_pin_hint_field">Doit être différent du code d\'accès.</string>
+    <string name="settings_save_decoy_pin">Activer le clavier PIN</string>
+    <string name="settings_clear_decoy_pin">Désactiver le clavier PIN</string>
+
+    <!-- ===== Configurer les rappels ===== -->
+    <string name="settings_section_reminders">Rappels</string>
+    <string name="settings_reminders_hint">Choisis les rappels actifs (injection, patch/gel, comprimé, analyse) et active la notification prioritaire au besoin.</string>
+    <string name="settings_open_reminders">Configurer les rappels</string>
+    <string name="reminders_title">Configurer les rappels</string>
+    <string name="reminders_section_meds">Médication</string>
+    <string name="reminders_section_meds_hint">Rappels programmés depuis chaque médication. Active la notification prioritaire pour celles qui ne tolèrent pas d\'oubli.</string>
+    <string name="reminders_section_labs">Analyses</string>
+    <string name="reminders_section_labs_hint">Bilans hormonaux, prises de sang, suivis. Ajoute-en autant que tu veux.</string>
+    <string name="reminders_no_meds">Aucun rappel actif. Crée-en depuis la fiche d\'une médication.</string>
+    <string name="reminders_no_labs">Aucun rappel d\'analyse. Tape sur + pour en ajouter un.</string>
+    <string name="reminders_priority_label">Notification prioritaire</string>
+    <string name="reminders_priority_hint">Bandeau, vibration et son. Sinon, notification silencieuse.</string>
+    <string name="reminders_delete">Supprimer</string>
+    <string name="reminders_add_lab">Ajouter un rappel d\'analyse</string>
+    <string name="reminders_lab_dialog_title">Nouveau rappel d\'analyse</string>
+    <string name="reminders_lab_label">Nom (ex. bilan hormonal)</string>
+    <string name="reminders_lab_kind_interval">Tous les N jours</string>
+    <string name="reminders_lab_kind_daily">Chaque jour à HH:MM</string>
+    <string name="reminders_lab_interval_days">Intervalle (jours)</string>
+    <string name="reminders_lab_interval_fmt">Tous les %1$d jours</string>
+    <string name="reminders_lab_save">Enregistrer</string>
+    <string name="reminders_lab_default_label">Bilan hormonal</string>
+    <string name="reminders_section_photos">Photo d\'évolution</string>
+    <string name="reminders_section_photos_hint">Un cliché régulier pour la timeline. Désactivable, comme tout.</string>
+    <string name="reminders_no_photos">Aucun rappel photo.</string>
+    <string name="reminders_add_photo">Ajouter un rappel photo</string>
+    <string name="reminders_photo_dialog_title">Nouveau rappel photo</string>
+    <string name="reminders_photo_default_label">Photo d\'évolution</string>
+    <string name="reminders_section_voice">Suivi voix</string>
+    <string name="reminders_section_voice_hint">Un extrait audio à intervalle régulier pour suivre l\'évolution.</string>
+    <string name="reminders_no_voice">Aucun rappel voix.</string>
+    <string name="reminders_add_voice">Ajouter un rappel voix</string>
+    <string name="reminders_voice_dialog_title">Nouveau rappel voix</string>
+    <string name="reminders_voice_default_label">Enregistrement voix</string>
+
+    <!-- ===== Réglages / hub ===== -->
+    <string name="more_title">Réglages</string>
+    <string name="more_row_reminders">Rappels &amp; notifications</string>
+    <string name="more_row_reminders_sub">Médication, analyses, photo, voix</string>
+    <string name="more_row_advanced">Paramètres avancés</string>
+    <string name="more_row_advanced_sub">Sécurité, masquage, sauvegarde, langue</string>
+    <string name="more_row_pdf">Export PDF</string>
+    <string name="more_row_pdf_sub">Bilan clair pour ton endocrino</string>
+    <string name="more_row_units">Unités d\'analyse</string>
+    <string name="more_row_units_sub">Affichage pg/mL, nmol/L, etc.</string>
+    <string name="more_row_theme">Thème</string>
+    <string name="more_row_theme_sub">Lavender, Catppuccin, Gruvbox, Dracula…</string>
+    <string name="more_row_resources">Ressources importantes</string>
+    <string name="more_row_resources_sub">Sites et associations utiles.</string>
+    <string name="more_row_features">Fonctionnalités</string>
+    <string name="more_row_features_sub">Active ou masque journal, courbes, poids, photos, voix.</string>
+    <string name="more_row_donate">Soutenir Eggshell</string>
+    <string name="more_row_donate_sub">Si l\'app t\'aide, un don PayPal me fait toujours plaisir 💛</string>
+
+    <!-- ===== Ressources screen ===== -->
+    <string name="resources_title">Ressources importantes</string>
+    <string name="resources_hint">Sites, lignes d\'écoute et associations. Le lien s\'ouvre dans ton navigateur.</string>
+    <string name="resources_open_external">Ouvrir le lien</string>
+
+    <!-- ===== Theme picker ===== -->
+    <string name="theme_picker_title">Thème</string>
+    <string name="theme_picker_hint">Choisis ta palette. Le changement s\'applique immédiatement.</string>
+
+    <!-- ===== What's new sheet ===== -->
+    <string name="whats_new_version_fmt">Version %1$s</string>
+    <string name="whats_new_got_it">C\'est parti</string>
+    <!-- ===== Features (per-view toggles) ===== -->
+    <string name="features_title">Fonctionnalités</string>
+    <string name="features_hint">Choisis ce qui apparaît dans la barre du bas. Seul Aujourd\'hui reste toujours visible.</string>
+    <string name="feature_medications_title">Médics</string>
+    <string name="feature_medications_sub">Catalogue de médication, prises, rotation des sites d\'injection.</string>
+    <string name="feature_journal_title">Journal</string>
+    <string name="feature_journal_sub">Humeur, dysphorie, libido, effets ressentis.</string>
+    <string name="feature_hormones_title">Courbes</string>
+    <string name="feature_hormones_sub">Taux hormonaux et suivi du poids dans le temps.</string>
+    <string name="feature_weight_title">Suivi du poids</string>
+    <string name="feature_weight_sub">Affiche l\'onglet Poids dans Courbes.</string>
+    <string name="feature_photos_title">Timeline photo</string>
+    <string name="feature_photos_sub">Évolution datée, avant/après, chiffrée localement.</string>
+    <string name="feature_voice_title">Suivi voix</string>
+    <string name="feature_voice_sub">Extraits audios datés et évolution de la voix.</string>
+
+    <!-- ===== Hormone units ===== -->
+    <string name="hormones_units_title">Unités d\'affichage</string>
+    <string name="hormones_units_hint">Tes valeurs sont stockées telles que saisies. Choisis ici dans quelle unité elles sont affichées.</string>
+    <string name="hormones_units_as_recorded">Comme saisi</string>
+    <string name="hormones_units_default">Par défaut</string>
+
+    <!-- ===== PDF export ===== -->
+    <string name="pdf_title">Export pour le médecin</string>
+    <string name="pdf_intro_title">Un PDF clair et synthétique</string>
+    <string name="pdf_intro_sub">À montrer à un soignant. Tout est généré localement, rien n\'est envoyé en ligne.</string>
+    <string name="pdf_section_period">Période</string>
+    <string name="pdf_period_1m">1 mois</string>
+    <string name="pdf_period_3m">3 mois</string>
+    <string name="pdf_period_6m">6 mois</string>
+    <string name="pdf_period_all">Tout</string>
+    <string name="pdf_section_include">À inclure</string>
+    <string name="pdf_inc_meds">Médication &amp; observance</string>
+    <string name="pdf_inc_meds_sub">Traitements actifs, doses, voies</string>
+    <string name="pdf_inc_hormones">Courbes hormonales</string>
+    <string name="pdf_inc_hormones_sub">Œstradiol, testostérone, etc.</string>
+    <string name="pdf_inc_journal">Journal de ressentis</string>
+    <string name="pdf_inc_journal_sub">Humeur, dysphorie, énergie</string>
+    <string name="pdf_inc_labs">Rappels d\'analyses</string>
+    <string name="pdf_inc_labs_sub">Bilans à venir et fréquence</string>
+    <string name="pdf_generate">Générer &amp; partager</string>
+    <string name="pdf_generating">Génération…</string>
+
+    <!-- ===== Photo lightbox ===== -->
+    <string name="photos_share">Partager</string>
+    <string name="photos_save">Enregistrer</string>
+    <string name="photos_saved_to_gallery">Enregistré dans la galerie Pictures/Eggshell</string>
+
+    <!-- ===== Voice share ===== -->
+    <string name="voice_share">Partager</string>
+
+    <!-- ===== Photos onglets ===== -->
+    <string name="photos_tab_gallery">Galerie</string>
+    <string name="photos_tab_compare">Comparer</string>
+    <string name="photos_compare_not_enough">Au moins deux photos sont nécessaires pour comparer.</string>
+    <string name="photos_compare_before">Avant</string>
+    <string name="photos_compare_after">Maintenant</string>
+    <string name="photos_compare_span_fmt">%1$d mois d\'évolution</string>
+    <string name="photos_compare_span_sub">Glisse pour comparer n\'importe quelles deux dates</string>
+
+    <!-- ===== Voix ===== -->
+    <string name="voice_title">Suivi voix</string>
+    <string name="voice_clips_count_label">EXTRAITS ENREGISTRÉS</string>
+    <string name="voice_clips_unit">enregistrements</string>
+    <string name="voice_clips_hint">Lis le paragraphe test à chaque fois pour comparer.</string>
+    <string name="voice_clips_count_fmt">%1$d extrait(s) au total</string>
+    <string name="voice_pitch_label">HAUTEUR MOYENNE (F0)</string>
+    <string name="voice_pitch_delta_up">+%1$d Hz depuis le début</string>
+    <string name="voice_pitch_delta_down">-%1$d Hz depuis le début</string>
+    <string name="voice_pitch_delta_flat">Stable depuis le début</string>
+    <string name="voice_section_clips">Extraits</string>
+    <string name="voice_empty">Aucun extrait pour le moment. Appuie sur le micro pour t\'enregistrer.</string>
+    <string name="voice_record">Démarrer l\'enregistrement</string>
+    <string name="voice_stop">Arrêter</string>
+    <string name="voice_play">Lecture</string>
+    <string name="voice_record_hint">Enregistrer un extrait</string>
+    <string name="voice_record_sub">Dans un endroit calme · lis le même paragraphe à chaque fois · ~30 cm du micro.</string>
+    <string name="voice_pitch_disclaimer">Estimation locale · sensible au bruit ambiant. Pour suivre l\'évolution, garde des conditions identiques (lieu, distance, texte).</string>
+    <string name="voice_recording_fmt">Enregistrement… %1$s</string>
+    <string name="voice_processing_title">Analyse de la voix…</string>
+    <string name="voice_processing_sub">Ça prend quelques secondes (chiffrement + estimation de la hauteur).</string>
+    <string name="action_delete">Supprimer</string>
+    <string name="unlock_prompt_passphrase">Mot de passe</string>
+    <string name="settings_export">Exporter le coffre</string>
+    <string name="settings_export_hint">Génère un fichier .transition.enc chiffré que tu peux sauvegarder où tu veux.</string>
+    <string name="settings_import">Importer un coffre</string>
+    <string name="settings_import_hint">Restaure un fichier .transition.enc précédemment exporté.</string>
+    <string name="settings_export_done">Export terminé.</string>
+    <string name="settings_import_done">Import terminé. L\'app va se redémarrer.</string>
+
+    <!-- Decoy mode -->
+    <string name="decoy_title">Calculatrice</string>
+
+    <!-- Alias de masquage (Phase 7) -->
+    <string name="alias_notes">Notes</string>
+    <string name="alias_calculator">Calculatrice</string>
+    <string name="alias_weather">Météo</string>
+
+    <!-- ===== Widget ===== -->
+    <string name="widget_label">Eggshell · prochain rappel</string>
+    <string name="widget_description">Affiche le prochain rappel programmé.</string>
+    <string name="widget_eyebrow">EGGSHELL · PROCHAIN</string>
+    <string name="widget_default_title">Tout est calme</string>
+    <string name="widget_default_subtitle">Aucun rappel programmé.</string>
+    <string name="widget_action_open">Ouvrir</string>
+    <string name="widget_action_journal">Noter</string>
+    <string name="widget_med_title">Prise programmée</string>
+    <string name="widget_in_label">dans</string>
+    <string name="widget_tomorrow">demain</string>
+    <string name="widget_now">maintenant</string>
+    <string name="widget_in_days_fmt">%1$d j</string>
+</resources>
