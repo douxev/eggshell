@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Politique de confidentialité — Eggshell</title>
+  <meta name="description"
+        content="Eggshell est une app de suivi d'hormonothérapie 100% locale. Aucune donnée ne quitte ton téléphone.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="egg" aria-hidden="true"></div>
+  <h1>Eggshell</h1>
+  <div class="lang-switch">
+    Français · <a href="en/">English</a>
+  </div>
+</header>
+
+<main>
+  <p class="meta">Politique de confidentialité — dernière mise à jour&nbsp;: 30&nbsp;mai&nbsp;2026</p>
+
+  <h2>En une phrase</h2>
+  <p>
+    <strong>Eggshell ne collecte aucune donnée.</strong> Tout ce que tu enregistres
+    dans l'app — médication, prises, valeurs hormonales, journal, photos, notes
+    vocales, rappels — reste chiffré sur ton téléphone et n'est jamais envoyé,
+    partagé ou stocké ailleurs.
+  </p>
+
+  <h2>Qui édite cette app</h2>
+  <p>
+    Eggshell est édité par <strong>douxev</strong>, développeuse indépendante.
+    Contact&nbsp;: <a href="mailto:eggshell@douxev.com">eggshell@douxev.com</a>.
+    Code source et architecture détaillés&nbsp;: voir le dépôt
+    <a href="https://github.com/douxev/eggshell">github.com/douxev/eggshell</a>.
+  </p>
+
+  <h2>Ce que l'app ne fait jamais</h2>
+  <ul>
+    <li>Aucune connexion à un serveur. L'app ne demande même pas la permission Internet&nbsp;: techniquement, elle <em>ne peut pas</em> envoyer quoi que ce soit hors du téléphone.</li>
+    <li>Aucune publicité, aucun pisteur (Google Analytics, Crashlytics, Sentry, Firebase&nbsp;: aucun n'est inclus).</li>
+    <li>Aucune création de compte, aucun identifiant utilisateur.</li>
+    <li>Aucune sauvegarde automatique vers le cloud (Google Drive, iCloud&nbsp;: désactivés explicitement dans les paramètres système de l'app).</li>
+    <li>Aucune télémétrie, aucune métrique d'usage, aucun rapport de crash distant.</li>
+  </ul>
+
+  <h2>Ce que l'app stocke et où</h2>
+  <p>
+    Toutes tes données vivent dans une base SQLite chiffrée (SQLCipher,
+    AES-256-CBC) dans le dossier privé de l'app sur ton téléphone. Les photos
+    et enregistrements audio sont stockés comme blobs chiffrés (AES-256-GCM)
+    dans le même dossier. La clé de chiffrement est&nbsp;:
+  </p>
+  <ul>
+    <li>soit générée aléatoirement et protégée par le <strong>Keystore Android</strong> de ton téléphone (mode par défaut)&nbsp;;</li>
+    <li>soit dérivée d'une <strong>passphrase</strong> que tu choisis (Argon2id)&nbsp;;</li>
+    <li>soit les deux (mode mixte ou "Paranoïaque" où la clé n'est jamais persistée).</li>
+  </ul>
+  <p>
+    Sans l'une de ces clés, le contenu de la base est inutilisable — même
+    pour quelqu'un qui aurait un accès physique au téléphone et le déverrouillerait.
+  </p>
+
+  <h2>Permissions Android demandées et pourquoi</h2>
+  <ul>
+    <li><code>POST_NOTIFICATIONS</code> — afficher les rappels de prise de médication et d'analyses.</li>
+    <li><code>SCHEDULE_EXACT_ALARM</code> / <code>USE_EXACT_ALARM</code> — déclencher les rappels exactement à l'heure programmée (la précision est importante pour les schémas d'hormonothérapie).</li>
+    <li><code>RECEIVE_BOOT_COMPLETED</code> — re-planifier les rappels après un redémarrage du téléphone.</li>
+    <li><code>USE_BIOMETRIC</code> — utiliser ton empreinte / Face Unlock pour déverrouiller le coffre, si tu l'as activé.</li>
+    <li><code>CAMERA</code> — uniquement si tu choisis d'utiliser la timeline photo. La capture se fait dans l'app, la photo est chiffrée immédiatement et n'est jamais écrite dans la galerie système.</li>
+    <li><code>RECORD_AUDIO</code> — uniquement si tu choisis d'utiliser le suivi voix. Idem&nbsp;: capture in-app, chiffrement immédiat, jamais dans les fichiers système.</li>
+  </ul>
+  <p>
+    Aucune permission liée au réseau (<code>INTERNET</code>,
+    <code>ACCESS_NETWORK_STATE</code>) n'est demandée.
+  </p>
+
+  <h2>Bibliothèques tierces utilisées</h2>
+  <p>
+    L'app embarque plusieurs bibliothèques techniques, toutes 100% on-device&nbsp;:
+  </p>
+  <ul>
+    <li><strong>SQLCipher</strong> — chiffrement de la base.</li>
+    <li><strong>ML Kit Text Recognition (variant <em>bundled</em>)</strong> — reconnaissance de texte sur les PDFs de résultats de laboratoire pour l'import automatique. Le modèle est embarqué dans l'app&nbsp;; il ne contacte aucun serveur Google et ne dépend pas des Google Play Services.</li>
+    <li><strong>Android Keystore</strong> — gestion sécurisée de la clé maître.</li>
+    <li><strong>Jetpack Compose, Material 3, AndroidX</strong> — UI, ressources Android standard.</li>
+  </ul>
+  <p>
+    Aucune de ces bibliothèques ne fait de réseau à notre connaissance.
+    Une vérification technique est possible&nbsp;: l'app ne demande pas la
+    permission <code>INTERNET</code> dans son manifest.
+  </p>
+
+  <h2>Tes droits sur tes données</h2>
+  <p>
+    Comme aucune donnée ne quitte ton téléphone, il n'y a personne à qui
+    demander la communication ou la suppression d'une donnée te concernant.
+    Toutes les actions RGPD sont des actions <em>locales</em> que tu effectues
+    directement&nbsp;:
+  </p>
+  <ul>
+    <li><strong>Accès</strong> — toutes tes données sont déjà affichées dans l'app après déverrouillage.</li>
+    <li><strong>Portabilité</strong> — Réglages → "Exporter une sauvegarde chiffrée" génère un fichier <code>.transition.enc</code> que tu peux conserver / déplacer / réimporter sur un autre téléphone.</li>
+    <li><strong>Suppression</strong> — Réglages → "Réinitialiser le coffre" supprime <em>définitivement</em> et <em>irréversiblement</em> l'ensemble du contenu, ainsi que les clés de chiffrement. Désinstaller l'app a le même effet.</li>
+  </ul>
+
+  <h2>Partage volontaire</h2>
+  <p>
+    L'app inclut deux fonctions de partage <strong>déclenchées explicitement</strong>
+    par toi&nbsp;:
+  </p>
+  <ul>
+    <li><strong>Export PDF "bilan médecin"</strong> — génère un document local que tu choisis ensuite d'envoyer (ou pas) via le partage système Android.</li>
+    <li><strong>Sauvegarde chiffrée</strong> — produit un fichier <code>.transition.enc</code> protégé par une passphrase que toi seul·e connais.</li>
+  </ul>
+  <p>
+    Dans les deux cas, le destinataire (médecin, autre téléphone, clé USB…)
+    est <strong>choisi par toi</strong> au moment du partage&nbsp;; rien n'est
+    envoyé automatiquement.
+  </p>
+
+  <h2>Sécurité du téléphone lui-même</h2>
+  <p>
+    Eggshell ne peut pas te protéger d'un téléphone non verrouillé entre les
+    mains de quelqu'un d'autre. Pour cette raison&nbsp;:
+  </p>
+  <ul>
+    <li>L'aperçu dans le sélecteur d'apps récentes et les captures d'écran sont bloqués par défaut (réglable dans Réglages → Confidentialité).</li>
+    <li>Un PIN de "leurre" optionnel permet de présenter une app calculatrice / notes factice à un regard indiscret.</li>
+    <li>Un mode "Paranoïaque" oblige la saisie de la passphrase à chaque démarrage du téléphone.</li>
+  </ul>
+
+  <h2>Enfants</h2>
+  <p>
+    Cette app traite de sujets médicaux adultes (hormonothérapie). Elle n'est
+    pas destinée aux moins de 18 ans et n'est pas conçue pour suivre les
+    règles "Designed for Families" du Play Store.
+  </p>
+
+  <h2>Modifications de cette politique</h2>
+  <p>
+    Toute modification est publiée sur cette même URL avec la date de mise à
+    jour en haut de page. Les changements substantiels (nouveau type de
+    donnée, nouvelle permission, ajout d'un service tiers) sont annoncés
+    explicitement dans une notification "What's new" à l'ouverture de l'app
+    qui suit l'update.
+  </p>
+
+  <h2>Juridiction</h2>
+  <p>
+    Eggshell est un projet indépendant développé en France. En cas de litige
+    ou question relative au RGPD, le contact reste
+    <a href="mailto:eggshell@douxev.com">eggshell@douxev.com</a>.
+  </p>
+</main>
+
+<footer>
+  Eggshell · douxev · <a href="en/">English version</a>
+</footer>
+
+</body>
+</html>

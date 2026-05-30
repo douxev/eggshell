@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Privacy Policy — Eggshell</title>
+  <meta name="description"
+        content="Eggshell is a 100% local HRT tracking app. No data ever leaves your phone.">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<header>
+  <div class="egg" aria-hidden="true"></div>
+  <h1>Eggshell</h1>
+  <div class="lang-switch">
+    <a href="../">Français</a> · English
+  </div>
+</header>
+
+<main>
+  <p class="meta">Privacy policy — last updated: 30 May 2026</p>
+
+  <h2>In one sentence</h2>
+  <p>
+    <strong>Eggshell does not collect any data.</strong> Everything you record
+    in the app — medications, doses, hormone values, journal, photos, voice
+    clips, reminders — stays encrypted on your phone and is never sent,
+    shared or stored anywhere else.
+  </p>
+
+  <h2>Who publishes this app</h2>
+  <p>
+    Eggshell is published by <strong>douxev</strong>, independent developer.
+    Contact: <a href="mailto:eggshell@douxev.com">eggshell@douxev.com</a>.
+    Source code and architecture details:
+    <a href="https://github.com/douxev/eggshell">github.com/douxev/eggshell</a>.
+  </p>
+
+  <h2>What the app never does</h2>
+  <ul>
+    <li>No server connection. The app does not even request the Internet permission: it technically <em>cannot</em> send anything off-device.</li>
+    <li>No advertising, no trackers (no Google Analytics, no Crashlytics, no Sentry, no Firebase).</li>
+    <li>No account, no user identifier.</li>
+    <li>No automatic cloud backup (Google Drive, iCloud: explicitly disabled in the app's manifest).</li>
+    <li>No telemetry, no usage metrics, no remote crash reports.</li>
+  </ul>
+
+  <h2>What the app stores and where</h2>
+  <p>
+    All your data lives in an encrypted SQLite database (SQLCipher,
+    AES-256-CBC) in the app's private folder on your phone. Photos and audio
+    recordings are stored as encrypted blobs (AES-256-GCM) in the same
+    folder. The encryption key is either:
+  </p>
+  <ul>
+    <li>randomly generated and protected by the Android <strong>Keystore</strong> of your phone (default mode);</li>
+    <li>derived from a <strong>passphrase</strong> you choose (Argon2id);</li>
+    <li>or both (mixed mode, or "Paranoid" mode where the key is never persisted).</li>
+  </ul>
+  <p>
+    Without one of these keys, the database contents are unusable — even by
+    someone with physical access to your unlocked phone.
+  </p>
+
+  <h2>Android permissions and why</h2>
+  <ul>
+    <li><code>POST_NOTIFICATIONS</code> — show medication and lab reminders.</li>
+    <li><code>SCHEDULE_EXACT_ALARM</code> / <code>USE_EXACT_ALARM</code> — fire reminders at the exact time you scheduled (clinically relevant for HRT regimens).</li>
+    <li><code>RECEIVE_BOOT_COMPLETED</code> — re-schedule reminders after a phone reboot.</li>
+    <li><code>USE_BIOMETRIC</code> — use your fingerprint / face unlock to open the vault, if you opted in.</li>
+    <li><code>CAMERA</code> — only if you choose to use the photo timeline. Capture happens in-app, the photo is encrypted immediately and never written to the system gallery.</li>
+    <li><code>RECORD_AUDIO</code> — only if you choose to use voice tracking. Same: in-app capture, immediate encryption, never in system files.</li>
+  </ul>
+  <p>
+    No network-related permission (<code>INTERNET</code>,
+    <code>ACCESS_NETWORK_STATE</code>) is requested.
+  </p>
+
+  <h2>Third-party libraries</h2>
+  <p>
+    The app bundles several technical libraries, all 100% on-device:
+  </p>
+  <ul>
+    <li><strong>SQLCipher</strong> — database encryption.</li>
+    <li><strong>ML Kit Text Recognition (<em>bundled</em> variant)</strong> — text recognition on lab-result PDFs for automatic import. The model ships inside the app; it does not contact any Google server and does not depend on Google Play Services.</li>
+    <li><strong>Android Keystore</strong> — secure master-key management.</li>
+    <li><strong>Jetpack Compose, Material 3, AndroidX</strong> — standard Android UI / resource libraries.</li>
+  </ul>
+  <p>
+    None of these libraries perform network calls to our knowledge. You can
+    verify this technically: the app does not request <code>INTERNET</code>
+    permission in its manifest.
+  </p>
+
+  <h2>Your rights over your data</h2>
+  <p>
+    Because no data ever leaves your phone, there is nobody to ask for
+    access or deletion of data concerning you. All GDPR-type actions are
+    <em>local</em> actions you perform directly:
+  </p>
+  <ul>
+    <li><strong>Access</strong> — all your data is already shown in the app after unlock.</li>
+    <li><strong>Portability</strong> — Settings → "Export an encrypted backup" produces a <code>.transition.enc</code> file you can keep / move / re-import on another phone.</li>
+    <li><strong>Erasure</strong> — Settings → "Reset vault" permanently and irreversibly destroys all content and encryption keys. Uninstalling the app has the same effect.</li>
+  </ul>
+
+  <h2>Voluntary sharing</h2>
+  <p>
+    The app includes two sharing features <strong>explicitly triggered</strong>
+    by you:
+  </p>
+  <ul>
+    <li><strong>"Doctor visit" PDF export</strong> — generates a local document you then choose (or not) to send via the Android system share sheet.</li>
+    <li><strong>Encrypted backup</strong> — produces a <code>.transition.enc</code> file protected by a passphrase only you know.</li>
+  </ul>
+  <p>
+    In both cases the recipient (doctor, other phone, USB stick…) is
+    <strong>chosen by you</strong> at share time; nothing is sent
+    automatically.
+  </p>
+
+  <h2>Phone security itself</h2>
+  <p>
+    Eggshell can't protect you from an unlocked phone in someone else's
+    hands. For that reason:
+  </p>
+  <ul>
+    <li>The Recents thumbnail and screenshots are blocked by default (toggleable in Settings → Privacy).</li>
+    <li>An optional "decoy" PIN presents a fake calculator / notes app to a snooping eye.</li>
+    <li>A "Paranoid" mode requires the passphrase at every cold boot.</li>
+  </ul>
+
+  <h2>Children</h2>
+  <p>
+    This app deals with adult medical topics (hormone therapy). It is not
+    intended for users under 18 and is not designed to follow the Play
+    Store's "Designed for Families" guidelines.
+  </p>
+
+  <h2>Changes to this policy</h2>
+  <p>
+    Any change is published on this same URL with the updated date at the
+    top of the page. Substantial changes (new data type, new permission,
+    new third-party service) are also announced explicitly in a "What's
+    new" notice the next time you open the app after the update.
+  </p>
+
+  <h2>Jurisdiction</h2>
+  <p>
+    Eggshell is an independent project developed in France. For any GDPR
+    or related question, the contact remains
+    <a href="mailto:eggshell@douxev.com">eggshell@douxev.com</a>.
+  </p>
+</main>
+
+<footer>
+  Eggshell · douxev · <a href="../">Version française</a>
+</footer>
+
+</body>
+</html>
