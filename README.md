@@ -1,4 +1,4 @@
-# Eggshell — gh-pages
+# eggshell — gh-pages
 
 Privacy policy + landing pages served at https://douxev.github.io/eggshell/
 
