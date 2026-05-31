@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.MedicationRepository
+import com.douxev.eggshell.ui.common.clickToDismissKeyboard
 import uniffi.transition.NewMedication
 
 @HiltViewModel
@@ -96,6 +97,7 @@ fun AddMedicationScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .clickToDismissKeyboard()
                 .padding(horizontal = 24.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),

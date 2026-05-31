@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Same cream-yellow as the Egg artwork's own backdrop. With the
-         foreground PNG including a rounded-corner cream backdrop too, the
-         two layers blend seamlessly under any launcher mask shape (circle,
-         squircle, square…). -->
-    <color name="ic_launcher_background">#FCF6C1</color>
+    <!-- Same cream-yellow as the Egg artwork's own backdrop, sampled from
+         the top centre of egg.png. With the foreground PNG including a
+         rounded-corner cream backdrop too, the two layers blend seamlessly
+         under any launcher mask shape (circle, squircle, square…). -->
+    <color name="ic_launcher_background">#FCF6D5</color>
     <!-- Alternative launcher backgrounds for the masking aliases. -->
     <color name="ic_launcher_notes_bg">#FFC107</color>
     <color name="ic_launcher_calculator_bg">#263238</color>

@@ -65,9 +65,14 @@ class VaultRepository @Inject constructor(
         biometricCopy: BiometricCopy,
     ) = withContext(Dispatchers.IO) {
         require(!isInitialized) { "vault already initialized" }
+        ensureBiometricAvailable(activity)
         val key = VaultKey.random()
         val raw = key.exportRaw()
-        val secret = keystoreBio.getOrCreate(requireBiometric = true)
+        // Always recreate the bio key — a stale alias from a prior failed
+        // attempt is the #1 cause of KeyPermanentlyInvalidatedException at
+        // cipher.init time, which fires *before* any biometric prompt and
+        // makes the failure look like "no prompt, just an error".
+        val secret = keystoreBio.recreate(requireBiometric = true)
         // Wrapping with a biometric-bound key needs a successful auth prompt.
         val encryptCipher = Cipher.getInstance(KeystoreWrapper.TRANSFORM).apply {
             init(Cipher.ENCRYPT_MODE, secret)
@@ -83,6 +88,18 @@ class VaultRepository @Inject constructor(
         prefs.setWrappedKey(wrapped)
         prefs.mode = VaultPrefs.Mode.KEYSTORE_BIOMETRIC
         session = Vault(dbPath, key)
+    }
+
+    private fun ensureBiometricAvailable(activity: FragmentActivity) {
+        when (BiometricKeystoreUnlock.availability(activity)) {
+            BiometricKeystoreUnlock.Availability.AVAILABLE -> Unit
+            BiometricKeystoreUnlock.Availability.NOT_ENROLLED ->
+                error("Aucune empreinte ou visage enregistré sur ce téléphone")
+            BiometricKeystoreUnlock.Availability.NO_HARDWARE ->
+                error("Ce téléphone n'a pas de capteur biométrique compatible Class 3")
+            BiometricKeystoreUnlock.Availability.UNAVAILABLE ->
+                error("Biométrie temporairement indisponible — réessaie après avoir déverrouillé l'écran")
+        }
     }
 
     suspend fun initializeKeystorePassphrase(passphrase: String) = withContext(Dispatchers.IO) {
@@ -143,7 +160,7 @@ class VaultRepository @Inject constructor(
         val rawKey: ByteArray = try {
             recoverRawKey(current, currentPassphrase, activity, biometricCopy)
         } catch (t: Throwable) {
-            return@withContext ChangeModeOutcome.Failed(t.message ?: "recover key")
+            return@withContext ChangeModeOutcome.Failed(describe(t))
         } ?: return@withContext ChangeModeOutcome.Failed("missing credentials")
 
         // Step 2: persist the same key under the target mode's wrap.
@@ -151,9 +168,18 @@ class VaultRepository @Inject constructor(
             applyNewMode(newMode, rawKey, newPassphrase, activity, biometricCopy)
             ChangeModeOutcome.Success
         } catch (t: Throwable) {
-            ChangeModeOutcome.Failed(t.message ?: "apply new mode")
+            ChangeModeOutcome.Failed(describe(t))
         }
     }
+
+    /**
+     * Builds a "ClassName: message" string. Bare `t.message` is often null or
+     * one cryptic word ("Tag", "init") and the user has no way to tell us which
+     * exception variant they hit. Carrying the class name lets a future bug
+     * report be diagnosed at a glance.
+     */
+    private fun describe(t: Throwable): String =
+        "${t::class.java.simpleName}: ${t.message ?: "no detail"}"
 
     private suspend fun recoverRawKey(
         mode: VaultPrefs.Mode,
@@ -198,19 +224,27 @@ class VaultRepository @Inject constructor(
         activity: FragmentActivity?,
         biometricCopy: BiometricCopy?,
     ) {
+        // CRITICAL: never delete the *previous* mode's Keystore key before the
+        // new mode is fully committed. If the new wrap throws (biometric prompt
+        // cancelled, KeyPermanentlyInvalidatedException, …) and we've already
+        // deleted the old key, the persisted wrappedKey becomes un-decryptable
+        // and the vault is unrecoverable. Delete only after prefs.mode flips.
         when (newMode) {
             VaultPrefs.Mode.KEYSTORE_ONLY -> {
-                runCatching { keystoreBio.delete() }
                 val secret = keystore.getOrCreate(requireBiometric = false)
                 val wrapped = keystore.encrypt(secret, rawKey)
                 prefs.setWrappedKey(wrapped)
                 prefs.setKdfMaterial(null)
                 prefs.mode = newMode
+                runCatching { keystoreBio.delete() }
             }
             VaultPrefs.Mode.KEYSTORE_BIOMETRIC -> {
                 require(activity != null && biometricCopy != null) { "biometric needs activity + copy" }
-                runCatching { keystore.delete() }
-                val secret = keystoreBio.getOrCreate(requireBiometric = true)
+                ensureBiometricAvailable(activity)
+                // Same recreate-from-scratch dance as initializeKeystoreBiometric
+                // — avoids inheriting a stale, invalidated alias from a previous
+                // half-finished mode switch.
+                val secret = keystoreBio.recreate(requireBiometric = true)
                 val encryptCipher = javax.crypto.Cipher.getInstance(KeystoreWrapper.TRANSFORM).apply {
                     init(javax.crypto.Cipher.ENCRYPT_MODE, secret)
                 }
@@ -222,6 +256,7 @@ class VaultRepository @Inject constructor(
                 prefs.setWrappedKey(wrapped)
                 prefs.setKdfMaterial(null)
                 prefs.mode = newMode
+                runCatching { keystore.delete() }
             }
             VaultPrefs.Mode.KEYSTORE_PASSPHRASE -> {
                 require(!newPassphrase.isNullOrBlank()) { "new passphrase required" }
@@ -235,6 +270,7 @@ class VaultRepository @Inject constructor(
                 prefs.setKdfMaterial(kdf.toPrefs())
                 prefs.setWrappedKey(wrappedByKeystore)
                 prefs.mode = newMode
+                runCatching { keystoreBio.delete() }
             }
             VaultPrefs.Mode.PARANOID -> error("paranoid handled separately")
         }
@@ -300,7 +336,7 @@ class VaultRepository @Inject constructor(
             session = Vault(dbPath, key)
             UnlockOutcome.Success
         } catch (cause: Throwable) {
-            UnlockOutcome.Failed(cause.message ?: cause::class.simpleName.orEmpty())
+            UnlockOutcome.Failed(describe(cause))
         }
     }
 

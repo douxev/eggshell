@@ -91,6 +91,66 @@ class LabReminderManager @Inject constructor(
         return entry
     }
 
+    /**
+     * Overwrite an existing reminder's schedule + label. Keeps the same id
+     * (so priority preference and any saved widget reference survive), cancels
+     * the old alarm, and schedules the fresh nextDueAt.
+     */
+    fun updateInterval(id: Long, label: String, intervalDays: Int) {
+        require(label.isNotBlank()) { "label required" }
+        require(intervalDays > 0) { "intervalDays must be positive" }
+        val existing = prefs.get(id) ?: error("no reminder with id $id")
+        val now = System.currentTimeMillis()
+        val nextDue = LabNextDueCalculator.nextDueAfter(
+            kind = "interval",
+            intervalDays = intervalDays,
+            dailyHour = null,
+            dailyMinute = null,
+            afterMs = now,
+        )
+        alarmScheduler.cancelLab(id)
+        prefs.put(
+            existing.copy(
+                label = label.trim(),
+                kind = "interval",
+                intervalDays = intervalDays,
+                dailyHour = null,
+                dailyMinute = null,
+                nextDueAtMs = nextDue,
+            )
+        )
+        alarmScheduler.scheduleLab(id, nextDue)
+        refreshWidget()
+    }
+
+    fun updateDaily(id: Long, label: String, hour: Int, minute: Int) {
+        require(label.isNotBlank()) { "label required" }
+        require(hour in 0..23) { "hour out of range" }
+        require(minute in 0..59) { "minute out of range" }
+        val existing = prefs.get(id) ?: error("no reminder with id $id")
+        val now = System.currentTimeMillis()
+        val nextDue = LabNextDueCalculator.nextDueAfter(
+            kind = "daily",
+            intervalDays = null,
+            dailyHour = hour,
+            dailyMinute = minute,
+            afterMs = now,
+        )
+        alarmScheduler.cancelLab(id)
+        prefs.put(
+            existing.copy(
+                label = label.trim(),
+                kind = "daily",
+                intervalDays = null,
+                dailyHour = hour,
+                dailyMinute = minute,
+                nextDueAtMs = nextDue,
+            )
+        )
+        alarmScheduler.scheduleLab(id, nextDue)
+        refreshWidget()
+    }
+
     fun delete(id: Long) {
         alarmScheduler.cancelLab(id)
         prefs.remove(id)

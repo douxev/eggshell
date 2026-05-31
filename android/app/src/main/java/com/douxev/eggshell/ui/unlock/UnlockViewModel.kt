@@ -37,6 +37,14 @@ class UnlockViewModel @Inject constructor(
         data object AwaitingPassphrase : State
 
         /**
+         * Keystore-biometric mode landed back here after a dismiss/error.
+         * The UI shows a single "tap to unlock" fingerprint button — we
+         * deliberately do NOT auto-retry since the user dismissed for a
+         * reason and re-popping the prompt would be hostile.
+         */
+        data object AwaitingBiometric : State
+
+        /**
          * The PIN gate passed in a Keystore-only-style mode (1, 2). The
          * screen reacts by triggering the normal Keystore / biometric
          * unwrap. No further input from the user.
@@ -143,9 +151,14 @@ class UnlockViewModel @Inject constructor(
         }
     }
 
-    /** Reset back to the PIN gate after a Failed state. */
+    /** Reset back to the right entry-point after a Failed state. */
     fun resetToPin() {
-        _state.value = if (hasDecoy) State.AwaitingPin else State.AwaitingPassphrase
+        _state.value = when {
+            hasDecoy -> State.AwaitingPin
+            mode == VaultPrefs.Mode.KEYSTORE_BIOMETRIC -> State.AwaitingBiometric
+            mode == VaultPrefs.Mode.KEYSTORE_ONLY -> State.Idle
+            else -> State.AwaitingPassphrase
+        }
     }
 
     private suspend fun attemptUnlock(

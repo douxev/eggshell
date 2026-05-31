@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Identité app -->
-    <string name="app_name">Eggshell</string>
+    <string name="app_name">eggshell</string>
 
     <!-- Écran d'accueil (Phase 0 smoke) -->
     <string name="hello_name_label">Ton prénom</string>
@@ -22,18 +22,19 @@
     <string name="onboarding_welcome_body">Toutes tes données restent sur ton téléphone, chiffrées en local. Aucun envoi vers un serveur. Choisis dans un instant comment tu veux protéger l\'ouverture de l\'app.</string>
     <string name="onboarding_pick_mode_title">Mode de sécurité</string>
     <string name="onboarding_pick_mode_body">Tu peux changer plus tard depuis les réglages.</string>
+    <string name="security_mode_encryption_note">Tes données sont toujours chiffrées sur ton appareil. Le mode choisi décide juste comment tu déverrouilles l\'app au quotidien.</string>
     <string name="onboarding_creating">Création du coffre chiffré…</string>
     <string name="onboarding_error_prefix">Erreur : %1$s</string>
 
     <!-- Modes -->
-    <string name="mode_keystore_only_title">Clé matérielle seule</string>
+    <string name="mode_keystore_only_title">Pas de code</string>
     <string name="mode_keystore_only_body">Le téléphone stocke la clé dans son module sécurisé. Aucun mot de passe à saisir, l\'app s\'ouvre instantanément. Quelqu\'un qui déverrouille ton téléphone peut ouvrir l\'app.</string>
-    <string name="mode_keystore_biometric_title">Clé matérielle + empreinte/visage</string>
-    <string name="mode_keystore_biometric_body">Tu valides biométriquement à chaque ouverture. Bon compromis sécurité/ergonomie.</string>
-    <string name="mode_keystore_passphrase_title">Mot de passe + clé matérielle</string>
-    <string name="mode_keystore_passphrase_body">Deux facteurs : il faut le mot de passe ET le téléphone. Recommandé si tu redoutes un accès physique au téléphone.</string>
-    <string name="mode_paranoid_title">Mode parano (mot de passe seul)</string>
-    <string name="mode_paranoid_body">Aucune clé persistée. Le mot de passe redérive la clé à chaque démarrage. Friction maximale, protection maximale.</string>
+    <string name="mode_keystore_biometric_title">Biométrique</string>
+    <string name="mode_keystore_biometric_body">Tu valides avec ton empreinte ou ton visage à chaque ouverture. La clé reste protégée par le module sécurisé du téléphone. Bon compromis sécurité/ergonomie.</string>
+    <string name="mode_keystore_passphrase_title">Mot de passe</string>
+    <string name="mode_keystore_passphrase_body">Deux facteurs : il faut le mot de passe ET le téléphone (la clé est protégée par le module sécurisé). Recommandé si tu redoutes un accès physique à l\'appareil.</string>
+    <string name="mode_paranoid_title">Mode parano</string>
+    <string name="mode_paranoid_body">Mot de passe seul, sans aide du module sécurisé. Aucune clé persistée : le mot de passe redérive la clé à chaque démarrage. Friction maximale, protection maximale (résiste à un attaquant qui aurait accès à l\'enclave sécurisée).</string>
 
     <!-- One-line "is this for me?" pitch shown under each mode. -->
     <string name="mode_keystore_only_for">Pour toi si ton téléphone est un appareil de confiance.</string>
@@ -58,6 +59,10 @@
     <string name="unlock_error_prefix">Échec : %1$s</string>
     <string name="unlock_prompt_pin">Saisis ton code</string>
     <string name="unlock_prompt_auto">Déverrouillage en cours…</string>
+    <string name="unlock_prompt_biometric">Touche le bouton pour confirmer avec ton empreinte ou ton visage.</string>
+    <string name="unlock_action_biometric">Déverrouiller</string>
+    <string name="password_show">Afficher le mot de passe</string>
+    <string name="password_hide">Masquer le mot de passe</string>
     <string name="unlock_biometric_cd">Empreinte ou visage</string>
     <string name="unlock_delete_cd">Effacer un chiffre</string>
 
@@ -156,7 +161,7 @@
     <!-- Generic, content-free copy shown on the lockscreen and on the
          paired watch when the user hasn't unlocked the device. Hides the
          specific lab / dose details from anyone glancing at the screen. -->
-    <string name="reminder_public_title">Eggshell</string>
+    <string name="reminder_public_title">eggshell</string>
     <string name="reminder_public_body">Rappel — déverrouille pour voir les détails.</string>
     <string name="reminder_locked_toast">Déverrouille l\'app pour enregistrer la prise.</string>
     <string name="unlock_throttled_fmt">Trop d\'erreurs — patiente %1$d s avant le prochain essai.</string>
@@ -355,6 +360,9 @@
     <string name="reminders_delete">Supprimer</string>
     <string name="reminders_add_lab">Ajouter un rappel d\'analyse</string>
     <string name="reminders_lab_dialog_title">Nouveau rappel d\'analyse</string>
+    <string name="reminders_lab_edit_dialog_title">Modifier le rappel</string>
+    <string name="reminders_photo_edit_dialog_title">Modifier le rappel photo</string>
+    <string name="reminders_voice_edit_dialog_title">Modifier le rappel voix</string>
     <string name="reminders_lab_label">Nom (ex. bilan hormonal)</string>
     <string name="reminders_lab_kind_interval">Tous les N jours</string>
     <string name="reminders_lab_kind_daily">Chaque jour à HH:MM</string>
@@ -398,6 +406,8 @@
     <string name="resources_title">Ressources importantes</string>
     <string name="resources_hint">Sites, lignes d\'écoute et associations. Le lien s\'ouvre dans ton navigateur.</string>
     <string name="resources_open_external">Ouvrir le lien</string>
+    <string name="resources_tab_general">Général</string>
+    <string name="resources_tab_associations">Associations</string>
 
     <!-- ===== Theme picker ===== -->
     <string name="theme_picker_title">Thème</string>

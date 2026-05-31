@@ -92,8 +92,11 @@ class OnboardingViewModel @Inject constructor(
     }
 
     private fun fail(t: Throwable) {
-        _error.value = t.message ?: t::class.simpleName.orEmpty()
-        // Go back to mode picking so the user can retry
+        // Include the exception class name — for biometric setup failures the
+        // bare message is often null or one cryptic word, and the class tells
+        // us exactly what went wrong (KeyPermanentlyInvalidatedException,
+        // UserNotAuthenticatedException, ProviderException, …).
+        _error.value = "${t::class.java.simpleName}: ${t.message ?: "no detail"}"
         _step.value = Step.PickMode
     }
 }

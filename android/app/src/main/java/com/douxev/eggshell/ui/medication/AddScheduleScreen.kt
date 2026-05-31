@@ -48,6 +48,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.ScheduleRepository
+import com.douxev.eggshell.ui.common.clickToDismissKeyboard
 
 @HiltViewModel
 class AddScheduleViewModel @Inject constructor(
@@ -123,6 +124,7 @@ fun AddScheduleScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .clickToDismissKeyboard()
                 .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {

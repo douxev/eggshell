@@ -32,14 +32,28 @@
 -keep class net.zetetic.** { *; }
 -dontwarn net.sqlcipher.**
 
-# ── ML Kit (text recognition, bundled variant) ──────────────────────────────
-# The bundled ML Kit ships native readers + reflection-driven model loaders.
-# Without these the OCR import call into TextRecognition.getClient() throws
-# a ClassNotFoundException in release.
--keep class com.google.mlkit.** { *; }
--keep class com.google_mlkit_text_recognition.** { *; }
--keep class com.google.android.gms.internal.mlkit_** { *; }
--dontwarn com.google.mlkit.**
+# ── Tesseract4Android (adaptech-cz fork) ────────────────────────────────────
+# JNI bridge to libtesseract.so + libleptonica.so. The native side looks up
+# Java classes + method signatures by exact name through JNI, so anything in
+# com.googlecode.tesseract.android and com.googlecode.leptonica.android MUST
+# keep its identifiers and members intact through obfuscation.
+-keep class com.googlecode.tesseract.android.** { *; }
+-keepclassmembers class com.googlecode.tesseract.android.** { *; }
+-keep class com.googlecode.leptonica.android.** { *; }
+-keepclassmembers class com.googlecode.leptonica.android.** { *; }
+-dontwarn com.googlecode.tesseract.android.**
+-dontwarn com.googlecode.leptonica.android.**
+
+# ── PDFBox-Android (com.tom-roush:pdfbox-android) ───────────────────────────
+# PDFBox uses reflection for font fallback + ICC profile loading; reflective
+# class lookups must survive obfuscation. The library also ships AWT shims
+# referencing java.awt.* (same flavour as JNA above) — keep dontwarn there
+# so R8 doesn't fail on those phantom classes.
+-keep class com.tom_roush.pdfbox.** { *; }
+-keep class org.apache.pdfbox.** { *; }
+-dontwarn com.tom_roush.pdfbox.**
+-dontwarn org.apache.pdfbox.**
+-dontwarn org.apache.fontbox.**
 
 # ── Hilt / Dagger ────────────────────────────────────────────────────────────
 -dontwarn org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement

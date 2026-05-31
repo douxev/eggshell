@@ -69,6 +69,8 @@ import com.douxev.eggshell.data.SecurityPrefs
 import com.douxev.eggshell.data.VaultRepository
 import com.douxev.eggshell.security.DecoyVerifier
 import com.douxev.eggshell.security.VaultPrefs
+import com.douxev.eggshell.ui.common.EncryptionNoteCard
+import com.douxev.eggshell.ui.common.PasswordField
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -294,6 +296,7 @@ fun SettingsScreen(
                 stringResource(R.string.settings_current_mode_fmt, mode?.name ?: "—"),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            EncryptionNoteCard()
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 VaultPrefs.Mode.values().forEach { m ->
                     ModeRow(
@@ -381,12 +384,10 @@ fun SettingsScreen(
             // -- Backup export ---------------------------------------------
             Text(stringResource(R.string.settings_section_backup), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.settings_export_hint), style = MaterialTheme.typography.bodySmall)
-            OutlinedTextField(
+            PasswordField(
                 value = exportPass,
                 onValueChange = { exportPass = it },
-                label = { Text(stringResource(R.string.passphrase_label)) },
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, platformImeOptions = androidx.compose.ui.text.input.PlatformImeOptions("flagNoPersonalizedLearning")),
+                label = stringResource(R.string.passphrase_label),
                 modifier = Modifier.fillMaxWidth(),
             )
             Button(
@@ -410,12 +411,10 @@ fun SettingsScreen(
             HorizontalDivider()
 
             Text(stringResource(R.string.settings_import_hint), style = MaterialTheme.typography.bodySmall)
-            OutlinedTextField(
+            PasswordField(
                 value = importPass,
                 onValueChange = { importPass = it },
-                label = { Text(stringResource(R.string.passphrase_label)) },
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, platformImeOptions = androidx.compose.ui.text.input.PlatformImeOptions("flagNoPersonalizedLearning")),
+                label = stringResource(R.string.passphrase_label),
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedButton(
@@ -495,22 +494,18 @@ private fun ChangeModeDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (needsCurrentPass) {
-                    OutlinedTextField(
+                    PasswordField(
                         value = currentPass,
                         onValueChange = { currentPass = it },
-                        label = { Text(stringResource(R.string.settings_current_passphrase)) },
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, platformImeOptions = androidx.compose.ui.text.input.PlatformImeOptions("flagNoPersonalizedLearning")),
+                        label = stringResource(R.string.settings_current_passphrase),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 if (needsNewPass) {
-                    OutlinedTextField(
+                    PasswordField(
                         value = newPass,
                         onValueChange = { newPass = it },
-                        label = { Text(stringResource(R.string.settings_new_passphrase)) },
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, platformImeOptions = androidx.compose.ui.text.input.PlatformImeOptions("flagNoPersonalizedLearning")),
+                        label = stringResource(R.string.settings_new_passphrase),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }

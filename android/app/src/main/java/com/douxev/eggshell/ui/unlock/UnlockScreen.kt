@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Favorite
@@ -25,7 +24,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,8 +39,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
@@ -51,6 +47,7 @@ import kotlinx.coroutines.delay
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.VaultRepository
 import com.douxev.eggshell.security.VaultPrefs
+import com.douxev.eggshell.ui.common.PasswordField
 
 /**
  * Two-stage lock screen.
@@ -145,8 +142,10 @@ fun UnlockScreen(
                     UnlockViewModel.State.AwaitingPassphrase ->
                         PassphraseStage(
                             onSubmit = { pp -> vm.submitPassphrase(pp, activity, biometricCopy) },
-                            showBiometricButton = vm.mode == VaultPrefs.Mode.KEYSTORE_PASSPHRASE,
-                            onBiometric = { vm.attemptAutoUnlock(activity, biometricCopy) },
+                        )
+                    UnlockViewModel.State.AwaitingBiometric ->
+                        BiometricRetryStage(
+                            onRetry = { vm.attemptAutoUnlock(activity, biometricCopy) },
                         )
                     UnlockViewModel.State.AccessGranted,
                     UnlockViewModel.State.InProgress ->
@@ -217,15 +216,19 @@ private fun Header(decoy: Boolean) {
 private fun Subtitle(state: UnlockViewModel.State, mode: VaultPrefs.Mode?) {
     val text = when {
         mode == null -> stringResource(R.string.unlock_not_initialized)
-        mode == VaultPrefs.Mode.KEYSTORE_ONLY ||
-            mode == VaultPrefs.Mode.KEYSTORE_BIOMETRIC ->
-            stringResource(R.string.unlock_prompt_auto)
+        // AwaitingBiometric already shows its own helper text inside the stage —
+        // keep the subtitle quiet to avoid stacked instructions.
+        state == UnlockViewModel.State.AwaitingBiometric -> ""
         state == UnlockViewModel.State.AwaitingPin ->
             stringResource(R.string.unlock_prompt_pin)
         state == UnlockViewModel.State.AwaitingPassphrase ->
             stringResource(R.string.unlock_prompt_passphrase)
-        state == UnlockViewModel.State.InProgress ->
+        state == UnlockViewModel.State.InProgress ||
+            state == UnlockViewModel.State.AccessGranted ->
             stringResource(R.string.unlock_in_progress)
+        mode == VaultPrefs.Mode.KEYSTORE_ONLY ||
+            mode == VaultPrefs.Mode.KEYSTORE_BIOMETRIC ->
+            stringResource(R.string.unlock_prompt_auto)
         else -> ""
     }
     Text(
@@ -261,8 +264,6 @@ private fun PinGate(onSubmit: (String) -> Unit, onBiometric: () -> Unit) {
 @Composable
 private fun PassphraseStage(
     onSubmit: (String) -> Unit,
-    showBiometricButton: Boolean,
-    onBiometric: () -> Unit,
 ) {
     var passphrase by remember { mutableStateOf("") }
     Column(
@@ -270,13 +271,10 @@ private fun PassphraseStage(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        OutlinedTextField(
+        PasswordField(
             value = passphrase,
             onValueChange = { passphrase = it },
-            label = { Text(stringResource(R.string.passphrase_label)) },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, platformImeOptions = androidx.compose.ui.text.input.PlatformImeOptions("flagNoPersonalizedLearning")),
-            singleLine = true,
+            label = stringResource(R.string.passphrase_label),
             modifier = Modifier.fillMaxWidth(),
         )
         Button(
@@ -284,23 +282,41 @@ private fun PassphraseStage(
             enabled = passphrase.isNotEmpty(),
             modifier = Modifier.fillMaxWidth(),
         ) { Text(stringResource(R.string.action_unlock)) }
-        if (showBiometricButton) {
-            Surface(
-                onClick = onBiometric,
-                shape = CircleShape,
-                color = Color.Transparent,
-                modifier = Modifier.size(56.dp),
-            ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Filled.Fingerprint,
-                        contentDescription = stringResource(R.string.unlock_biometric_cd),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BiometricRetryStage(onRetry: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            stringResource(R.string.unlock_prompt_biometric),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Surface(
+            onClick = onRetry,
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier.size(96.dp),
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Filled.Fingerprint,
+                    contentDescription = stringResource(R.string.unlock_biometric_cd),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(56.dp),
+                )
             }
         }
+        Button(
+            onClick = onRetry,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(stringResource(R.string.unlock_action_biometric)) }
     }
 }
 

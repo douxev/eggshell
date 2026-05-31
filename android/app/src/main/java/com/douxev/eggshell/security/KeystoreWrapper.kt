@@ -31,16 +31,32 @@ class KeystoreWrapper(private val alias: String) {
     fun getOrCreate(requireBiometric: Boolean): SecretKey {
         val ks = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
         ks.getKey(alias, null)?.let { return it as SecretKey }
+        return generateFresh(requireBiometric)
+    }
 
-        // Try StrongBox first when the device has a dedicated security chip
-        // (Pixel 3+, Samsung Knox-class hardware). Fall back to the regular
-        // TEE-backed key on StrongBoxUnavailableException.
-        return runCatching { generateKey(requireBiometric, useStrongBox = true) }
+    /**
+     * Delete the existing alias (if any) and create a fresh key. Used in
+     * setup/mode-change paths where a stale, possibly invalidated key would
+     * make every cipher operation throw KeyPermanentlyInvalidatedException
+     * (e.g. user re-enrolled fingerprints since the key was created).
+     */
+    fun recreate(requireBiometric: Boolean): SecretKey {
+        runCatching { delete() }
+        return generateFresh(requireBiometric)
+    }
+
+    private fun generateFresh(requireBiometric: Boolean): SecretKey {
+        // StrongBox + biometric-bound keys is a known minefield: Samsung Knox,
+        // some Xiaomi/Oppo devices throw assorted ProviderException /
+        // KeyStoreException variants instead of the documented
+        // StrongBoxUnavailableException. TEE alone is plenty for our threat
+        // model, so don't even try StrongBox for biometric keys.
+        val tryStrongBox = !requireBiometric
+        return runCatching { generateKey(requireBiometric, useStrongBox = tryStrongBox) }
             .getOrElse { t ->
-                when (t) {
-                    is StrongBoxUnavailableException -> generateKey(requireBiometric, useStrongBox = false)
-                    else -> throw t
-                }
+                if (t is StrongBoxUnavailableException) {
+                    generateKey(requireBiometric, useStrongBox = false)
+                } else throw t
             }
     }
 
@@ -65,11 +81,17 @@ class KeystoreWrapper(private val alias: String) {
                 }
                 if (requireBiometric) {
                     setUserAuthenticationRequired(true)
-                    // 0 = an auth must happen at each use (we'll attach the
-                    // Cipher to a BiometricPrompt so the prompt unlocks the key
-                    // for a single operation).
-                    setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
                     setInvalidatedByBiometricEnrollment(true)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        // 0 = per-use auth via CryptoObject (the BiometricPrompt
+                        // unlocks the key for exactly one operation).
+                        setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+                    } else {
+                        // Pre-API-30 equivalent: -1 also means "auth required at
+                        // every use through a CryptoObject" (no time window).
+                        @Suppress("DEPRECATION")
+                        setUserAuthenticationValidityDurationSeconds(-1)
+                    }
                 }
             }
             .build()

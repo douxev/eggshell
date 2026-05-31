@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.JournalRepository
+import com.douxev.eggshell.ui.common.clickToDismissKeyboard
 import uniffi.transition.JournalEntry
 import uniffi.transition.NewJournalEntry
 
@@ -180,20 +181,26 @@ fun AddJournalEntryScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .clickToDismissKeyboard()
                 .padding(horizontal = 24.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             GaugeRow(stringResource(R.string.gauge_mood), hasMood, moodVal,
-                { hasMood = it }, { moodVal = it })
+                { hasMood = it }, { moodVal = it },
+                leftEmoji = "😞", rightEmoji = "😊") // 😞 → 😊
             GaugeRow(stringResource(R.string.gauge_dysphoria), hasDysphoria, dysphoriaVal,
-                { hasDysphoria = it }, { dysphoriaVal = it })
+                { hasDysphoria = it }, { dysphoriaVal = it },
+                leftEmoji = "😌", rightEmoji = "😣") // 😌 → 😣
             GaugeRow(stringResource(R.string.gauge_euphoria), hasEuphoria, euphoriaVal,
-                { hasEuphoria = it }, { euphoriaVal = it })
+                { hasEuphoria = it }, { euphoriaVal = it },
+                leftEmoji = "😐", rightEmoji = "😄") // 😐 → 😄
             GaugeRow(stringResource(R.string.gauge_libido), hasLibido, libidoVal,
-                { hasLibido = it }, { libidoVal = it })
+                { hasLibido = it }, { libidoVal = it },
+                leftEmoji = "💤", rightEmoji = "🔥") // 💤 → 🔥
             GaugeRow(stringResource(R.string.gauge_energy), hasEnergy, energyVal,
-                { hasEnergy = it }, { energyVal = it })
+                { hasEnergy = it }, { energyVal = it },
+                leftEmoji = "🥱", rightEmoji = "⚡") // 🥱 → ⚡
 
             OutlinedTextField(
                 value = freeText,
@@ -245,6 +252,8 @@ private fun GaugeRow(
     value: Float,
     onEnabledChange: (Boolean) -> Unit,
     onValueChange: (Float) -> Unit,
+    leftEmoji: String,
+    rightEmoji: String,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -255,15 +264,23 @@ private fun GaugeRow(
             Switch(checked = enabled, onCheckedChange = onEnabledChange)
         }
         if (enabled) {
-            Slider(
-                value = value,
-                onValueChange = onValueChange,
-                valueRange = 0f..10f,
-                steps = 9,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics { stateDescription = "${value.toInt()} sur 10" },
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(leftEmoji, style = MaterialTheme.typography.bodyMedium)
+                Slider(
+                    value = value,
+                    onValueChange = onValueChange,
+                    valueRange = 0f..10f,
+                    steps = 9,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp)
+                        .semantics { stateDescription = "${value.toInt()} sur 10" },
+                )
+                Text(rightEmoji, style = MaterialTheme.typography.bodyMedium)
+            }
         }
     }
 }

@@ -44,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -138,6 +139,16 @@ class RemindersViewModel @Inject constructor(
         refresh()
     }
 
+    fun updateLabInterval(id: Long, label: String, intervalDays: Int) {
+        runCatching { labs.updateInterval(id, label, intervalDays) }
+        refresh()
+    }
+
+    fun updateLabDaily(id: Long, label: String, hour: Int, minute: Int) {
+        runCatching { labs.updateDaily(id, label, hour, minute) }
+        refresh()
+    }
+
     fun deleteLab(labId: Long) {
         labs.delete(labId)
         refresh()
@@ -158,7 +169,9 @@ fun RemindersScreen(
     vm: RemindersViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
-    var addCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    // Null = no dialog open. Set to a LabDialogTarget to open the lab-reminder
+    // dialog in either "create new" or "edit existing" mode.
+    var dialogTarget by remember { mutableStateOf<LabDialogTarget?>(null) }
 
     Scaffold(
         topBar = {
@@ -213,7 +226,8 @@ fun RemindersScreen(
                 items = state.labReminders.filter { it.category == LabReminderPrefs.CATEGORY_LAB },
                 priorities = state.labPriorities,
                 iconForCategory = LabIconFor(LabReminderPrefs.CATEGORY_LAB),
-                onAdd = { addCategory = LabReminderPrefs.CATEGORY_LAB },
+                onAdd = { dialogTarget = LabDialogTarget.New(LabReminderPrefs.CATEGORY_LAB) },
+                onEdit = { entry -> dialogTarget = LabDialogTarget.Edit(entry) },
                 onTogglePriority = vm::setLabPriority,
                 onDelete = vm::deleteLab,
             )
@@ -227,7 +241,8 @@ fun RemindersScreen(
                 items = state.labReminders.filter { it.category == LabReminderPrefs.CATEGORY_PHOTO },
                 priorities = state.labPriorities,
                 iconForCategory = LabIconFor(LabReminderPrefs.CATEGORY_PHOTO),
-                onAdd = { addCategory = LabReminderPrefs.CATEGORY_PHOTO },
+                onAdd = { dialogTarget = LabDialogTarget.New(LabReminderPrefs.CATEGORY_PHOTO) },
+                onEdit = { entry -> dialogTarget = LabDialogTarget.Edit(entry) },
                 onTogglePriority = vm::setLabPriority,
                 onDelete = vm::deleteLab,
             )
@@ -241,7 +256,8 @@ fun RemindersScreen(
                 items = state.labReminders.filter { it.category == LabReminderPrefs.CATEGORY_VOICE },
                 priorities = state.labPriorities,
                 iconForCategory = LabIconFor(LabReminderPrefs.CATEGORY_VOICE),
-                onAdd = { addCategory = LabReminderPrefs.CATEGORY_VOICE },
+                onAdd = { dialogTarget = LabDialogTarget.New(LabReminderPrefs.CATEGORY_VOICE) },
+                onEdit = { entry -> dialogTarget = LabDialogTarget.Edit(entry) },
                 onTogglePriority = vm::setLabPriority,
                 onDelete = vm::deleteLab,
             )
@@ -250,31 +266,59 @@ fun RemindersScreen(
         }
     }
 
-    addCategory?.let { cat ->
-        AddLabReminderDialog(
-            titleRes = when (cat) {
+    dialogTarget?.let { target ->
+        val category = when (target) {
+            is LabDialogTarget.New -> target.category
+            is LabDialogTarget.Edit -> target.entry.category
+        }
+        val titleRes = when (target) {
+            is LabDialogTarget.Edit -> when (category) {
+                LabReminderPrefs.CATEGORY_PHOTO -> R.string.reminders_photo_edit_dialog_title
+                LabReminderPrefs.CATEGORY_VOICE -> R.string.reminders_voice_edit_dialog_title
+                else -> R.string.reminders_lab_edit_dialog_title
+            }
+            is LabDialogTarget.New -> when (category) {
                 LabReminderPrefs.CATEGORY_PHOTO -> R.string.reminders_photo_dialog_title
                 LabReminderPrefs.CATEGORY_VOICE -> R.string.reminders_voice_dialog_title
                 else -> R.string.reminders_lab_dialog_title
-            },
-            defaultLabel = stringResource(
-                when (cat) {
+            }
+        }
+        val defaultLabel = when (target) {
+            is LabDialogTarget.Edit -> target.entry.label
+            is LabDialogTarget.New -> stringResource(
+                when (category) {
                     LabReminderPrefs.CATEGORY_PHOTO -> R.string.reminders_photo_default_label
                     LabReminderPrefs.CATEGORY_VOICE -> R.string.reminders_voice_default_label
                     else -> R.string.reminders_lab_default_label
                 }
-            ),
-            onDismiss = { addCategory = null },
+            )
+        }
+        AddLabReminderDialog(
+            titleRes = titleRes,
+            defaultLabel = defaultLabel,
+            initialEntry = (target as? LabDialogTarget.Edit)?.entry,
+            onDismiss = { dialogTarget = null },
             onSaveInterval = { label, days ->
-                vm.addLabInterval(label, days, cat)
-                addCategory = null
+                when (target) {
+                    is LabDialogTarget.New -> vm.addLabInterval(label, days, category)
+                    is LabDialogTarget.Edit -> vm.updateLabInterval(target.entry.id, label, days)
+                }
+                dialogTarget = null
             },
             onSaveDaily = { label, h, m ->
-                vm.addLabDaily(label, h, m, cat)
-                addCategory = null
+                when (target) {
+                    is LabDialogTarget.New -> vm.addLabDaily(label, h, m, category)
+                    is LabDialogTarget.Edit -> vm.updateLabDaily(target.entry.id, label, h, m)
+                }
+                dialogTarget = null
             },
         )
     }
+}
+
+private sealed interface LabDialogTarget {
+    data class New(val category: String) : LabDialogTarget
+    data class Edit(val entry: LabReminderPrefs.Entry) : LabDialogTarget
 }
 
 @Composable
@@ -287,6 +331,7 @@ private fun CategorySection(
     priorities: Map<Long, Boolean>,
     iconForCategory: ImageVector,
     onAdd: () -> Unit,
+    onEdit: (LabReminderPrefs.Entry) -> Unit,
     onTogglePriority: (Long, Boolean) -> Unit,
     onDelete: (Long) -> Unit,
 ) {
@@ -304,6 +349,7 @@ private fun CategorySection(
                 entry = entry,
                 icon = iconForCategory,
                 priority = priorities[entry.id] == true,
+                onClick = { onEdit(entry) },
                 onTogglePriority = { onTogglePriority(entry.id, it) },
                 onDelete = { onDelete(entry.id) },
             )
@@ -384,6 +430,7 @@ private fun LabReminderCard(
     entry: LabReminderPrefs.Entry,
     icon: ImageVector,
     priority: Boolean,
+    onClick: () -> Unit,
     onTogglePriority: (Boolean) -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -401,25 +448,27 @@ private fun LabReminderCard(
         title = entry.label,
         subtitle = scheduleText,
         priority = priority,
+        onClick = onClick,
         onTogglePriority = onTogglePriority,
         onDelete = onDelete,
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReminderCard(
     leadingIcon: ImageVector,
     title: String,
     subtitle: String,
     priority: Boolean,
+    onClick: (() -> Unit)? = null,
     onTogglePriority: (Boolean) -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = RoundedCornerShape(20.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
+    val cardModifier = Modifier.fillMaxWidth()
+    val colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+    val shape = RoundedCornerShape(20.dp)
+    val content: @Composable () -> Unit = {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -462,6 +511,11 @@ private fun ReminderCard(
             }
         }
     }
+    if (onClick != null) {
+        Card(onClick = onClick, modifier = cardModifier, colors = colors, shape = shape) { content() }
+    } else {
+        Card(modifier = cardModifier, colors = colors, shape = shape) { content() }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -469,15 +523,22 @@ private fun ReminderCard(
 private fun AddLabReminderDialog(
     titleRes: Int,
     defaultLabel: String,
+    initialEntry: LabReminderPrefs.Entry? = null,
     onDismiss: () -> Unit,
     onSaveInterval: (label: String, days: Int) -> Unit,
     onSaveDaily: (label: String, hour: Int, minute: Int) -> Unit,
 ) {
+    // initialEntry seeds edit-mode defaults; if absent we keep the create-mode
+    // defaults (90-day interval, 9 AM daily).
+    val seedKind = initialEntry?.kind ?: "interval"
+    val seedDays = initialEntry?.intervalDays?.toString() ?: "90"
+    val seedHour = initialEntry?.dailyHour?.toString() ?: "9"
+    val seedMinute = initialEntry?.dailyMinute?.toString() ?: "0"
     var label by rememberSaveable(defaultLabel) { mutableStateOf(defaultLabel) }
-    var kind by rememberSaveable { mutableStateOf("interval") }
-    var daysStr by rememberSaveable { mutableStateOf("90") }
-    var hourStr by rememberSaveable { mutableStateOf("9") }
-    var minuteStr by rememberSaveable { mutableStateOf("0") }
+    var kind by rememberSaveable(seedKind) { mutableStateOf(seedKind) }
+    var daysStr by rememberSaveable(seedDays) { mutableStateOf(seedDays) }
+    var hourStr by rememberSaveable(seedHour) { mutableStateOf(seedHour) }
+    var minuteStr by rememberSaveable(seedMinute) { mutableStateOf(seedMinute) }
 
     val canSave: Boolean = label.isNotBlank() && when (kind) {
         "interval" -> daysStr.toIntOrNull()?.let { it > 0 } == true

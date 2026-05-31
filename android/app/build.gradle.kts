@@ -22,13 +22,22 @@ fun signingValue(propName: String, envName: String): String? =
 android {
     namespace = "com.douxev.eggshell"
     compileSdk = 35
+    // Pin to the same NDK that cargo-ndk uses to build the Rust .so files.
+    // Without this, AGP picks whichever NDK is newest on the machine
+    // (currently 30.0.x) and its strip/objcopy can't process our libs
+    // built with 27.2.x — the "Unable to strip" warning + the empty
+    // native-symbol-tables extraction both come from that mismatch.
+    ndkVersion = "27.2.12479018"
 
     defaultConfig {
         applicationId = "com.douxev.eggshell"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.0.1"
+        // Reminder for the next release: Play enforces strictly monotonic
+        // versionCode across all tracks. Bump versionCode every upload,
+        // even for a same-day re-build, otherwise Play refuses the AAB.
+        versionCode = 5
+        versionName = "0.0.5"
 
         ndk {
             // Limit ABIs to common phone architectures; can extend to x86 for emulators
@@ -65,6 +74,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Extract function-name tables from every .so we bundle (our
+            // Rust core, SQLCipher, Tesseract, leptonica, JNA, …) and
+            // pack them inside the AAB's BUNDLE-METADATA section. Play
+            // uses them to symbolicate native crashes + ANRs; clients
+            // never download these symbol files.
+            // FULL would add DWARF line numbers (+ ~50 MB to the AAB);
+            // SYMBOL_TABLE is the sweet spot — readable stack frames
+            // without bloating the bundle.
+            ndk { debugSymbolLevel = "SYMBOL_TABLE" }
             // Only attach the signing config if we actually loaded credentials.
             // Otherwise `./gradlew assembleDebug` (which doesn't need them)
             // still works without keystore.properties on disk.
@@ -222,10 +240,16 @@ dependencies {
     // SQLCipher native lib (will be wired up in Phase 1)
     implementation(libs.sqlcipher.android)
 
-    // ML Kit on-device text recognition for the lab-result OCR import.
-    // The model ships with the APK (no Google Play Services dependency,
-    // no first-use download, no cloud calls) — privacy-first by design.
-    implementation(libs.mlkit.text.recognition)
+    // Lab-result import — two-stage strategy:
+    //  1. Most lab PDFs (Cerba, Biogroup, Synlab…) ship with an embedded
+    //     text layer. PDFBox-Android extracts it losslessly without any
+    //     OCR pass — fast, accurate, no model files needed.
+    //  2. When extraction yields nothing (scanned PDF, image input),
+    //     we fall back to Tesseract OCR. Languages bundled: fra + eng.
+    // Both libraries are pure FOSS (BSD / Apache 2.0) — no proprietary
+    // blobs, so the app stays clean of F-Droid anti-features.
+    implementation(libs.pdfbox.android)
+    implementation(libs.tesseract4android)
 
     // EXIF stripping on photo import so GPS / camera-model tags don't end up
     // in the encrypted blob (and consequently leak out via share / gallery).

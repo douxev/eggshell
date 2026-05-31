@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- English translations — placeholder, not active until i18n rollout. -->
-    <string name="app_name">Eggshell</string>
+    <string name="app_name">eggshell</string>
 
     <string name="hello_name_label">Your first name</string>
     <string name="hello_button">Greet from Rust</string>
@@ -19,17 +19,18 @@
     <string name="onboarding_welcome_body">All your data stays on your phone, encrypted locally. Nothing is sent to a server. You\'re about to pick how the app should be locked.</string>
     <string name="onboarding_pick_mode_title">Security mode</string>
     <string name="onboarding_pick_mode_body">You can change this later from the settings.</string>
+    <string name="security_mode_encryption_note">Your data is always encrypted on your device. The mode you pick only changes how you unlock the app day-to-day.</string>
     <string name="onboarding_creating">Creating encrypted vault…</string>
     <string name="onboarding_error_prefix">Error: %1$s</string>
 
-    <string name="mode_keystore_only_title">Hardware key only</string>
+    <string name="mode_keystore_only_title">No code</string>
     <string name="mode_keystore_only_body">The phone stores the key in its secure module. No password to type, the app opens instantly. Whoever unlocks your phone can open the app.</string>
-    <string name="mode_keystore_biometric_title">Hardware key + biometric</string>
-    <string name="mode_keystore_biometric_body">You confirm with your fingerprint or face each time. Good balance of security and ergonomics.</string>
-    <string name="mode_keystore_passphrase_title">Password + hardware key</string>
-    <string name="mode_keystore_passphrase_body">Two-factor: you need both the password and the phone. Recommended if you worry about physical access to your device.</string>
-    <string name="mode_paranoid_title">Paranoid mode (password only)</string>
-    <string name="mode_paranoid_body">No key persisted. The password re-derives the key on every cold start. Maximum friction, maximum protection.</string>
+    <string name="mode_keystore_biometric_title">Biometric</string>
+    <string name="mode_keystore_biometric_body">You confirm with your fingerprint or face each time. The key stays protected by the phone\'s secure module. Good balance of security and ergonomics.</string>
+    <string name="mode_keystore_passphrase_title">Password</string>
+    <string name="mode_keystore_passphrase_body">Two-factor: you need both the password AND the phone (the key is protected by the secure module). Recommended if you worry about physical access to the device.</string>
+    <string name="mode_paranoid_title">Paranoid mode</string>
+    <string name="mode_paranoid_body">Password only, no help from the secure module. No key is persisted: the password re-derives the key on every cold start. Maximum friction, maximum protection (resists an attacker who compromised the secure enclave).</string>
 
     <!-- One-line "is this for me?" pitch shown under each mode. -->
     <string name="mode_keystore_only_for">Pick this if your phone is a trusted device.</string>
@@ -52,6 +53,10 @@
     <string name="unlock_error_prefix">Failed: %1$s</string>
     <string name="unlock_prompt_pin">Enter your code</string>
     <string name="unlock_prompt_auto">Unlocking…</string>
+    <string name="unlock_prompt_biometric">Tap the button to confirm with your fingerprint or face.</string>
+    <string name="unlock_action_biometric">Unlock</string>
+    <string name="password_show">Show password</string>
+    <string name="password_hide">Hide password</string>
     <string name="unlock_biometric_cd">Fingerprint or face</string>
     <string name="unlock_delete_cd">Delete digit</string>
 
@@ -133,7 +138,7 @@
     <string name="reminder_channel_priority_description">Heads-up banner, vibration, sound.</string>
     <string name="reminder_action_mark_taken">Taken</string>
     <string name="lab_reminder_title">Lab follow-up due</string>
-    <string name="reminder_public_title">Eggshell</string>
+    <string name="reminder_public_title">eggshell</string>
     <string name="reminder_public_body">Reminder — unlock to see details.</string>
     <string name="reminder_locked_toast">Unlock the app to log this dose.</string>
     <string name="unlock_throttled_fmt">Too many failures — wait %1$d s before trying again.</string>
@@ -325,6 +330,9 @@
     <string name="reminders_delete">Delete</string>
     <string name="reminders_add_lab">Add a lab reminder</string>
     <string name="reminders_lab_dialog_title">New lab reminder</string>
+    <string name="reminders_lab_edit_dialog_title">Edit reminder</string>
+    <string name="reminders_photo_edit_dialog_title">Edit photo reminder</string>
+    <string name="reminders_voice_edit_dialog_title">Edit voice reminder</string>
     <string name="reminders_lab_label">Name (e.g. hormone panel)</string>
     <string name="reminders_lab_kind_interval">Every N days</string>
     <string name="reminders_lab_kind_daily">Daily at HH:MM</string>
@@ -368,6 +376,8 @@
     <string name="resources_title">Important resources</string>
     <string name="resources_hint">Sites, helplines and associations. Links open in your browser.</string>
     <string name="resources_open_external">Open link</string>
+    <string name="resources_tab_general">General</string>
+    <string name="resources_tab_associations">Associations</string>
 
     <!-- ===== Theme picker ===== -->
     <string name="theme_picker_title">Theme</string>

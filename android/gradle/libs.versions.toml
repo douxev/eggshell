@@ -17,7 +17,8 @@ vico = "2.0.0-beta.3"
 jna = "5.15.0"
 reorderable = "2.4.3"
 appcompat = "1.7.0"
-mlkitTextRecognition = "16.0.1"
+pdfboxAndroid = "2.0.27.0"
+tesseract4android = "4.7.0"
 exifinterface = "1.3.7"
 
 [libraries]
@@ -50,7 +51,8 @@ jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 reorderable = { group = "sh.calvin.reorderable", name = "reorderable", version.ref = "reorderable" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 sqlcipher-android = { group = "net.zetetic", name = "sqlcipher-android", version = "4.6.1" }
-mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
+pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfboxAndroid" }
+tesseract4android = { group = "com.github.adaptech-cz.Tesseract4Android", name = "tesseract4android", version.ref = "tesseract4android" }
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
 
 [plugins]

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -21,7 +20,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -35,13 +33,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.VaultRepository
+import com.douxev.eggshell.ui.common.EncryptionNoteCard
+import com.douxev.eggshell.ui.common.PasswordField
 import com.douxev.eggshell.security.VaultPrefs
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -118,6 +116,8 @@ private fun PickModeStep(
 ) {
     Text(stringResource(R.string.onboarding_pick_mode_title), style = MaterialTheme.typography.titleLarge)
     Text(stringResource(R.string.onboarding_pick_mode_body))
+
+    EncryptionNoteCard()
 
     ModeCard(
         title = stringResource(R.string.mode_keystore_only_title),
@@ -209,24 +209,20 @@ private fun PassphraseStep(
     )
     Text(stringResource(R.string.passphrase_step_body, MIN_PASSPHRASE_LEN))
 
-    OutlinedTextField(
+    PasswordField(
         value = pass1,
         onValueChange = { pass1 = it },
-        label = { Text(stringResource(R.string.passphrase_label)) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, platformImeOptions = androidx.compose.ui.text.input.PlatformImeOptions("flagNoPersonalizedLearning")),
-        visualTransformation = PasswordVisualTransformation(),
+        label = stringResource(R.string.passphrase_label),
         isError = tooShort,
         supportingText = if (tooShort) {
             { Text(stringResource(R.string.passphrase_too_short, MIN_PASSPHRASE_LEN)) }
         } else null,
         modifier = Modifier.fillMaxWidth(),
     )
-    OutlinedTextField(
+    PasswordField(
         value = pass2,
         onValueChange = { pass2 = it },
-        label = { Text(stringResource(R.string.passphrase_confirm_label)) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, platformImeOptions = androidx.compose.ui.text.input.PlatformImeOptions("flagNoPersonalizedLearning")),
-        visualTransformation = PasswordVisualTransformation(),
+        label = stringResource(R.string.passphrase_confirm_label),
         isError = mismatch,
         supportingText = if (mismatch) {
             { Text(stringResource(R.string.passphrase_mismatch)) }
