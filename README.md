@@ -31,6 +31,16 @@ Encrypted SQLite database (SQLCipher), biometric or PIN unlock, and a
   alias, content masking in the recents/background.
 - **Widget** — your next dose visible from the home screen.
 
+## Screenshots
+
+| Home | Medication | Journal | Timeline |
+|------|------------|---------|----------|
+| <img src="assets/home.png" width="180" alt="Home" /> | <img src="assets/meds.png" width="180" alt="Medication" /> | <img src="assets/journal.png" width="180" alt="Journal" /> | <img src="assets/timeline.png" width="180" alt="Photo timeline" /> |
+
+| Themes | Encryption | Settings |
+|--------|------------|----------|
+| <img src="assets/themes.png" width="180" alt="Themes" /> | <img src="assets/encryption.png" width="180" alt="Encryption" /> | <img src="assets/settings.png" width="180" alt="Settings" /> |
+
 ## Privacy model
 
 - **Storage**: SQLite encrypted via SQLCipher. The database key is derived
