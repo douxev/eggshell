@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- An explicit keychain access group so the Keychain works even on an
+         ad-hoc-signed simulator build (Appetize). On the signed TestFlight
+         build $(AppIdentifierPrefix) resolves to the team prefix; the app's own
+         group needs no special provisioning capability. -->
+    <key>keychain-access-groups</key>
+    <array>
+        <string>$(AppIdentifierPrefix)com.douxev.eggshell</string>
+    </array>
+</dict>
+</plist>

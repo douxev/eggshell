@@ -54,14 +54,22 @@ jobs:
         env:
           DEVELOPMENT_TEAM: ""   # not needed for an unsigned simulator build
 
-      - name: Build app for simulator (no signing)
+      - name: Build app for simulator (ad-hoc signed)
         run: |
+          # Ad-hoc sign (identity "-") so the keychain-access-groups entitlement
+          # is embedded — otherwise the Keychain is unusable on Appetize/simulator
+          # (errSecMissingEntitlement). No provisioning profile is needed for the
+          # simulator destination.
           xcodebuild build \
             -project apple/Eggshell/Eggshell.xcodeproj \
             -scheme Eggshell \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            DEVELOPMENT_TEAM=""
 
       - name: Stage simulator .app for Appetize
         run: |

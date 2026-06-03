@@ -17,6 +17,11 @@ func describe(_ error: Error) -> String {
     case Biometric.BiometricError.cancelled: return "Authentification annulée."
     case Biometric.BiometricError.unavailable: return "Biométrie indisponible."
     case Keychain.KeychainError.userCancelled: return "Authentification annulée."
+    case Keychain.KeychainError.notFound: return "Élément du trousseau introuvable."
+    case Keychain.KeychainError.unexpectedStatus(let status):
+        // -34018 = errSecMissingEntitlement (typically an unsigned simulator build).
+        let hint = status == -34018 ? " — build non signé ? Teste via TestFlight." : ""
+        return "Trousseau indisponible (code \(status))\(hint)"
     case VaultError.missingPassphrase: return "Phrase secrète requise."
     default: return (error as NSError).localizedDescription
     }
