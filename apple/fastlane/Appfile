@@ -1,0 +1,4 @@
+app_identifier("com.douxev.eggshell")
+# No apple_id / itc team here — auth is via the App Store Connect API key
+# (set in the Fastfile from APP_STORE_CONNECT_API_KEY_* secrets), which avoids
+# 2FA in headless CI.

@@ -1,0 +1,65 @@
+name: iOS TestFlight (beta)
+
+# Builds, signs, and uploads a beta to TestFlight (internal testers — no Beta
+# App Review gate). Trigger by pushing a tag like `ios-v0.0.6`, or manually.
+#
+# Requires the GitHub secrets listed in apple/README.md.
+
+on:
+  push:
+    tags: ["ios-v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  beta:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      DEVELOPMENT_TEAM:                    ${{ secrets.DEVELOPMENT_TEAM }}
+      APP_STORE_CONNECT_API_KEY_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}
+      APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY_KEY:       ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY }}
+      MATCH_GIT_URL:                       ${{ secrets.MATCH_GIT_URL }}
+      MATCH_PASSWORD:                      ${{ secrets.MATCH_PASSWORD }}
+      MATCH_GIT_BASIC_AUTHORIZATION:       ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+      FASTLANE_SKIP_UPDATE_CHECK:          "true"
+      FASTLANE_HIDE_CHANGELOG:             "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable   # pin '26.x' for Liquid Glass once available
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          working-directory: apple
+          bundler-cache: true
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build Rust xcframework
+        run: bash apple/build-ios.sh
+
+      - name: Generate Xcode project
+        run: bundle exec fastlane gen
+        working-directory: apple
+
+      - name: Build & upload to TestFlight
+        run: bundle exec fastlane beta
+        working-directory: apple

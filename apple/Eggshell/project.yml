@@ -1,0 +1,61 @@
+# XcodeGen spec — the .xcodeproj is generated from this (never hand-edited /
+# committed). CI runs `xcodegen generate` before fastlane gym.
+#
+#   brew install xcodegen && (cd apple/Eggshell && xcodegen generate)
+#
+name: Eggshell
+options:
+  bundleIdPrefix: com.douxev
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "0.0.6"          # keep in sync with android versionName
+    CURRENT_PROJECT_VERSION: "1"        # build number; CI overrides per upload
+    DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}
+    # Swift 5 language mode: keeps the large, locally-uncompilable port free of
+    # Swift-6 strict-concurrency errors. async/await + actors still work. Tighten
+    # to 6.0 later once it builds green and we can iterate.
+    SWIFT_VERSION: "5.0"
+    # Liquid Glass lives behind `if #available(iOS 26)`; base SDK is whatever the
+    # pinned Xcode ships. Building against the iOS 26 SDK is what enables the
+    # glass APIs to resolve at all.
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+
+packages:
+  TransitionCore:
+    path: ../TransitionCore
+
+targets:
+  Eggshell:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources
+        excludes:
+          - "Info.plist"           # referenced via INFOPLIST_FILE, not compiled
+    dependencies:
+      - package: TransitionCore
+        product: TransitionCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.douxev.eggshell
+        INFOPLIST_FILE: Resources/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Manual       # fastlane match installs the profile; see Fastfile
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        TARGETED_DEVICE_FAMILY: "1"   # iPhone (add 2 for iPad later)
+        SWIFT_EMIT_LOC_STRINGS: YES
+
+schemes:
+  Eggshell:
+    build:
+      targets:
+        Eggshell: all
+    run:
+      config: Debug
+    archive:
+      config: Release
