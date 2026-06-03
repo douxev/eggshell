@@ -13,14 +13,19 @@ final class FeaturesStore: ObservableObject {
     @Published var photos: Bool      { didSet { d.set(photos, forKey: "photos") } }
     @Published var voice: Bool       { didSet { d.set(voice, forKey: "voice") } }
 
+    private static func read(_ d: UserDefaults, _ k: String, _ def: Bool) -> Bool {
+        d.object(forKey: k) == nil ? def : d.bool(forKey: k)
+    }
+
     init() {
-        func read(_ k: String, _ def: Bool) -> Bool { d.object(forKey: k) == nil ? def : d.bool(forKey: k) }
-        medications = read("medications", true)
-        journal     = read("journal", true)
-        hormones    = read("hormones", true)
-        weight      = read("weight", true)
-        photos      = read("photos", false)
-        voice       = read("voice", false)
+        // Pass `d` explicitly: a nested closure capturing self can't be called
+        // before all stored properties are initialized.
+        medications = Self.read(d, "medications", true)
+        journal     = Self.read(d, "journal", true)
+        hormones    = Self.read(d, "hormones", true)
+        weight      = Self.read(d, "weight", true)
+        photos      = Self.read(d, "photos", false)
+        voice       = Self.read(d, "voice", false)
     }
 }
 
