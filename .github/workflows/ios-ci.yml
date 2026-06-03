@@ -46,10 +46,6 @@ jobs:
       - name: Build Rust xcframework
         run: bash apple/build-ios.sh
 
-      - name: Debug generated NewDoseSchedule init
-        run: |
-          grep -nE 'public init\(medicationId: Int64, kind:' apple/TransitionCore/Sources/TransitionCore/transition*.swift || echo "NOT FOUND"
-
       - name: Install XcodeGen
         run: brew install xcodegen
 
