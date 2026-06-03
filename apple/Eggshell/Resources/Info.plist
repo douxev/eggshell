@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>fr</string>
+    <key>CFBundleDisplayName</key>
+    <string>eggshell</string>
+    <key>CFBundleName</key>
+    <string>eggshell</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$(MARKETING_VERSION)</string>
+    <key>CFBundleVersion</key>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>UILaunchScreen</key>
+    <dict/>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+
+    <!-- Localizations: French primary, English secondary (matches Android) -->
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>fr</string>
+        <string>en</string>
+    </array>
+
+    <!-- Permission usage strings (shown in the iOS consent prompts) -->
+    <key>NSFaceIDUsageDescription</key>
+    <string>Déverrouiller votre coffre chiffré avec Face ID.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Prendre des photos de suivi, stockées chiffrées sur votre appareil.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Enregistrer des clips vocaux pour le suivi de la voix, stockés chiffrés.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Importer des photos de suivi depuis votre photothèque.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Enregistrer une photo déchiffrée dans votre photothèque.</string>
+
+    <!-- Export compliance.
+         The app protects only its own local data with standard, published
+         algorithms (AES-GCM, Argon2id, SQLCipher). That use qualifies for the
+         export-compliance exemption, so we declare non-exempt = false to avoid
+         the per-build "Missing Compliance" gate on TestFlight.
+         ⚠ Confirm this determination for your jurisdiction; flip to <true/> and
+         complete the App Store Connect self-classification if you add any
+         non-standard cryptography. -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+</dict>
+</plist>

@@ -1,0 +1,38 @@
+name: iOS Certificates (one-time setup)
+
+# Run this ONCE (manually) to mint the Apple Distribution certificate + the
+# App Store provisioning profile and store them, encrypted, in your private
+# `match` git repo. After this succeeds, the normal beta pipeline runs in
+# read-only mode and never needs to create certificates again.
+#
+# This lets you bootstrap signing WITHOUT a Mac — everything happens on the
+# runner. Requires the same secrets as the TestFlight workflow.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  certs:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      APP_STORE_CONNECT_API_KEY_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}
+      APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY_KEY:       ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY }}
+      MATCH_GIT_URL:                       ${{ secrets.MATCH_GIT_URL }}
+      MATCH_PASSWORD:                      ${{ secrets.MATCH_PASSWORD }}
+      MATCH_GIT_BASIC_AUTHORIZATION:       ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+      FASTLANE_SKIP_UPDATE_CHECK:          "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          working-directory: apple
+          bundler-cache: true
+      - name: Create distribution cert + App Store profile in the match repo
+        run: bundle exec fastlane certs
+        working-directory: apple

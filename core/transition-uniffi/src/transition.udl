@@ -301,6 +301,7 @@ dictionary DoseSchedule {
     u32? interval_minutes;
     u32? daily_hour;
     u32? daily_minute;
+    u32? interval_days;
     i64 next_due_at_ms;
     boolean active;
     i64 created_at_ms;
@@ -312,5 +313,6 @@ dictionary NewDoseSchedule {
     u32? interval_minutes;
     u32? daily_hour;
     u32? daily_minute;
+    u32? interval_days;
     i64 next_due_at_ms;
 };

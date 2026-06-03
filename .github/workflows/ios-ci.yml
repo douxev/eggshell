@@ -1,0 +1,63 @@
+name: iOS CI (build check)
+
+# Compiles the Rust core into an xcframework and builds the app for the
+# simulator WITHOUT signing — so it needs no secrets and runs on every push/PR.
+# This is your fast feedback loop when you don't have a Mac locally.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/**"
+      - "apple/**"
+      - ".github/workflows/ios-ci.yml"
+  pull_request:
+    paths:
+      - "core/**"
+      - "apple/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          # 'latest-stable' always builds. Pin '26.x' once the runner image
+          # ships it to get real Liquid Glass (otherwise the app compiles with
+          # the .ultraThinMaterial fallback — see Theme/GlassCompat.swift).
+          xcode-version: latest-stable
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - name: Build Rust xcframework
+        run: bash apple/build-ios.sh
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: cd apple/Eggshell && xcodegen generate
+        env:
+          DEVELOPMENT_TEAM: ""   # not needed for an unsigned simulator build
+
+      - name: Build app for simulator (no signing)
+        run: |
+          xcodebuild build \
+            -project apple/Eggshell/Eggshell.xcodeproj \
+            -scheme Eggshell \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO

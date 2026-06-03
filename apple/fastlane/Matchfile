@@ -1,0 +1,11 @@
+# fastlane match — encrypted certs + provisioning profiles in a PRIVATE git repo.
+# The repo URL and the decryption passphrase come from CI secrets:
+#   MATCH_GIT_URL, MATCH_PASSWORD, MATCH_GIT_BASIC_AUTHORIZATION
+git_url(ENV["MATCH_GIT_URL"])
+storage_mode("git")
+
+type("appstore")
+app_identifier(["com.douxev.eggshell"])
+
+# CI never mints new certificates — it only reads existing ones.
+readonly(true)

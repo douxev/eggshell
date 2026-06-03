@@ -37,3 +37,23 @@ keystores/
 *.jks
 *.keystore
 keystore.properties
+
+# Apple / iOS — generated build artifacts (rebuilt by apple/build-ios.sh + CI)
+apple/TransitionCore/TransitionCoreFFI.xcframework/
+apple/TransitionCore/Sources/TransitionCore/transition*.swift
+apple/Eggshell/Eggshell.xcodeproj/
+apple/.bindings/
+apple/.headers/
+# fastlane / build outputs
+apple/build/
+apple/fastlane/report.xml
+apple/fastlane/Preview.html
+apple/fastlane/test_output/
+apple/fastlane/README.md
+apple/vendor/
+apple/.bundle/
+*.ipa
+*.dSYM.zip
+*.mobileprovision
+*.p12
+*.p8

@@ -28,6 +28,12 @@ rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"]
 [profile.release]
 lto = "thin"
 codegen-units = 1
-strip = "debuginfo"
+# Strip the whole symbol table (not just debuginfo) so the shipped .so files
+# don't carry readable Rust function names (transition_core::vault::…). Android
+# Studio still symbolicates release crashes because the AAB's debugSymbolLevel
+# extracts a symbol table into BUNDLE-METADATA *before* this strip reaches the
+# packaged library. Local Rust debugging uses the dev/test profiles (cargo
+# test on transition-core), which are unaffected.
+strip = "symbols"
 panic = "abort"
 opt-level = "z"
