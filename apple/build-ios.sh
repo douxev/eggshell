@@ -45,13 +45,14 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 # --- C-side env for the vendored OpenSSL + SQLCipher cross-compile ----------
-# The cc crate reads CFLAGS_<triple_with_underscores>. The simulator slices MUST
-# use -mios-simulator-version-min (NOT -miphoneos-version-min) or you get
-# "building for iOS Simulator, but linking against object built for iOS".
+# Do NOT inject `-target <triple>` via CFLAGS_<triple>: openssl-src already picks
+# the right Configure target (ios64-cross / iossimulator-xcrun) from the Rust
+# triple, and appending the bare triple makes OpenSSL's Configure treat it as a
+# SECOND target → "target already defined - ios64-cross" (perl exit 255). Both
+# openssl-src (300.x) and the `cc` crate (SQLCipher) derive the SDK + min-version
+# from the triple + IPHONEOS_DEPLOYMENT_TARGET themselves, including the
+# simulator-vs-device distinction — so we only set the deployment target.
 export IPHONEOS_DEPLOYMENT_TARGET="$DEPLOY_TARGET"
-export CFLAGS_aarch64_apple_ios="-target arm64-apple-ios -miphoneos-version-min=$DEPLOY_TARGET"
-export CFLAGS_aarch64_apple_ios_sim="-target arm64-apple-ios-simulator -mios-simulator-version-min=$DEPLOY_TARGET"
-export CFLAGS_x86_64_apple_ios="-target x86_64-apple-ios-simulator -mios-simulator-version-min=$DEPLOY_TARGET"
 # Never let a system/Homebrew OpenSSL hijack the vendored build.
 unset OPENSSL_DIR OPENSSL_LIB_DIR OPENSSL_INCLUDE_DIR || true
 
