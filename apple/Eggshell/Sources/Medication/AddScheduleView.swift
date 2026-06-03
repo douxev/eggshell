@@ -118,13 +118,24 @@ struct AddScheduleView: View {
     }
 
     private func buildSchedule() -> NewDoseSchedule {
-        NewDoseSchedule(
+        // Explicitly-typed optionals: feeding nested `? UInt32(x) : nil` ternaries
+        // straight into the initializer overloads the type solver and makes it
+        // emit a misleading "extra argument" error.
+        let timed = (kind == "daily" || kind == "days_interval")
+        let intervalMinutes: UInt32? = kind == "interval" ? UInt32(hours * 60) : nil
+        let dailyHour: UInt32? = timed ? UInt32(hour) : nil
+        let dailyMinute: UInt32? = timed ? UInt32(minute) : nil
+        let intervalDays: UInt32? = kind == "days_interval" ? UInt32(days) : nil
+
+        var schedule = NewDoseSchedule(
             medicationId: medId,
             kind: kind,
-            intervalMinutes: kind == "interval" ? UInt32(hours * 60) : nil,
-            dailyHour: (kind == "daily" || kind == "days_interval") ? UInt32(hour) : nil,
-            dailyMinute: (kind == "daily" || kind == "days_interval") ? UInt32(minute) : nil,
-            intervalDays: kind == "days_interval" ? UInt32(days) : nil,
+            intervalMinutes: intervalMinutes,
+            dailyHour: dailyHour,
+            dailyMinute: dailyMinute,
+            intervalDays: intervalDays,
             nextDueAtMs: 0)
+        schedule.nextDueAtMs = NextDueCalculator.firstDue(schedule)
+        return schedule
     }
 }

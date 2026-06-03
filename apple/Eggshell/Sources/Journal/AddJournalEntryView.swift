@@ -54,13 +54,20 @@ final class AddJournalEntryViewModel: ObservableObject {
         do {
             let text = freeText.trimmingCharacters(in: .whitespacesAndNewlines)
             let effects = sideEffects.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Explicitly-typed optionals so the type solver doesn't choke on the
+            // stacked `? UInt32(x) : nil` ternaries (misleading "extra argument").
+            let mood: UInt32? = moodOn ? UInt32(moodVal) : nil
+            let dysphoria: UInt32? = dysphoriaOn ? UInt32(dysphoriaVal) : nil
+            let euphoria: UInt32? = euphoriaOn ? UInt32(euphoriaVal) : nil
+            let libido: UInt32? = libidoOn ? UInt32(libidoVal) : nil
+            let energy: UInt32? = energyOn ? UInt32(energyVal) : nil
             let entry = NewJournalEntry(
                 atMs: existingAtMs ?? Time.nowMs(),
-                mood: moodOn ? UInt32(moodVal) : nil,
-                dysphoria: dysphoriaOn ? UInt32(dysphoriaVal) : nil,
-                euphoria: euphoriaOn ? UInt32(euphoriaVal) : nil,
-                libido: libidoOn ? UInt32(libidoVal) : nil,
-                energy: energyOn ? UInt32(energyVal) : nil,
+                mood: mood,
+                dysphoria: dysphoria,
+                euphoria: euphoria,
+                libido: libido,
+                energy: energy,
                 freeText: text.isEmpty ? nil : text,
                 sideEffects: effects.isEmpty ? nil : effects)
             if let id = entryId {
