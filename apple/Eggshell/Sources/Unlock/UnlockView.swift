@@ -112,7 +112,7 @@ final class UnlockViewModel: ObservableObject {
             self.error = describe(error)
             // back to the appropriate input step
             step = (mode.needsPassphrase) ? .passphrase : (mode.needsBiometric ? .biometric : .passphrase)
-            passphrase = ""
+            self.passphrase = ""   // @Published property, not the shadowing parameter
         }
     }
 
