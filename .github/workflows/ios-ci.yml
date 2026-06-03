@@ -63,16 +63,19 @@ jobs:
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO
 
-      - name: Package simulator .app (for Appetize.io)
+      - name: Stage simulator .app for Appetize
         run: |
           APP="build/Build/Products/Debug-iphonesimulator/Eggshell.app"
           test -d "$APP" || { echo "::error::simulator .app not found at $APP"; exit 1; }
-          (cd "$(dirname "$APP")" && zip -r -y "$GITHUB_WORKSPACE/Eggshell-simulator.zip" Eggshell.app)
-          echo "Zipped $(du -h Eggshell-simulator.zip | cut -f1)"
+          rm -rf appetize && mkdir -p appetize
+          cp -R "$APP" appetize/
 
+      # Don't double-zip: GitHub already zips the artifact. Uploading the staging
+      # dir makes the downloaded .zip contain Eggshell.app/ at top level —
+      # directly droppable onto Appetize.io.
       - name: Upload simulator app artifact
         uses: actions/upload-artifact@v4
         with:
           name: Eggshell-simulator-app
-          path: Eggshell-simulator.zip
+          path: appetize
           if-no-files-found: error
