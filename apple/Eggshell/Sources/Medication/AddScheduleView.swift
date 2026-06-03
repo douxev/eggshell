@@ -103,8 +103,7 @@ struct AddScheduleView: View {
             if let session = app.session {
                 submitting = true
                 Task {
-                    var schedule = buildSchedule()
-                    schedule.nextDueAtMs = NextDueCalculator.firstDue(schedule)
+                    let schedule = buildSchedule()
                     let ok = await vm.save(schedule, session: session)
                     submitting = false
                     if ok { dismiss() }
@@ -118,24 +117,22 @@ struct AddScheduleView: View {
     }
 
     private func buildSchedule() -> NewDoseSchedule {
-        // Explicitly-typed optionals: feeding nested `? UInt32(x) : nil` ternaries
-        // straight into the initializer overloads the type solver and makes it
-        // emit a misleading "extra argument" error.
         let timed = (kind == "daily" || kind == "days_interval")
-        let intervalMinutes: UInt32? = kind == "interval" ? UInt32(hours * 60) : nil
-        let dailyHour: UInt32? = timed ? UInt32(hour) : nil
-        let dailyMinute: UInt32? = timed ? UInt32(minute) : nil
-        let intervalDays: UInt32? = kind == "days_interval" ? UInt32(days) : nil
+        let mins: UInt32?  = kind == "interval" ? UInt32(hours * 60) : nil
+        let dh: UInt32?    = timed ? UInt32(hour) : nil
+        let dm: UInt32?    = timed ? UInt32(minute) : nil
+        let dInt: UInt32?  = kind == "days_interval" ? UInt32(days) : nil
 
-        var schedule = NewDoseSchedule(
+        let seed = NewDoseSchedule(
             medicationId: medId,
             kind: kind,
-            intervalMinutes: intervalMinutes,
-            dailyHour: dailyHour,
-            dailyMinute: dailyMinute,
-            intervalDays: intervalDays,
+            intervalMinutes: mins,
+            dailyHour: dh,
+            dailyMinute: dm,
+            intervalDays: dInt,
             nextDueAtMs: 0)
-        schedule.nextDueAtMs = NextDueCalculator.firstDue(schedule)
-        return schedule
+        var result = seed
+        result.nextDueAtMs = NextDueCalculator.firstDue(seed)
+        return result
     }
 }
