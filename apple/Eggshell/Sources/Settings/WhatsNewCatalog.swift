@@ -29,7 +29,7 @@ enum WhatsNewCatalog {
                 "Rappels labo, photo & voix — catégories séparées avec notification prioritaire optionnelle.",
                 "Lightbox + zoom — pince pour zoomer, partage et sauvegarde dans la galerie depuis la timeline photo.",
                 "Blocage des captures d'écran — bascule dans Avancé pour cacher l'app et bloquer les captures.",
-                "Saignements — suivi optionnel des saignements et du spotting.",
+                "Menstruations — suivi optionnel des règles et du spotting.",
                 "Ressources — sites et associations utiles dans Plus → Ressources.",
             ]
         ),

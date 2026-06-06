@@ -75,14 +75,15 @@ struct MetricSlidersView: View {
         VStack(alignment: .leading, spacing: Spacing.l) {
             ForEach(definitions, id: \.id) { def in
                 let v = values[def.id] ?? def.minValue
+                let (le, re) = MetricCatalog.emojis(def)
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     HStack {
-                        Text(def.label).font(.eggLabel).foregroundStyle(palette.onSurface)
+                        Text(MetricCatalog.displayLabel(def)).font(.eggLabel).foregroundStyle(palette.onSurface)
                         Spacer()
                         Text("\(v)").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
                     }
                     HStack(spacing: Spacing.s) {
-                        if let l = def.emojiLeft { Text(l) }
+                        if let le, !le.isEmpty { Text(le) }
                         Slider(
                             value: Binding(
                                 get: { Double(values[def.id] ?? def.minValue) },
@@ -90,7 +91,7 @@ struct MetricSlidersView: View {
                             in: Double(def.minValue)...Double(def.maxValue),
                             step: 1)
                         .tint(palette.primary)
-                        if let r = def.emojiRight { Text(r) }
+                        if let re, !re.isEmpty { Text(re) }
                     }
                 }
             }

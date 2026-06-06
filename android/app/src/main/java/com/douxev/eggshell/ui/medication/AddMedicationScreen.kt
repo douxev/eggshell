@@ -1,15 +1,24 @@
 package com.douxev.eggshell.ui.medication
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -161,6 +170,7 @@ fun AddMedicationScreen(
     var unit by rememberSaveable { mutableStateOf("") }
     var notes by rememberSaveable { mutableStateOf("") }
     var notifAlias by rememberSaveable { mutableStateOf("") }
+    var color by rememberSaveable { mutableStateOf<Long?>(null) }
     var seeded by rememberSaveable { mutableStateOf(false) }
 
     // Prefill once the existing medication loads (edit mode only).
@@ -174,6 +184,7 @@ fun AddMedicationScreen(
             unit = m.defaultDoseUnit.orEmpty()
             notes = m.notes.orEmpty()
             notifAlias = loadedAlias.orEmpty()
+            color = m.color
             seeded = true
         }
     }
@@ -257,6 +268,9 @@ fun AddMedicationScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            Text(stringResource(R.string.med_field_color), style = MaterialTheme.typography.labelLarge)
+            ColorSwatchPicker(selected = color, onSelected = { color = it })
+
             Button(
                 enabled = canSubmit,
                 onClick = {
@@ -267,7 +281,7 @@ fun AddMedicationScreen(
                             route = route,
                             defaultDose = dose.replace(',', '.').toDoubleOrNull(),
                             defaultDoseUnit = unit.ifBlank { null },
-                            color = null,
+                            color = color,
                             notes = notes.ifBlank { null },
                         ),
                         notifAlias = notifAlias.ifBlank { null },
@@ -284,6 +298,56 @@ fun AddMedicationScreen(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+        }
+    }
+}
+
+/** Preset accent colours, stored as opaque ARGB (0xFFRRGGBB) so the value is
+ *  rendered identically on iOS (Color from ARGB) from the shared DB. */
+private val MED_COLOR_SWATCHES: List<Long> = listOf(
+    0xFFE57373, 0xFFBA68C8, 0xFF9575CD, 0xFF7986CB, 0xFF4FC3F7,
+    0xFF4DB6AC, 0xFF81C784, 0xFFFFD54F, 0xFFFFB74D, 0xFF90A4AE,
+)
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ColorSwatchPicker(selected: Long?, onSelected: (Long?) -> Unit) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        // "None" option.
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                .border(
+                    width = if (selected == null) 3.dp else 1.dp,
+                    color = if (selected == null) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outlineVariant,
+                    shape = CircleShape,
+                )
+                .clickable { onSelected(null) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("∅", style = MaterialTheme.typography.bodyMedium)
+        }
+        MED_COLOR_SWATCHES.forEach { swatch ->
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color(swatch))
+                    .border(
+                        width = if (selected == swatch) 3.dp else 1.dp,
+                        color = if (selected == swatch) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outlineVariant,
+                        shape = CircleShape,
+                    )
+                    .clickable { onSelected(swatch) },
+            )
         }
     }
 }

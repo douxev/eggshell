@@ -198,7 +198,7 @@ struct MetricEditorView: View {
             }
             Button("Annuler", role: .cancel) { confirmDelete = nil }
         } message: { target in
-            Text("« \(target.label) » sera retirée. Les valeurs déjà enregistrées sont conservées.")
+            Text("« \(MetricCatalog.displayLabel(target)) » sera retirée. Les valeurs déjà enregistrées sont conservées.")
         }
     }
 
@@ -265,11 +265,10 @@ struct MetricEditorView: View {
     }
 
     private func metricTitle(_ def: MetricDefinition) -> String {
-        let emojis = [def.emojiLeft, def.emojiRight]
-            .compactMap { $0 }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        return emojis.isEmpty ? def.label : "\(def.label)  \(emojis)"
+        let label = MetricCatalog.displayLabel(def)
+        let (le, re) = MetricCatalog.emojis(def)
+        let emojis = [le, re].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+        return emojis.isEmpty ? label : "\(label)  \(emojis)"
     }
 }
 

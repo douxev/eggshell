@@ -29,7 +29,7 @@ struct HomeTabView: View {
                 }
             }
             if features.bleeding {
-                Tab("Saignements", systemImage: "drop.fill", value: HomeTab.bleeding) {
+                Tab("Menstruations", systemImage: "drop.fill", value: HomeTab.bleeding) {
                     TabStack { BleedingView() }
                 }
             }

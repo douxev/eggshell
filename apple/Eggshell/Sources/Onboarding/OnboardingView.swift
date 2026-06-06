@@ -502,7 +502,7 @@ struct OnboardingView: View {
                 Toggle("Journal", isOn: $features.journal)
                 Toggle("Hormones", isOn: $features.hormones)
                 Toggle("Poids", isOn: $features.weight)
-                Toggle("Saignements", isOn: $features.bleeding)
+                Toggle("Menstruations", isOn: $features.bleeding)
                 Toggle("Photos", isOn: $features.photos)
                 Toggle("Voix", isOn: $features.voice)
             }

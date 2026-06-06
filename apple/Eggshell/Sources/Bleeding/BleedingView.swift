@@ -34,8 +34,8 @@ struct BleedingView: View {
     @StateObject private var vm = BleedingViewModel()
 
     var body: some View {
-        TabScaffold(title: "Saignements") {
-            Text("Suis tes saignements et ton spotting au fil du cycle.")
+        TabScaffold(title: "Menstruations") {
+            Text("Note tes règles et ton spotting au fil du cycle.")
                 .font(.eggCaption)
                 .foregroundStyle(palette.onSurface.opacity(0.6))
 
@@ -85,7 +85,7 @@ struct BleedingView: View {
     private func kindLabel(_ isSpotting: Bool?) -> String {
         switch isSpotting {
         case .some(true): return "Spotting"
-        case .some(false): return "Saignement"
+        case .some(false): return "Règles"
         case .none: return "Non précisé"
         }
     }

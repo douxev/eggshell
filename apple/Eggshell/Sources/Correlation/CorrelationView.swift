@@ -83,7 +83,7 @@ struct CorrelationView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.m) {
-                Text("Visualise ton humeur en regard de tes prises, changements de traitement et jours de saignement. Description uniquement, aucune relation de cause à effet.")
+                Text("Visualise ton humeur en regard de tes prises, changements de traitement et jours de règles. Description uniquement, aucune relation de cause à effet.")
                     .font(.eggCaption)
                     .foregroundStyle(palette.onSurface.opacity(0.6))
 
@@ -225,7 +225,7 @@ struct CorrelationView: View {
             legendRow(palette.error, "Doses manquées")
             legendRow(palette.secondary, "Changement de traitement")
             if !vm.bleedingDays.isEmpty {
-                legendRow(palette.error, "Saignement")
+                legendRow(palette.error, "Règles")
             }
         }
     }

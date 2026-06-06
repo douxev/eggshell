@@ -51,8 +51,8 @@ struct FeaturesView: View {
                         isOn: $features.voice)
                     Divider().overlay(palette.outlineVariant)
                     featureToggle(
-                        title: "Saignements",
-                        subtitle: "Suivi des saignements et du spotting",
+                        title: "Menstruations",
+                        subtitle: "Suivi des règles et du spotting",
                         isOn: $features.bleeding)
                 }
             }

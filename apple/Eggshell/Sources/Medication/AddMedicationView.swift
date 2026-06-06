@@ -1,5 +1,6 @@
 import SwiftUI
 import TransitionCore
+import UIKit
 
 // ===========================================================================
 // PUSHED screen — create OR edit a medication.
@@ -23,7 +24,8 @@ final class AddMedicationViewModel: ObservableObject {
     @Published var route = MedCatalog.routes.first ?? "oral"
     @Published var doseText = ""
     @Published var unit = ""
-    @Published var color = ""
+    @Published var colorEnabled = false
+    @Published var pickedColor: Color = Color(hex: 0x6A4FA3)   // default lavender
     @Published var notes = ""
 
     let editId: Int64?
@@ -53,7 +55,10 @@ final class AddMedicationViewModel: ObservableObject {
                     route = med.route
                     doseText = med.defaultDose.map { formatDose($0) } ?? ""
                     unit = med.defaultDoseUnit ?? ""
-                    color = med.color.map { String($0) } ?? ""
+                    if let c = med.color {
+                        colorEnabled = true
+                        pickedColor = MedColor.color(fromArgb: c)
+                    }
                     notes = med.notes ?? ""
                     seeded = true
                 }
@@ -71,7 +76,7 @@ final class AddMedicationViewModel: ObservableObject {
         error = nil
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let parsedDose = Double(doseText.replacingOccurrences(of: ",", with: "."))
-        let parsedColor = Int64(color.trimmingCharacters(in: .whitespacesAndNewlines))
+        let parsedColor: Int64? = colorEnabled ? MedColor.argb(from: pickedColor) : nil
         let med = NewMedication(
             name: trimmed,
             kind: kind,
@@ -219,11 +224,19 @@ struct AddMedicationView: View {
 
     private var colorCard: some View {
         SectionCard {
-            Text("Couleur (optionnel)").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            TextField("Code couleur", text: $vm.color)
-                .keyboardType(.numberPad)
-                .font(.eggBody)
-                .foregroundStyle(palette.onSurface)
+            Toggle(isOn: $vm.colorEnabled) {
+                Text("Couleur").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
+            }
+            .tint(palette.primary)
+            if vm.colorEnabled {
+                ColorPicker(selection: $vm.pickedColor, supportsOpacity: false) {
+                    HStack(spacing: Spacing.s) {
+                        Circle().fill(vm.pickedColor).frame(width: 22, height: 22)
+                            .overlay(Circle().stroke(palette.outlineVariant, lineWidth: 1))
+                        Text("Choisir une couleur").font(.eggBody).foregroundStyle(palette.onSurface)
+                    }
+                }
+            }
         }
     }
 
@@ -262,6 +275,26 @@ struct AddMedicationView: View {
             // New medication → chain straight into its schedule setup.
             if !editing { router.push(.addSchedule(medId: id)) }
         }
+    }
+}
+
+// Medication accent color <-> stored Int. Stored as opaque ARGB (0xFFRRGGBB) so
+// Android's `Color(it.toInt())` (which reads ARGB) renders the same swatch from
+// the shared DB.
+private enum MedColor {
+    static func argb(from color: Color) -> Int64 {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(color).getRed(&r, green: &g, blue: &b, alpha: &a)
+        func byte(_ v: CGFloat) -> Int64 { Int64((max(0, min(1, v)) * 255).rounded()) }
+        return Int64(0xFF00_0000) | (byte(r) << 16) | (byte(g) << 8) | byte(b)
+    }
+
+    static func color(fromArgb v: Int64) -> Color {
+        Color(.sRGB,
+              red: Double((v >> 16) & 0xFF) / 255,
+              green: Double((v >> 8) & 0xFF) / 255,
+              blue: Double(v & 0xFF) / 255,
+              opacity: 1)
     }
 }
 

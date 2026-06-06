@@ -237,7 +237,7 @@ struct PdfExportView: View {
             includeRow("Doses", "Prises enregistrées sur la période", "syringe", $options.doses)
             includeRow("Hormones", "Taux mesurés en laboratoire", "chart.line.uptrend.xyaxis", $options.hormones)
             includeRow("Journal", "Ressentis et effets", "square.and.pencil", $options.journal)
-            includeRow("Saignements", "Suivi des saignements", "drop", $options.bleeding)
+            includeRow("Menstruations", "Suivi des règles", "drop", $options.bleeding)
         }
     }
 
@@ -370,9 +370,9 @@ private enum PdfReportRenderer {
             }
 
             if options.bleeding {
-                cursor.section("Saignements", count: bleeding.count)
+                cursor.section("Menstruations", count: bleeding.count)
                 if bleeding.isEmpty {
-                    cursor.muted("Aucun saignement enregistré sur la période.")
+                    cursor.muted("Aucune entrée enregistrée sur la période.")
                 } else {
                     for b in bleeding.prefix(120) { bleedingRow(&cursor, b) }
                 }
@@ -468,8 +468,8 @@ private enum PdfReportRenderer {
 
     private static func bleedingRow(_ c: inout Cursor, _ b: BleedingEntry) {
         c.ensure(20)
-        var label = "Saignement"
-        if let spotting = b.isSpotting { label = spotting ? "Léger (spotting)" : "Saignement" }
+        var label = "Règles"
+        if let spotting = b.isSpotting { label = spotting ? "Léger (spotting)" : "Règles" }
         let detail = (b.freeText?.isEmpty == false) ? (b.freeText ?? "") : ""
         c.row(left: dateTime.string(from: date(b.atMs)) + " — " + label, right: detail)
         c.divider()

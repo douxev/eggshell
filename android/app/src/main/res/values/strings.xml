@@ -131,6 +131,8 @@
     <string name="med_field_dose_unit">Unité</string>
     <string name="med_field_dose">Dose</string>
     <string name="med_field_notes">Notes (facultatif)</string>
+    <string name="med_field_color">Couleur (facultatif)</string>
+    <string name="med_color_none">Aucune</string>
     <string name="med_field_notif_alias">Alias notification (facultatif)</string>
     <string name="med_field_notif_alias_hint">Nom affiché dans les rappels si tu choisis « Alias » dans Réglages → Rappels. Ex. « Vitamines ».</string>
     <string name="med_alias_section">Alias notification</string>

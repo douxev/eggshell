@@ -162,7 +162,7 @@ struct AddBleedingEntryView: View {
         SectionCard {
             Text("Type").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
             HStack(spacing: Spacing.s) {
-                ChoiceChip(label: "Saignement", selected: vm.isSpotting == false) {
+                ChoiceChip(label: "Règles", selected: vm.isSpotting == false) {
                     vm.isSpotting = (vm.isSpotting == false) ? nil : false
                 }
                 ChoiceChip(label: "Spotting", selected: vm.isSpotting == true) {

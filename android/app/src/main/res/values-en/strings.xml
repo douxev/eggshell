@@ -120,6 +120,8 @@
     <string name="med_field_dose_unit">Unit</string>
     <string name="med_field_dose">Dose</string>
     <string name="med_field_notes">Notes (optional)</string>
+    <string name="med_field_color">Color (optional)</string>
+    <string name="med_color_none">None</string>
     <string name="med_field_notif_alias">Notification alias (optional)</string>
     <string name="med_field_notif_alias_hint">Name shown in reminders if you pick \"Alias\" in Settings → Reminders. E.g. \"Vitamins\".</string>
     <string name="med_alias_section">Notification alias</string>
