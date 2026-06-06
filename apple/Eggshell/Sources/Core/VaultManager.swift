@@ -80,8 +80,22 @@ actor VaultManager {
                  mode: SecurityMode, localPassphrase: String?,
                  biometricContext: LAContext? = nil) throws -> VaultService {
         guard mode != .paranoid else { throw VaultError.paranoidRequiresRekey }
+        // Decrypt + write the DB first. A wrong bundle passphrase throws here,
+        // before any local state is touched.
         let imported = try importEncrypted(bundle: bundle, passphrase: bundlePassphrase, targetDbPath: dbPath)
         let key = try VaultKey.fromRaw(raw: imported.masterKey)
+
+        // Drop ALL device-local security state carried over from the source
+        // install BEFORE persisting the restored vault's wrap. Otherwise the
+        // old access/decoy PIN hashes survive in the vault prefs and gate the
+        // freshly restored vault on the next unlock — the old decoy PIN would
+        // open the decoy DB instead of the restored data, and accumulated
+        // failures against the stale rate-limiter could auto-wipe the just-
+        // imported vault. Mirrors Android's restoreFromImportedKey, which wipes
+        // prefs first. (prefs.wipe() also clears mode/kdf/wrapped_key, which we
+        // immediately rewrite below.)
+        prefs.wipe()
+        PinRateLimiter().reset()
 
         let mat = freshKdfMaterial()
         persistKdf(mat)
@@ -180,6 +194,7 @@ actor VaultManager {
         prefs.wipe()
         Keystore.wipe()
         MetadataSeal.wipe()
+        DecoyNotesStore.clear()
         AppPaths.wipeAll()
     }
 }

@@ -498,9 +498,9 @@ struct OnboardingView: View {
                 .font(.eggCallout)
                 .foregroundStyle(palette.onSurface.opacity(0.7))
             SectionCard {
-                Toggle("Médicaments", isOn: $features.medications)
+                Toggle("Médics", isOn: $features.medications)
                 Toggle("Journal", isOn: $features.journal)
-                Toggle("Hormones", isOn: $features.hormones)
+                Toggle("Courbes", isOn: $features.hormones)
                 Toggle("Poids", isOn: $features.weight)
                 Toggle("Menstruations", isOn: $features.bleeding)
                 Toggle("Photos", isOn: $features.photos)
@@ -662,7 +662,7 @@ private struct MedicationSetupStep: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.m) {
-            Text("Un premier médicament ?")
+            Text("Un premier traitement ?")
                 .font(.eggTitle)
                 .foregroundStyle(palette.onSurface)
             Text("Optionnel — tu pourras en ajouter autant que tu veux plus tard.")

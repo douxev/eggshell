@@ -1,12 +1,20 @@
 import SwiftUI
 
-// Pure-UI fake "Notes" app shown when the decoy PIN is entered. NO vault access,
-// no persistence — resets on cold start. Mirrors android/.../ui/unlock/DecoyScreen.kt.
-// A coercive observer sees an ordinary, lived-in notes app.
+// Working fake "Notes" app shown when the decoy PIN is entered. NO vault access.
+// Notes are PERSISTED in a plain UserDefaults suite so the decoy behaves like a
+// real notes app across sessions (edits/additions/deletions survive a cold
+// start). The content is decoy-only cover text — it never touches the real
+// encrypted vault. Seeded once on first launch so it looks lived-in.
+// Mirrors android/.../ui/unlock/DecoyScreen.kt.
 struct DecoyNotesView: View {
-    private struct Note: Identifiable { let id = UUID(); var title: String; var body: String; var tint: Color }
+    struct Note: Identifiable, Codable, Equatable {
+        var id = UUID()
+        var title: String
+        var body: String
+        var tintHex: UInt32
+    }
 
-    @State private var notes: [Note] = DecoyNotesView.seed()
+    @State private var notes: [Note] = DecoyNotesStore.loadOrSeed()
     @State private var search = ""
     @State private var editing: Note?
 
@@ -33,7 +41,9 @@ struct DecoyNotesView: View {
             .searchable(text: $search)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { notes.insert(Note(title: "Nouvelle note", body: "", tint: Self.tints.randomElement()!), at: 0) } label: {
+                    Button {
+                        notes.insert(Note(title: "Nouvelle note", body: "", tintHex: Self.tintHexes.randomElement()!), at: 0)
+                    } label: {
                         Image(systemName: "plus")
                     }
                 }
@@ -41,6 +51,8 @@ struct DecoyNotesView: View {
             .tint(Self.teal)
             .sheet(item: $editing) { note in editor(note) }
         }
+        // Persist on every change so the decoy stays believable across launches.
+        .onChange(of: notes) { _, new in DecoyNotesStore.save(new) }
     }
 
     private func card(_ note: Note) -> some View {
@@ -50,7 +62,7 @@ struct DecoyNotesView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 90, alignment: .topLeading)
         .padding(12)
-        .background(note.tint, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Color(hex: note.tintHex), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private func editor(_ note: Note) -> some View {
@@ -76,16 +88,38 @@ struct DecoyNotesView: View {
         }
     }
 
-    private static let tints = [Color(hex: 0xFFF3C4), Color(hex: 0xD7F0E6), Color(hex: 0xFAD9D5),
-                                Color(hex: 0xE3E0F4), Color(hex: 0xDDEBF7), Color(hex: 0xF7E6D5)]
+    static let tintHexes: [UInt32] = [0xFFF3C4, 0xD7F0E6, 0xFAD9D5, 0xE3E0F4, 0xDDEBF7, 0xF7E6D5]
+}
 
-    private static func seed() -> [Note] {
-        [
-            Note(title: "Courses", body: "Lait\nœufs\npain\ncafé\ntomates", tint: tints[0]),
-            Note(title: "À faire ce week-end", body: "Lessive\nappeler maman\nranger le bureau", tint: tints[1]),
-            Note(title: "Idées vacances", body: "Lisbonne ? Rome au printemps. Vérifier les vols.", tint: tints[2]),
-            Note(title: "Recette tarte tatin", body: "Pommes, beurre, sucre, pâte. 25 min à 180°C.", tint: tints[3]),
-            Note(title: "Films à voir", body: "Portrait de la jeune fille en feu\nPpast Lives", tint: tints[4]),
+// Plaintext decoy-notes store (cover content only; never the real vault).
+enum DecoyNotesStore {
+    private static let d = UserDefaults(suiteName: "com.douxev.eggshell.decoynotes") ?? .standard
+    private static let key = "notes"
+
+    static func loadOrSeed() -> [DecoyNotesView.Note] {
+        if let data = d.data(forKey: key),
+           let notes = try? JSONDecoder().decode([DecoyNotesView.Note].self, from: data) {
+            return notes
+        }
+        let seed = self.seed()
+        save(seed)
+        return seed
+    }
+
+    static func save(_ notes: [DecoyNotesView.Note]) {
+        if let data = try? JSONEncoder().encode(notes) { d.set(data, forKey: key) }
+    }
+
+    static func clear() { d.removeObject(forKey: key) }
+
+    private static func seed() -> [DecoyNotesView.Note] {
+        let t = DecoyNotesView.tintHexes
+        return [
+            .init(title: "Courses", body: "Lait\nœufs\npain\ncafé\ntomates", tintHex: t[0]),
+            .init(title: "À faire ce week-end", body: "Lessive\nappeler maman\nranger le bureau", tintHex: t[1]),
+            .init(title: "Idées vacances", body: "Lisbonne ? Rome au printemps. Vérifier les vols.", tintHex: t[2]),
+            .init(title: "Recette tarte tatin", body: "Pommes, beurre, sucre, pâte. 25 min à 180°C.", tintHex: t[3]),
+            .init(title: "Films à voir", body: "Portrait de la jeune fille en feu\nPast Lives", tintHex: t[4]),
         ]
     }
 }

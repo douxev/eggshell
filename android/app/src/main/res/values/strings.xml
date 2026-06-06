@@ -5,7 +5,7 @@
 
     <!-- Écran d'accueil (Phase 0 smoke) -->
     <string name="hello_name_label">Ton prénom</string>
-    <string name="hello_button">Saluer depuis Rust</string>
+    <string name="hello_button">Bienvenue !</string>
 
     <!-- Actions communes -->
     <string name="action_start">Commencer</string>
@@ -17,9 +17,9 @@
     <string name="action_ok">OK</string>
 
     <!-- Onboarding -->
-    <string name="onboarding_title">Configuration initiale</string>
+    <string name="onboarding_title">Configuration rapide</string>
     <string name="onboarding_welcome_title">Bienvenue</string>
-    <string name="onboarding_welcome_body">Toutes tes données restent sur ton téléphone, chiffrées en local. Aucun envoi vers un serveur. Choisis dans un instant comment tu veux protéger l\'ouverture de l\'app.</string>
+    <string name="onboarding_welcome_body">Toutes tes données restent sur ton téléphone, chiffrées. Aucune connexion internet. Choisis dans un instant comment tu veux ouvrir l\'app.</string>
     <string name="onboarding_pick_mode_title">Mode de sécurité</string>
     <string name="onboarding_pick_mode_body">Tu peux changer plus tard depuis les réglages.</string>
     <string name="onboarding_scenario_title">Quelle est ta situation ?</string>
@@ -30,18 +30,18 @@
     <string name="onboarding_scenario_atrisk_body">Tu vis là où c\'est risqué ou criminalisé. On met en place une protection forte, étape par étape.</string>
     <string name="onboarding_advanced">Configurer manuellement (avancé)</string>
     <string name="onboarding_guided_decoy_title">Mode leurre</string>
-    <string name="onboarding_guided_decoy_body">Deux codes à 4 chiffres. Ton code d\'accès ouvre l\'app ; le PIN de leurre ouvre une fausse calculatrice, sans aucune trace de tes vraies données. Utile si on t\'oblige à déverrouiller.</string>
+    <string name="onboarding_guided_decoy_body">Deux codes à 4 chiffres. Ton code d\'accès ouvre l\'app, le PIN de leurre ouvre une fausse appli de prise de notes. Utile si on t\'oblige à déverrouiller.</string>
     <string name="onboarding_guided_decoy_set">Activer le leurre</string>
-    <string name="onboarding_guided_decoy_skip">Passer cette étape</string>
-    <string name="onboarding_guided_decoy_must_differ">Le code d\'accès et le PIN de leurre doivent différer.</string>
+    <string name="onboarding_guided_decoy_skip">Passer</string>
+    <string name="onboarding_guided_decoy_must_differ">Les deux codes doivent être différents.</string>
     <string name="onboarding_guided_icon_title">Icône discrète</string>
     <string name="onboarding_guided_icon_body">L\'app peut se présenter sous une autre icône et un autre nom sur ton téléphone.</string>
     <string name="onboarding_guided_icon_keep">Garder l\'icône actuelle</string>
     <string name="onboarding_scenario_biometric_title">Biométrie</string>
     <string name="onboarding_scenario_biometric_body">Ouverture par empreinte ou visage. La clé reste protégée par le module sécurisé du téléphone.</string>
     <string name="onboarding_features_title">Que veux-tu suivre ?</string>
-    <string name="onboarding_features_body">Active seulement ce qui te sert. Tu pourras changer à tout moment dans les réglages.</string>
-    <string name="onboarding_cfg_med_title">Un premier médicament</string>
+    <string name="onboarding_features_body">Choisis les fonctionnalités utiles. Tu pourras modifier tout ça plus tard dans les réglages.</string>
+    <string name="onboarding_cfg_med_title">Un premier traitement</string>
     <string name="onboarding_cfg_med_body">Ajoute un traitement si tu veux. Tu pourras en ajouter d\'autres ensuite.</string>
     <string name="onboarding_cfg_med_remind">Me le rappeler chaque jour</string>
     <string name="onboarding_cfg_med_add">Ajouter</string>
@@ -53,15 +53,15 @@
     <string name="onboarding_cfg_voice_body">Un rappel régulier pour enregistrer ta voix.</string>
     <string name="onboarding_cfg_reminder_activate">Activer le rappel</string>
     <string name="onboarding_cfg_theme_title">Choisis ton thème</string>
-    <string name="onboarding_cfg_theme_body">Touche un thème pour l\'essayer en direct.</string>
+    <string name="onboarding_cfg_theme_body">Selectionne un thème pour l\'essayer.</string>
     <string name="onboarding_cfg_backup_title">Garde ta phrase secrète</string>
     <string name="onboarding_cfg_backup_body">Tes données sont chiffrées avec ta phrase secrète. Si tu l\'oublies, personne — pas même nous — ne peut les récupérer. Note-la dans un endroit sûr.</string>
     <string name="onboarding_cfg_backup_hint">Tu pourras créer une sauvegarde chiffrée depuis Réglages → Sauvegarde quand tu veux.</string>
     <string name="onboarding_cfg_backup_ack">J\'ai noté ma phrase secrète</string>
     <string name="onboarding_cfg_export_title">Export pour ton médecin</string>
-    <string name="onboarding_cfg_export_body">Quand tu auras des données, tu pourras générer un rapport PDF clair (traitements, courbes, journal) à montrer à ton endocrinologue — depuis Réglages → Export PDF.</string>
+    <string name="onboarding_cfg_export_body">Quand tu auras des données, tu pourras générer un rapport PDF clair (traitements, courbes, journal) à montrer à ton endocrinologue, psy, etc — depuis Réglages → Export PDF.</string>
     <string name="onboarding_cfg_recap_title">Tout est prêt ✓</string>
-    <string name="onboarding_cfg_recap_body">Tu peux commencer. Chaque réglage reste modifiable dans Réglages.</string>
+    <string name="onboarding_cfg_recap_body">Tu peux commencer. Chaque option reste modifiable dans Réglages.</string>
     <string name="onboarding_cfg_recap_finish">C\'est parti</string>
     <string name="action_continue">Continuer</string>
     <string name="action_later">Plus tard</string>
@@ -77,11 +77,11 @@
     <string name="mode_keystore_passphrase_title">Mot de passe</string>
     <string name="mode_keystore_passphrase_body">Deux facteurs : il faut le mot de passe ET le téléphone (la clé est protégée par le module sécurisé). Recommandé si tu redoutes un accès physique à l\'appareil.</string>
     <string name="mode_paranoid_title">Mode parano</string>
-    <string name="mode_paranoid_body">Mot de passe seul, sans aide du module sécurisé. Aucune clé persistée : le mot de passe redérive la clé à chaque démarrage. Friction maximale, protection maximale (résiste à un attaquant qui aurait accès à l\'enclave sécurisée).</string>
+    <string name="mode_paranoid_body">Mot de passe seul, sans aide du module sécurisé. Aucune clé persistée : le mot de passe redérive la clé à chaque démarrage. Protection maximale (résiste à un attaquant qui aurait accès à l\'enclave sécurisée).</string>
 
     <!-- One-line "is this for me?" pitch shown under each mode. -->
     <string name="mode_keystore_only_for">Pour toi si ton téléphone est un appareil de confiance.</string>
-    <string name="mode_keystore_biometric_for">Pour toi si tu veux ouvrir avec ton empreinte ou ton visage.</string>
+    <string name="mode_keystore_biometric_for">Pour toi si tu veux éviter les indiscrétions.</string>
     <string name="mode_keystore_passphrase_for">Pour toi s\'il faut une sécurité renforcée sur l\'appareil.</string>
     <string name="mode_paranoid_for">Pour toi si tu vis dans un contexte hostile et tu redoutes une saisie de l\'appareil.</string>
     <string name="mode_for_label">Pour toi si&#8230;</string>
@@ -115,15 +115,15 @@
     <string name="biometric_unlock_title">Déverrouiller le coffre</string>
     <string name="biometric_unlock_subtitle">Confirme avec ton empreinte ou ton visage.</string>
 
-    <!-- ===== Phase 2 : Médication ===== -->
+    <!-- ===== Phase 2 : Traitements ===== -->
 
     <!-- Liste -->
-    <string name="med_list_title">Médications</string>
-    <string name="med_list_empty">Aucune médication enregistrée. Ajoute-en une avec le bouton ci-dessous.</string>
+    <string name="med_list_title">Médics</string>
+    <string name="med_list_empty">Aucun traitement enregistré. Ajoute-en un avec le bouton ci-dessous.</string>
     <string name="med_add">Ajouter</string>
 
     <!-- Création -->
-    <string name="med_add_title">Nouvelle médication</string>
+    <string name="med_add_title">Nouveau traitement</string>
     <string name="med_field_name">Nom</string>
     <string name="med_field_kind">Type</string>
     <string name="med_field_route">Voie</string>
@@ -145,13 +145,13 @@
 
     <!-- Détail -->
     <string name="med_detail_loading">Chargement…</string>
-    <string name="med_log_dose">Logger une prise</string>
+    <string name="med_log_dose">Noter une prise</string>
     <string name="med_history">Historique</string>
-    <string name="med_history_empty">Aucune prise enregistrée pour cette médication.</string>
+    <string name="med_history_empty">Aucune prise enregistrée pour ce traitement.</string>
     <string name="med_default_dose_fmt">Dose habituelle : %1$s %2$s</string>
 
     <!-- Log dose -->
-    <string name="med_log_dose_title">Logger une prise</string>
+    <string name="med_log_dose_title">Noter une prise</string>
     <string name="med_save_dose">Enregistrer</string>
     <string name="med_injection_site">Site d\'injection</string>
     <string name="med_injection_suggested">Suggéré : %1$s</string>
@@ -200,7 +200,7 @@
 
     <!-- ===== Rappels (Phase 2 suite) ===== -->
     <string name="reminder_title">C\'est l\'heure</string>
-    <string name="reminder_body">Une prise est due. Ouvre l\'app pour voir laquelle.</string>
+    <string name="reminder_body">Rappel — déverrouille pour voir les détails.</string>
     <string name="reminder_channel_name">Rappels</string>
     <string name="reminder_channel_description">Notifications programmées.</string>
     <string name="reminder_channel_default_name">Rappels (discret)</string>
@@ -218,12 +218,12 @@
     <string name="reminder_queued_toast">Prise enregistrée — ajoutée à tes stats au prochain déverrouillage.</string>
     <string name="reminder_body_named">C\'est l\'heure de ta prise.</string>
     <string name="unlock_throttled_fmt">Trop d\'erreurs — patiente %1$d s avant le prochain essai.</string>
-    <string name="settings_decoy_pin_warning">Le PIN décoy te protège d\'un regard opportuniste (partenaire, contrôle rapide). En mode Keystore-seul / biométrique, il ne remplace pas la passphrase : quelqu\'un avec root + accès au Keystore peut ouvrir le coffre sans saisir le PIN. Pour une protection plus forte, choisis le mode Paranoid (passphrase obligatoire à chaque démarrage).</string>
+    <string name="settings_decoy_pin_warning">Le PIN décoy te protège d\'un regard opportuniste (partenaire, contrôle rapide). En mode Keystore-seul / biométrique, il ne remplace pas la passphrase : quelqu\'un avec root + accès au Keystore peut ouvrir le coffre sans saisir le PIN. Pour une protection plus forte, choisis le mode Parano (passphrase obligatoire à chaque démarrage).</string>
 
     <string name="schedule_list_title">Rappels</string>
     <string name="schedule_add">Ajouter un rappel</string>
     <string name="schedule_add_title">Nouveau rappel</string>
-    <string name="schedule_none">Aucun rappel programmé pour cette médication.</string>
+    <string name="schedule_none">Aucun rappel programmé pour ce traitement.</string>
     <string name="schedule_kind_interval">Toutes les N heures</string>
     <string name="schedule_kind_daily">Chaque jour à HH:MM</string>
     <string name="schedule_kind_days_interval">Tous les N jours</string>
@@ -270,13 +270,13 @@
     <string name="today_feel_sub">Glisse 4 curseurs · 10 secondes</string>
     <string name="today_feel_trend_label">Humeur · 14 jours</string>
     <string name="today_feel_trend_rising">En hausse</string>
-    <string name="today_reminder_lab_title">Analyse sanguine</string>
+    <string name="today_reminder_lab_title">Analyse de sang</string>
     <string name="today_reminder_lab_sub">Œstradiol + testostérone</string>
     <string name="today_reminder_lab_when">à venir</string>
     <string name="today_reminder_injection_title">Injection hebdomadaire</string>
     <string name="today_reminder_injection_sub">Site conseillé selon la rotation</string>
     <string name="today_reminder_injection_when">Lun.</string>
-    <string name="today_reminders_empty">Aucun rappel programmé. Configure-en depuis Réglages → Rappels.</string>
+    <string name="today_reminders_empty">Aucun rappel programmé. Va dans Réglages → Rappels.</string>
 
     <!-- ===== Phase 3 : Journal ===== -->
     <string name="journal_title">Journal</string>
@@ -305,7 +305,7 @@
     <string name="hormones_tab_hormones">Hormones</string>
     <string name="hormones_tab_weight">Poids</string>
     <string name="weight_kind">Poids</string>
-    <string name="weight_add_title">Nouvelle pesée</string>
+    <string name="weight_add_title">Ajouter une entrée</string>
     <string name="weight_save">Enregistrer</string>
     <string name="weight_unit_kg">kg</string>
     <string name="weight_unit_lb">lb</string>
@@ -396,7 +396,7 @@
     <string name="settings_current_icon">Icône active</string>
     <string name="settings_pick_icon">Choisir une icône / un nom</string>
     <string name="settings_decoy_pin">Code d\'accès + PIN de leurre (facultatif)</string>
-    <string name="settings_decoy_pin_hint">À l\'ouverture, un clavier 4 chiffres remplace la saisie de ton mot de passe. Le \"code d\'accès\" ouvre ton vrai mot de passe ; le \"PIN de leurre\" ouvre une calculatrice factice. Les deux doivent être différents.</string>
+    <string name="settings_decoy_pin_hint">À l\'ouverture, un clavier 4 chiffres remplace la saisie de ton mot de passe. Le \"code d\'accès\" ouvre ton vrai mot de passe ; le \"PIN de leurre\" ouvre une appli de notes fonctionnelle. Les deux doivent être différents.</string>
     <string name="settings_access_pin_label">Code d\'accès (4 chiffres)</string>
     <string name="settings_access_pin_hint">Mène à la saisie du mot de passe.</string>
     <string name="settings_decoy_pin_label">PIN de leurre (4 chiffres)</string>
@@ -410,24 +410,24 @@
     <string name="settings_open_reminders">Configurer les rappels</string>
     <string name="reminders_title">Configurer les rappels</string>
     <string name="reminders_section_notif_content">Contenu des notifications</string>
-    <string name="reminders_notif_content_hint">Ce que tes rappels de médication affichent. L\'écran verrouillé montre toujours une version neutre.</string>
+    <string name="reminders_notif_content_hint">Ce que tes rappels de traitement affichent. L\'écran verrouillé montre toujours une version neutre.</string>
     <string name="reminders_notif_mode_generic">Générique</string>
     <string name="reminders_notif_mode_generic_desc">« C\'est l\'heure » — aucun nom.</string>
-    <string name="reminders_notif_mode_name">Nom du médicament</string>
+    <string name="reminders_notif_mode_name">Nom du traitement</string>
     <string name="reminders_notif_mode_name_desc">Affiche le vrai nom (hors écran verrouillé).</string>
     <string name="reminders_notif_mode_alias">Alias</string>
-    <string name="reminders_notif_mode_alias_desc">Affiche l\'alias défini sur chaque médication.</string>
-    <string name="reminders_section_meds">Médication</string>
-    <string name="reminders_section_meds_hint">Rappels programmés depuis chaque médication. Active la notification prioritaire pour celles qui ne tolèrent pas d\'oubli.</string>
+    <string name="reminders_notif_mode_alias_desc">Affiche l\'alias défini sur chaque traitement.</string>
+    <string name="reminders_section_meds">Médics</string>
+    <string name="reminders_section_meds_hint">Rappels programmés depuis chaque traitement. Active la notification prioritaire pour celles qui ne tolèrent pas d\'oubli.</string>
     <string name="reminders_section_labs">Analyses</string>
     <string name="reminders_section_labs_hint">Bilans hormonaux, prises de sang, suivis. Ajoute-en autant que tu veux.</string>
-    <string name="reminders_no_meds">Aucun rappel actif. Crée-en depuis la fiche d\'une médication.</string>
+    <string name="reminders_no_meds">Aucun rappel actif. Crée-en depuis la fiche d\'un traitement.</string>
     <string name="reminders_no_labs">Aucun rappel d\'analyse. Tape sur + pour en ajouter un.</string>
     <string name="reminders_priority_label">Notification prioritaire</string>
     <string name="reminders_priority_hint">Bandeau, vibration et son. Sinon, notification silencieuse.</string>
     <string name="reminders_delete">Supprimer</string>
     <string name="reminders_delete_confirm_title">Supprimer ce rappel ?</string>
-    <string name="reminders_delete_confirm_body">Le rappel pour « %1$s » sera supprimé définitivement. Ton historique de prises est conservé. Pour suspendre temporairement, utilise plutôt « Mettre en pause » depuis la fiche de la médication.</string>
+    <string name="reminders_delete_confirm_body">Le rappel pour « %1$s » sera supprimé définitivement. Ton historique de prises est conservé. Pour suspendre temporairement, utilise plutôt « Mettre en pause » depuis la fiche du traitement.</string>
     <string name="reminders_delete_confirm_action">Supprimer</string>
     <string name="reminders_add_lab">Ajouter un rappel d\'analyse</string>
     <string name="reminders_lab_dialog_title">Nouveau rappel d\'analyse</string>
@@ -457,7 +457,7 @@
     <!-- ===== Réglages / hub ===== -->
     <string name="more_title">Réglages</string>
     <string name="more_row_reminders">Rappels &amp; notifications</string>
-    <string name="more_row_reminders_sub">Médication, analyses, photo, voix</string>
+    <string name="more_row_reminders_sub">Traitements, analyses, photo, voix</string>
     <string name="more_row_advanced">Paramètres avancés</string>
     <string name="more_row_advanced_sub">Sécurité, masquage, sauvegarde, langue</string>
     <string name="more_row_pdf">Export PDF</string>
@@ -491,7 +491,7 @@
     <string name="features_title">Fonctionnalités</string>
     <string name="features_hint">Choisis ce qui apparaît dans la barre du bas. Seul Aujourd\'hui reste toujours visible.</string>
     <string name="feature_medications_title">Médics</string>
-    <string name="feature_medications_sub">Catalogue de médication, prises, rotation des sites d\'injection.</string>
+    <string name="feature_medications_sub">Catalogue de traitements, prises, rotation des sites d\'injection.</string>
     <string name="feature_journal_title">Journal</string>
     <string name="feature_journal_sub">Humeur, dysphorie, libido, effets ressentis.</string>
     <string name="feature_hormones_title">Courbes</string>
@@ -519,7 +519,7 @@
     <string name="pdf_period_6m">6 mois</string>
     <string name="pdf_period_all">Tout</string>
     <string name="pdf_section_include">À inclure</string>
-    <string name="pdf_inc_meds">Médication &amp; observance</string>
+    <string name="pdf_inc_meds">Traitements &amp; observance</string>
     <string name="pdf_inc_meds_sub">Traitements actifs, doses, voies</string>
     <string name="pdf_inc_hormones">Courbes hormonales</string>
     <string name="pdf_inc_hormones_sub">Œstradiol, testostérone, etc.</string>
@@ -639,7 +639,7 @@
     <string name="reminder_action_skip">Passer</string>
     <string name="reminder_action_snooze">Rappeler plus tard</string>
     <string name="reminder_snoozed_toast">Rappel reprogrammé dans 30 min</string>
-    <string name="med_edit_title">Modifier la médication</string>
+    <string name="med_edit_title">Modifier le traitement</string>
     <string name="correlation_open">Corrélations dose / humeur</string>
     <string name="correlation_title">Corrélations</string>
     <string name="correlation_hint">Visualise l\'humeur, les prises, les oublis et les changements de traitement sur une même échelle de temps.</string>

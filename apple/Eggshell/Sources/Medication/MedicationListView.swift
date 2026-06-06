@@ -54,11 +54,11 @@ struct MedicationListView: View {
     @StateObject private var vm = MedicationListViewModel()
 
     var body: some View {
-        TabScaffold(title: "Médicaments") {
+        TabScaffold(title: "Médics") {
             if vm.loading {
                 ProgressView().tint(palette.primary).frame(maxWidth: .infinity).padding()
             } else if vm.medications.isEmpty {
-                EmptyStateCard(text: "Aucun médicament", systemImage: "pills")
+                EmptyStateCard(text: "Aucun traitement", systemImage: "pills")
             } else {
                 ForEach(vm.medications, id: \.id) { med in
                     medicationCard(med)

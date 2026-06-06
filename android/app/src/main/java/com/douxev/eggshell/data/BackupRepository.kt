@@ -48,10 +48,15 @@ class BackupRepository @Inject constructor(
     suspend fun importFromUri(uri: Uri, passphrase: String) = withContext(Dispatchers.IO) {
         val bundle = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("could not read $uri")
-        // Close any open SQLCipher handle first — Rust will overwrite the
-        // file underneath us.
-        vault.lock()
         val targetPath = File(context.filesDir, "vault.db").absolutePath
+        // NB: we do NOT lock the session up-front. `importEncrypted` decrypts
+        // and validates the passphrase BEFORE writing the DB, so a wrong
+        // passphrase throws here with the current session still intact — the
+        // app stays usable instead of being stranded with no session. On
+        // success, `restoreFromImportedKey` drops the (now-stale) session. The
+        // brief overlap where the old SQLCipher handle is still open while Rust
+        // atomically renames the new vault.db over it is safe: the old handle
+        // keeps the unlinked inode, the next unlock opens the new one.
         val imported = importEncrypted(bundle, passphrase, targetPath)
         try {
             vault.restoreFromImportedKey(imported.masterKey)

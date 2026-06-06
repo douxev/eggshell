@@ -28,7 +28,7 @@ final class RemindersViewModel: ObservableObject {
         loading = false
     }
 
-    func medName(_ id: Int64) -> String { medsById[id]?.name ?? "Médicament" }
+    func medName(_ id: Int64) -> String { medsById[id]?.name ?? "Traitement" }
 
     /// Medications that have at least one active schedule (the only ones whose
     /// alias affects a real reminder).
@@ -117,8 +117,8 @@ struct RemindersView: View {
 
     private var medicationsSection: some View {
         SectionCard {
-            Text("Médicaments").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            Text("Plannings actifs de vos médicaments. Suspendez un rappel sans supprimer le planning.")
+            Text("Médics").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
+            Text("Tes plannings de traitements actifs. Mets un rappel en pause sans supprimer le planning.")
                 .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
             if vm.schedules.isEmpty {
                 Text("Aucun planning actif").font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.6))
@@ -202,7 +202,7 @@ struct RemindersView: View {
     private var contentModeSection: some View {
         SectionCard {
             Text("Contenu des notifications").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            Text("Ce qu'un rappel de médicament révèle. Par défaut, rien n'apparaît sur l'écran verrouillé.")
+            Text("Ce qu'un rappel de traitement révèle. Par défaut, rien n'apparaît sur l'écran verrouillé.")
                 .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
             ForEach(NotifContentMode.allCases) { mode in
                 Button {
@@ -231,9 +231,9 @@ struct RemindersView: View {
     @ViewBuilder
     private var aliasEditors: some View {
         Divider().overlay(palette.outlineVariant)
-        Text("Alias par médicament").font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+        Text("Alias par traitement").font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
         if vm.aliasableMeds.isEmpty {
-            Text("Aucun médicament avec un planning actif").font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.5))
+            Text("Aucun traitement avec un planning actif").font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.5))
         } else {
             ForEach(vm.aliasableMeds, id: \.id) { med in
                 AliasField(medId: med.id, realName: med.name) {

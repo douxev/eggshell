@@ -74,7 +74,7 @@ final class AppState: ObservableObject {
             let names = Dictionary(uniqueKeysWithValues: meds.map { ($0.id, $0.name) })
             await NotificationManager.reschedule(
                 schedules: schedules,
-                nameFor: { names[$0] ?? "Médicament" })
+                nameFor: { names[$0] ?? "Traitement" })
         } catch { /* reminders are best-effort */ }
     }
 

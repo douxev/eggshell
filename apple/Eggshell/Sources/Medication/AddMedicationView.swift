@@ -168,14 +168,14 @@ struct AddMedicationView: View {
             }
             .padding(Spacing.l)
         }
-        .navigationTitle(vm.isEditing ? "Modifier le médicament" : "Nouveau médicament")
+        .navigationTitle(vm.isEditing ? "Modifier le traitement" : "Nouveau traitement")
         .task { if let s = app.session { await vm.load(s) } }
     }
 
     private var nameCard: some View {
         SectionCard {
             Text("Nom").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            TextField("Nom du médicament", text: $vm.name)
+            TextField("Nom du traitement", text: $vm.name)
                 .font(.eggBody)
                 .foregroundStyle(palette.onSurface)
         }

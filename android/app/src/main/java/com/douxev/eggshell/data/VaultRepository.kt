@@ -377,11 +377,9 @@ class VaultRepository @Inject constructor(
      */
     suspend fun restoreFromImportedKey(rawKey: ByteArray) = withContext(Dispatchers.IO) {
         require(rawKey.size == 32) { "expected 32-byte master key, got ${rawKey.size}" }
-        // Wipe any previous mode / wrapped material so we don't end up
-        // with stale KDF params or a stale wrapped_key pointing at the
-        // old (pre-import) device's master key.
+        // Drop the (now-stale) open session; the next unlock opens the restored
+        // DB. Recreate the Keystore key so the wrap below is fresh.
         session = null
-        prefs.wipe()
         runCatching { keystore.delete() }
         runCatching { keystoreBio.delete() }
         // Re-wrap the imported key under the local Keystore (KEYSTORE_ONLY
@@ -389,8 +387,14 @@ class VaultRepository @Inject constructor(
         // to biometric/passphrase later via Settings → Change security mode).
         val secret = keystore.getOrCreate(requireBiometric = false)
         val wrapped = keystore.encrypt(secret, rawKey)
-        prefs.setWrappedKey(wrapped)
-        prefs.mode = VaultPrefs.Mode.KEYSTORE_ONLY
+        // Synchronous, atomic clear-old + write-new. This MUST be durable before
+        // the caller restarts the process (an async apply() would be dropped by
+        // the kill, stranding the vault). Also clears any stale access/decoy PIN
+        // hashes from the source install so they can't gate (or wipe) the
+        // restored vault on the next unlock.
+        check(prefs.commitRestoredKeystoreOnly(wrapped)) {
+            "failed to persist restored vault state"
+        }
     }
 
     // -- helpers -------------------------------------------------------------

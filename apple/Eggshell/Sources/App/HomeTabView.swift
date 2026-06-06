@@ -10,11 +10,11 @@ struct HomeTabView: View {
 
     var body: some View {
         TabView(selection: $tabRouter.selection) {
-            Tab("Aujourd'hui", systemImage: "sun.max.fill", value: HomeTab.today) {
+            Tab("Accueil", systemImage: "sun.max.fill", value: HomeTab.today) {
                 TabStack { TodayView() }
             }
             if features.medications {
-                Tab("Médicaments", systemImage: "pills.fill", value: HomeTab.medications) {
+                Tab("Médics", systemImage: "pills.fill", value: HomeTab.medications) {
                     TabStack { MedicationListView() }
                 }
             }
@@ -24,7 +24,7 @@ struct HomeTabView: View {
                 }
             }
             if features.hormones {
-                Tab("Hormones", systemImage: "chart.xyaxis.line", value: HomeTab.hormones) {
+                Tab("Courbes", systemImage: "chart.xyaxis.line", value: HomeTab.hormones) {
                     TabStack { HormonesView() }
                 }
             }

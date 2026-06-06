@@ -28,7 +28,7 @@ enum NotifContentMode: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .generic: return "Générique"
-        case .name:    return "Nom du médicament"
+        case .name:    return "Nom du traitement"
         case .alias:   return "Alias"
         }
     }
@@ -37,8 +37,8 @@ enum NotifContentMode: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .generic: return "Ne révèle rien (« C'est l'heure de votre prise »)."
-        case .name:    return "Affiche le vrai nom du médicament."
-        case .alias:   return "Affiche un surnom de votre choix par médicament."
+        case .name:    return "Affiche le vrai nom du traitement."
+        case .alias:   return "Affiche un surnom de ton choix par traitement."
         }
     }
 

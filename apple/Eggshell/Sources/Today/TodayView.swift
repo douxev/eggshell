@@ -148,7 +148,7 @@ struct TodayView: View {
     @State private var showQuickLog = false
 
     var body: some View {
-        TabScaffold(title: "Aujourd'hui") {
+        TabScaffold(title: "Accueil") {
             if vm.loading {
                 ProgressView().tint(palette.primary).frame(maxWidth: .infinity).padding()
             } else {
@@ -197,7 +197,7 @@ struct TodayView: View {
                             .font(.eggHeadline).foregroundStyle(palette.onSurface)
                         Text(vm.hasMedications
                              ? "Programme une prise pour suivre tes doses."
-                             : "Ajoute un médicament pour commencer.")
+                             : "Ajoute un traitement pour commencer.")
                             .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.7))
                     } else if let next = vm.nextItem {
                         Text(next.medication.name)
@@ -215,7 +215,7 @@ struct TodayView: View {
             }
             if empty {
                 NavigationLink(value: vm.hasMedications ? Route.medicationList : Route.addMedication) {
-                    Label(vm.hasMedications ? "Programmer une prise" : "Ajouter un médicament",
+                    Label(vm.hasMedications ? "Programmer une prise" : "Ajouter un traitement",
                           systemImage: "calendar.badge.plus")
                         .font(.eggCallout)
                         .frame(maxWidth: .infinity)

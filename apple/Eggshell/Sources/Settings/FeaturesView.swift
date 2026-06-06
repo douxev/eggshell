@@ -21,7 +21,7 @@ struct FeaturesView: View {
 
                 SectionCard {
                     featureToggle(
-                        title: "Médicaments",
+                        title: "Médics",
                         subtitle: "Suivi des prises et des plannings",
                         isOn: $features.medications)
                     Divider().overlay(palette.outlineVariant)
@@ -31,7 +31,7 @@ struct FeaturesView: View {
                         isOn: $features.journal)
                     Divider().overlay(palette.outlineVariant)
                     featureToggle(
-                        title: "Hormones",
+                        title: "Courbes",
                         subtitle: "Résultats de laboratoire",
                         isOn: $features.hormones)
                     Divider().overlay(palette.outlineVariant)

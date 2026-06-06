@@ -1,5 +1,6 @@
 package com.douxev.eggshell.ui.unlock
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -44,33 +45,35 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.json.JSONArray
+import org.json.JSONObject
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 
 /**
  * Decoy "Notes" app — shown when the user types the decoy PIN at unlock.
  *
- * Visually inspired by NotallyX (Material 3 staggered cards, pastel tints,
- * FAB, drag-to-reorder, search, overflow menu). Pre-seeded with everyday
- * notes so a snooper sees a lived-in app rather than something empty.
+ * A real, working notes app (Material 3 staggered cards, pastel tints, FAB,
+ * drag-to-reorder, search, overflow menu). Notes are PERSISTED in a plain
+ * SharedPreferences file so the decoy behaves like a genuine notes app across
+ * sessions — edits, reorders and additions survive a cold start. The stored
+ * content is decoy-only (the user's own cover notes); it never touches the real
+ * encrypted vault. On first launch it seeds a few everyday notes so the app
+ * looks lived-in rather than empty.
  *
- * Local state only — edits, reorders and additions don't survive a cold
- * start. The seeds come back each time so the decoy keeps a believable
- * surface across sessions without persisting anything that could later be
- * used to fingerprint the user.
- *
- * Overrides MaterialTheme with a neutral teal palette so it doesn't inherit
- * the main app's lavender tokens (which would tip off an observant snooper).
+ * Overrides MaterialTheme with a neutral teal palette so it doesn't inherit the
+ * main app's lavender tokens (which would tip off an observant snooper).
  */
 @Composable
 fun DecoyScreen() {
@@ -85,9 +88,9 @@ fun DecoyScreen() {
 }
 
 /**
- * Neutral teal palette used by the decoy notes app — and now also by the
- * PIN gate when a decoy PIN is configured, so the transition from
- * lock-screen to fake-notes is visually seamless (no lavender flash).
+ * Neutral teal palette used by the decoy notes app — and also by the PIN gate
+ * when a decoy PIN is configured, so the transition from lock-screen to
+ * fake-notes is visually seamless (no lavender flash).
  */
 internal val DecoyColors = lightColorScheme(
     primary = Color(0xFF006A6A),
@@ -113,11 +116,8 @@ private data class DecoyNote(
     val id: Long,
     val title: String,
     val body: String,
-    val tint: Color,
+    val tintIndex: Int,
 )
-
-private var nextDecoyNoteId: Long = 1_000L
-private fun nextNoteId(): Long = ++nextDecoyNoteId
 
 private val PastelTints = listOf(
     Color(0xFFFFF1B8),
@@ -128,24 +128,82 @@ private val PastelTints = listOf(
     Color(0xFFFFE0B2),
 )
 
+private fun DecoyNote.tint(): Color = PastelTints[tintIndex.coerceIn(PastelTints.indices)]
+
+// --- Persistence (plain prefs; decoy content only, never the real vault) -----
+
+private object DecoyNotesStore {
+    private const val PREFS = "decoy_notes"
+    private const val KEY = "notes"
+
+    /** Returns null if the user has never saved (→ caller seeds). */
+    fun load(ctx: Context): List<DecoyNote>? {
+        val raw = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null) ?: return null
+        return runCatching {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                DecoyNote(
+                    id = o.getLong("id"),
+                    title = o.getString("title"),
+                    body = o.getString("body"),
+                    tintIndex = o.optInt("tint", 0),
+                )
+            }
+        }.getOrNull()
+    }
+
+    fun save(ctx: Context, notes: List<DecoyNote>) {
+        val arr = JSONArray()
+        notes.forEach { n ->
+            arr.put(
+                JSONObject()
+                    .put("id", n.id)
+                    .put("title", n.title)
+                    .put("body", n.body)
+                    .put("tint", n.tintIndex)
+            )
+        }
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY, arr.toString()).apply()
+    }
+
+    /** Wipe the decoy notes (called from the app's full wipe). */
+    fun clear(ctx: Context) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+    }
+}
+
 private fun seedNotes(): List<DecoyNote> = listOf(
-    DecoyNote(nextNoteId(), "Courses",
-        "Pain complet\nLait d'avoine\nŒufs\nCafé\nTomates cerises\nFromage râpé", PastelTints[0]),
-    DecoyNote(nextNoteId(), "À faire ce week-end",
-        "Appeler Marie\nRanger le placard de l'entrée\nFinir le livre commencé lundi\nLancer une lessive", PastelTints[1]),
-    DecoyNote(nextNoteId(), "Idées vacances",
-        "Lisbonne en septembre ?\nRegarder vols depuis Lyon\nDemander à Léa si dispo", PastelTints[3]),
-    DecoyNote(nextNoteId(), "Recette tarte tatin",
-        "Pâte brisée\n6 pommes (Reinette)\n100g sucre roux\n50g beurre\nUne pincée de cannelle", PastelTints[5]),
-    DecoyNote(nextNoteId(), "Films à voir",
-        "Past Lives\nThe Holdovers\nAnatomie d'une chute", PastelTints[4]),
+    DecoyNote(1, "Courses",
+        "Pain complet\nLait d'avoine\nŒufs\nCafé\nTomates cerises\nFromage râpé", 0),
+    DecoyNote(2, "À faire ce week-end",
+        "Appeler Marie\nRanger le placard de l'entrée\nFinir le livre commencé lundi\nLancer une lessive", 1),
+    DecoyNote(3, "Idées vacances",
+        "Lisbonne en septembre ?\nRegarder vols depuis Lyon\nDemander à Léa si dispo", 3),
+    DecoyNote(4, "Recette tarte tatin",
+        "Pâte brisée\n6 pommes (Reinette)\n100g sucre roux\n50g beurre\nUne pincée de cannelle", 5),
+    DecoyNote(5, "Films à voir",
+        "Past Lives\nThe Holdovers\nAnatomie d'une chute", 4),
 )
 
 private enum class Sort { Natural, Title, Length }
 
 @Composable
 private fun DecoyNotesApp() {
-    val notes = remember { mutableStateListOf(*seedNotes().toTypedArray()) }
+    val ctx = LocalContext.current
+    val notes = remember {
+        val loaded = DecoyNotesStore.load(ctx)
+        mutableStateListOf(*(loaded ?: seedNotes()).toTypedArray())
+    }
+    // Persist whenever the list (content or order) changes.
+    LaunchedEffect(notes) {
+        snapshotFlow { notes.toList() }.collect { DecoyNotesStore.save(ctx, it) }
+    }
+    // Next id strictly above any existing one, so additions never collide.
+    val nextId = remember { mutableStateOf((notes.maxOfOrNull { it.id } ?: 0L) + 1L) }
+    fun freshId(): Long { val v = nextId.value; nextId.value = v + 1; return v }
+
     var editingIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
 
@@ -163,7 +221,7 @@ private fun DecoyNotesApp() {
             onBack = { editingIndex = null },
         )
         creating -> EditNote(
-            note = DecoyNote(nextNoteId(), "", "", PastelTints.random()),
+            note = DecoyNote(freshId(), "", "", PastelTints.indices.random()),
             onSave = { updated ->
                 notes.add(0, updated)
                 creating = false
@@ -176,9 +234,6 @@ private fun DecoyNotesApp() {
             onOpen = { idx -> editingIndex = idx },
             onAdd = { creating = true },
             onSwap = { from, to ->
-                // Wrap the two list mutations in a single Snapshot so observers
-                // see one atomic move instead of "remove then add" — that's what
-                // was causing the drop-target flicker.
                 androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot {
                     val item = notes.removeAt(from)
                     notes.add(to, item)
@@ -202,8 +257,6 @@ private fun NoteList(
     var menuOpen by remember { mutableStateOf(false) }
     var aboutOpen by rememberSaveable { mutableStateOf(false) }
 
-    // Filter + sort. We keep the **original index** so taps on a tile open
-    // the right note even when the visible order differs from the storage order.
     val visible: List<Pair<Int, DecoyNote>> by remember(notes, query, sort) {
         derivedStateOf {
             val indexed = notes.mapIndexedNotNull { idx, note ->
@@ -223,10 +276,6 @@ private fun NoteList(
     val canReorder = query.isBlank() && sort == Sort.Natural
     val gridState = rememberLazyGridState()
     val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
-        // `from.key` / `to.key` are the note IDs we provided in `itemsIndexed`.
-        // Resolve back to the storage-list indices via `notes` (stable IDs)
-        // so the source-of-truth list moves correctly even if the visible
-        // slice is filtered / sorted.
         val fromIdx = notes.indexOfFirst { it.id == from.key as Long }
         val toIdx = notes.indexOfFirst { it.id == to.key as Long }
         if (fromIdx >= 0 && toIdx >= 0) onSwap(fromIdx, toIdx)
@@ -300,10 +349,6 @@ private fun NoteList(
         ) {
             itemsIndexed(visible, key = { _, pair -> pair.second.id }) { _, (origIdx, note) ->
                 ReorderableItem(reorderState, key = note.id) { dragging ->
-                    // `longPressDraggableHandle()` is an extension on
-                    // ReorderableCollectionItemScope (this scope), so we attach
-                    // it directly to the card's modifier when reordering is
-                    // currently allowed.
                     val handle = if (canReorder) {
                         Modifier.longPressDraggableHandle()
                     } else Modifier
@@ -401,7 +446,7 @@ private fun NoteCard(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(14.dp),
-        color = note.tint,
+        color = note.tint(),
         contentColor = Color(0xFF1A1A1A),
         tonalElevation = if (elevated) 8.dp else 0.dp,
         shadowElevation = if (elevated) 8.dp else 0.dp,
@@ -465,7 +510,7 @@ private fun EditNote(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(note.tint)
+                .background(note.tint())
                 .padding(padding)
                 .padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -507,4 +552,3 @@ private fun EditNote(
         }
     }
 }
-

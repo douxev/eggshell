@@ -85,6 +85,26 @@ class VaultPrefs @Inject constructor(@ApplicationContext context: Context) {
         prefs.edit().clear().apply()
     }
 
+    /**
+     * Atomically wipe ALL prior auth state (mode, KDF, wrapped key, AND the
+     * access/decoy PIN hashes) and persist the post-restore KEYSTORE_ONLY
+     * state, **synchronously** (`commit`, not `apply`).
+     *
+     * The backup-restore flow kills the process right after this returns to
+     * force a clean relaunch; `apply()` queues the write on a background
+     * thread that the kill would abort, so the new mode/wrapped-key could be
+     * lost — leaving the relaunched app either trying the old key against the
+     * imported DB ("file is not in database") or falling back to onboarding
+     * over the restored data. `commit()` guarantees the bytes hit disk first.
+     * Doing it in a single edit() also avoids a half-wiped intermediate state.
+     */
+    fun commitRestoredKeystoreOnly(wrapped: ByteArray): Boolean =
+        prefs.edit()
+            .clear()
+            .putString(KEY_WRAPPED, Base64.encodeToString(wrapped, Base64.NO_WRAP))
+            .putString(KEY_MODE, Mode.KEYSTORE_ONLY.name)
+            .commit()
+
     // -- Access + Decoy PINs (Phase 7) ---------------------------------------
 
     /** Persisted material for a 4-digit PIN (access OR decoy). */

@@ -233,7 +233,7 @@ struct PdfExportView: View {
         SectionCard {
             Text("Sections à inclure").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
                 .frame(maxWidth: .infinity, alignment: .leading)
-            includeRow("Médicaments", "Traitements et posologies", "pills", $options.medications)
+            includeRow("Traitements", "Doses et posologies", "pills", $options.medications)
             includeRow("Doses", "Prises enregistrées sur la période", "syringe", $options.doses)
             includeRow("Hormones", "Taux mesurés en laboratoire", "chart.line.uptrend.xyaxis", $options.hormones)
             includeRow("Journal", "Ressentis et effets", "square.and.pencil", $options.journal)
@@ -334,9 +334,9 @@ private enum PdfReportRenderer {
             drawCover(&cursor, period: period)
 
             if options.medications {
-                cursor.section("Médicaments", count: meds.count)
+                cursor.section("Traitements", count: meds.count)
                 if meds.isEmpty {
-                    cursor.muted("Aucun médicament enregistré.")
+                    cursor.muted("Aucun traitement enregistré.")
                 } else {
                     for m in meds { medRow(&cursor, m) }
                 }
@@ -411,7 +411,7 @@ private enum PdfReportRenderer {
 
     private static func doseRow(_ c: inout Cursor, _ d: DoseEvent, medsById: [Int64: Medication]) {
         c.ensure(20)
-        let name = medsById[d.medicationId]?.name ?? "Médicament"
+        let name = medsById[d.medicationId]?.name ?? "Traitement"
         var right = ""
         if let dose = d.dose { right = trim(dose) + " " + (d.doseUnit ?? "") }
         if let site = d.injectionSite, !site.isEmpty {

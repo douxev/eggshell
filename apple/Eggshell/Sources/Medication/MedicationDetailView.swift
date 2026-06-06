@@ -105,7 +105,7 @@ struct MedicationDetailView: View {
             }
             .padding(Spacing.m)
         }
-        .navigationTitle(vm.med?.name ?? "Médicament")
+        .navigationTitle(vm.med?.name ?? "Traitement")
         .overlay(alignment: .bottomTrailing) {
             Button {
                 router.push(.logDose(medId: medId))
@@ -137,7 +137,7 @@ struct MedicationDetailView: View {
                     Text(notes).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.7))
                 }
             } else {
-                Text("Médicament introuvable").font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.6))
+                Text("Traitement introuvable").font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.6))
             }
         }
     }

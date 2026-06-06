@@ -27,7 +27,7 @@
     <string name="onboarding_scenario_atrisk_body">You live where this is risky or criminalised. We\'ll set up strong protection, one step at a time.</string>
     <string name="onboarding_advanced">Configure manually (advanced)</string>
     <string name="onboarding_guided_decoy_title">Decoy mode</string>
-    <string name="onboarding_guided_decoy_body">Two 4-digit codes. Your access code opens the app; the decoy PIN opens a fake calculator with no trace of your real data. Useful if you\'re forced to unlock.</string>
+    <string name="onboarding_guided_decoy_body">Two 4-digit codes. Your access code opens the app; the decoy PIN opens a working notes app, with no trace of your real data. Useful if you\'re forced to unlock.</string>
     <string name="onboarding_guided_decoy_set">Enable decoy</string>
     <string name="onboarding_guided_decoy_skip">Skip this step</string>
     <string name="onboarding_guided_decoy_must_differ">The access code and decoy PIN must differ.</string>
@@ -366,7 +366,7 @@
     <string name="settings_current_icon">Active icon</string>
     <string name="settings_pick_icon">Pick icon / name</string>
     <string name="settings_decoy_pin">Access PIN + Decoy PIN (optional)</string>
-    <string name="settings_decoy_pin_hint">When you unlock, a 4-digit keypad replaces the passphrase prompt. The "access PIN" opens the real passphrase entry; the "decoy PIN" opens a fake calculator. Both must differ.</string>
+    <string name="settings_decoy_pin_hint">When you unlock, a 4-digit keypad replaces the passphrase prompt. The "access PIN" opens the real passphrase entry; the "decoy PIN" opens a working notes app. Both must differ.</string>
     <string name="settings_access_pin_label">Access PIN (4 digits)</string>
     <string name="settings_access_pin_hint">Leads to the real passphrase.</string>
     <string name="settings_decoy_pin_label">Decoy PIN (4 digits)</string>
@@ -547,7 +547,7 @@
     <string name="settings_export_done">Export complete.</string>
     <string name="settings_import_done">Import complete. The app will restart.</string>
 
-    <string name="decoy_title">Calculator</string>
+    <string name="decoy_title">Notes</string>
 
     <string name="alias_notes">Notes</string>
     <string name="alias_calculator">Calculator</string>

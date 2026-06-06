@@ -164,7 +164,7 @@ struct HormonesView: View {
     }
 
     var body: some View {
-        TabScaffold(title: "Hormones") {
+        TabScaffold(title: "Courbes") {
             if features.weight {
                 HStack(spacing: Spacing.s) {
                     ChoiceChip(label: "Hormones", selected: !weightMode) { weightMode = false }
