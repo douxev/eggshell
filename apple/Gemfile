@@ -2,3 +2,8 @@ source "https://rubygems.org"
 
 gem "fastlane"
 gem "xcodeproj"
+
+# Ruby 3.3+ stopped auto-loading some former default gems; fastlane's
+# representable/google-apis chain needs multi_json explicitly in the bundle,
+# otherwise `bundle exec fastlane` fails with "multi_json is not part of the bundle".
+gem "multi_json"
