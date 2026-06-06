@@ -58,6 +58,15 @@ pub struct DoseEvent {
     pub route: Option<String>,
     pub injection_site: Option<String>,
     pub notes: Option<String>,
+    /// "taken" | "skipped" | "missed" | "delayed". Existing rows default to
+    /// "taken" (migration 0009).
+    pub status: String,
+    /// When the dose was *due* (epoch ms), if it originated from a schedule.
+    /// `taken_at_ms` is always the tap time, so this is what makes "late by N"
+    /// computable rather than inferred.
+    pub scheduled_at_ms: Option<i64>,
+    /// Schedule this event belongs to, when known.
+    pub schedule_id: Option<i64>,
 }
 
 #[derive(Clone, Debug)]
@@ -69,6 +78,9 @@ pub struct NewDoseEvent {
     pub route: Option<String>,
     pub injection_site: Option<String>,
     pub notes: Option<String>,
+    pub status: String,
+    pub scheduled_at_ms: Option<i64>,
+    pub schedule_id: Option<i64>,
 }
 
 // -- Medication CRUD ------------------------------------------------------------
@@ -169,11 +181,13 @@ pub fn log_dose(db: &Database, d: NewDoseEvent) -> Result<DoseEvent, TransitionE
     db.conn()
         .execute(
             "INSERT INTO dose_events
-                (medication_id, taken_at_ms, dose, dose_unit, route, injection_site, notes)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                (medication_id, taken_at_ms, dose, dose_unit, route, injection_site, notes,
+                 status, scheduled_at_ms, schedule_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 d.medication_id, d.taken_at_ms, d.dose, d.dose_unit,
                 d.route, d.injection_site, d.notes,
+                d.status, d.scheduled_at_ms, d.schedule_id,
             ],
         )
         .map_err(map_sql)?;
@@ -187,6 +201,9 @@ pub fn log_dose(db: &Database, d: NewDoseEvent) -> Result<DoseEvent, TransitionE
         route: d.route,
         injection_site: d.injection_site,
         notes: d.notes,
+        status: d.status,
+        scheduled_at_ms: d.scheduled_at_ms,
+        schedule_id: d.schedule_id,
     })
 }
 
@@ -200,7 +217,8 @@ pub fn list_doses(
     let mut stmt = db
         .conn()
         .prepare(
-            "SELECT id, medication_id, taken_at_ms, dose, dose_unit, route, injection_site, notes
+            "SELECT id, medication_id, taken_at_ms, dose, dose_unit, route, injection_site, notes,
+                    status, scheduled_at_ms, schedule_id
              FROM dose_events
              WHERE medication_id = ?1
              ORDER BY taken_at_ms DESC
@@ -209,6 +227,112 @@ pub fn list_doses(
         .map_err(map_sql)?;
     let rows = stmt
         .query_map(params![medication_id, limit, offset], parse_dose_event)
+        .map_err(map_sql)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(map_sql)?;
+    Ok(rows)
+}
+
+/// All dose events across every medication in a time window, newest first.
+/// Powers the dose↔mood correlation timeline, which needs taken doses, skips
+/// and misses on one axis regardless of which medication they belong to.
+pub fn list_dose_events_between(
+    db: &Database,
+    from_ms: i64,
+    to_ms: i64,
+) -> Result<Vec<DoseEvent>, TransitionError> {
+    let mut stmt = db
+        .conn()
+        .prepare(
+            "SELECT id, medication_id, taken_at_ms, dose, dose_unit, route, injection_site, notes,
+                    status, scheduled_at_ms, schedule_id
+             FROM dose_events
+             WHERE taken_at_ms >= ?1 AND taken_at_ms <= ?2
+             ORDER BY taken_at_ms DESC",
+        )
+        .map_err(map_sql)?;
+    let rows = stmt
+        .query_map(params![from_ms, to_ms], parse_dose_event)
+        .map_err(map_sql)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(map_sql)?;
+    Ok(rows)
+}
+
+// -- Treatment-change audit -----------------------------------------------------
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TreatmentChange {
+    pub id: i64,
+    pub medication_id: i64,
+    pub at_ms: i64,
+    pub field: String,
+    pub old_value: Option<String>,
+    pub new_value: Option<String>,
+    pub note: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct NewTreatmentChange {
+    pub medication_id: i64,
+    pub at_ms: i64,
+    pub field: String,
+    pub old_value: Option<String>,
+    pub new_value: Option<String>,
+    pub note: Option<String>,
+}
+
+pub fn log_treatment_change(
+    db: &Database,
+    c: NewTreatmentChange,
+) -> Result<TreatmentChange, TransitionError> {
+    db.conn()
+        .execute(
+            "INSERT INTO treatment_changes
+                (medication_id, at_ms, field, old_value, new_value, note)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![c.medication_id, c.at_ms, c.field, c.old_value, c.new_value, c.note],
+        )
+        .map_err(map_sql)?;
+    let id = db.conn().last_insert_rowid();
+    Ok(TreatmentChange {
+        id,
+        medication_id: c.medication_id,
+        at_ms: c.at_ms,
+        field: c.field,
+        old_value: c.old_value,
+        new_value: c.new_value,
+        note: c.note,
+    })
+}
+
+/// Treatment changes across all medications in a time window, newest first.
+pub fn list_treatment_changes(
+    db: &Database,
+    from_ms: i64,
+    to_ms: i64,
+) -> Result<Vec<TreatmentChange>, TransitionError> {
+    let mut stmt = db
+        .conn()
+        .prepare(
+            "SELECT id, medication_id, at_ms, field, old_value, new_value, note
+             FROM treatment_changes
+             WHERE at_ms >= ?1 AND at_ms <= ?2
+             ORDER BY at_ms DESC",
+        )
+        .map_err(map_sql)?;
+    let rows = stmt
+        .query_map(params![from_ms, to_ms], |row| {
+            Ok(TreatmentChange {
+                id: row.get(0)?,
+                medication_id: row.get(1)?,
+                at_ms: row.get(2)?,
+                field: row.get(3)?,
+                old_value: row.get(4)?,
+                new_value: row.get(5)?,
+                note: row.get(6)?,
+            })
+        })
         .map_err(map_sql)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(map_sql)?;
@@ -314,6 +438,9 @@ fn parse_dose_event(row: &Row) -> rusqlite::Result<DoseEvent> {
         route: row.get(5)?,
         injection_site: row.get(6)?,
         notes: row.get(7)?,
+        status: row.get(8)?,
+        scheduled_at_ms: row.get(9)?,
+        schedule_id: row.get(10)?,
     })
 }
 
@@ -432,6 +559,9 @@ mod tests {
                     route: Some("injection_im".into()),
                     injection_site: Some(format!("thigh_{}", if i % 2 == 0 { "left" } else { "right" })),
                     notes: None,
+                    status: "taken".into(),
+                    scheduled_at_ms: None,
+                    schedule_id: None,
                 },
             )
             .unwrap();
@@ -461,6 +591,9 @@ mod tests {
                 route: None,
                 injection_site: None,
                 notes: None,
+                status: "taken".into(),
+                scheduled_at_ms: None,
+                schedule_id: None,
             },
         )
         .unwrap();
@@ -527,6 +660,9 @@ mod tests {
                     route: None,
                     injection_site: Some(site.into()),
                     notes: None,
+                    status: "taken".into(),
+                    scheduled_at_ms: None,
+                    schedule_id: None,
                 },
             )
             .unwrap();

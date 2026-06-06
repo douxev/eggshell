@@ -236,6 +236,41 @@ impl Vault {
         crate::medication::set_archived(&*self.db()?, id, archived)
     }
 
+    /// Overwrite every editable field of a medication. The native side reads
+    /// the current values, lets the user edit them, and passes the full new
+    /// record back — so this is a full overwrite, not a partial patch.
+    pub fn update_medication(
+        &self,
+        id: i64,
+        med: crate::medication::NewMedication,
+    ) -> Result<(), TransitionError> {
+        let upd = crate::medication::MedicationUpdate {
+            name: Some(med.name),
+            kind: Some(med.kind),
+            route: Some(med.route),
+            default_dose: Some(med.default_dose),
+            default_dose_unit: Some(med.default_dose_unit),
+            color: Some(med.color),
+            notes: Some(med.notes),
+        };
+        crate::medication::update(&*self.db()?, id, upd)
+    }
+
+    pub fn log_treatment_change(
+        &self,
+        change: crate::medication::NewTreatmentChange,
+    ) -> Result<crate::medication::TreatmentChange, TransitionError> {
+        crate::medication::log_treatment_change(&*self.db()?, change)
+    }
+
+    pub fn list_treatment_changes(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<Vec<crate::medication::TreatmentChange>, TransitionError> {
+        crate::medication::list_treatment_changes(&*self.db()?, from_ms, to_ms)
+    }
+
     // -- Dose log ------------------------------------------------------------
 
     pub fn log_dose(
@@ -252,6 +287,14 @@ impl Vault {
         limit: i64,
     ) -> Result<Vec<crate::medication::DoseEvent>, TransitionError> {
         crate::medication::list_doses(&*self.db()?, medication_id, offset, limit)
+    }
+
+    pub fn list_dose_events_between(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<Vec<crate::medication::DoseEvent>, TransitionError> {
+        crate::medication::list_dose_events_between(&*self.db()?, from_ms, to_ms)
     }
 
     pub fn suggest_next_injection_site(
@@ -306,6 +349,10 @@ impl Vault {
         crate::dose_schedule::set_next_due(&*self.db()?, id, next_due_at_ms)
     }
 
+    pub fn delete_schedule(&self, id: i64) -> Result<(), TransitionError> {
+        crate::dose_schedule::delete(&*self.db()?, id)
+    }
+
     // -- Journal -------------------------------------------------------------
 
     pub fn add_journal_entry(
@@ -328,6 +375,14 @@ impl Vault {
         id: i64,
     ) -> Result<Option<crate::journal::JournalEntry>, TransitionError> {
         crate::journal::get(&*self.db()?, id)
+    }
+
+    pub fn update_journal_entry(
+        &self,
+        id: i64,
+        entry: crate::journal::NewJournalEntry,
+    ) -> Result<crate::journal::JournalEntry, TransitionError> {
+        crate::journal::update(&*self.db()?, id, entry)
     }
 
     pub fn delete_journal_entry(&self, id: i64) -> Result<(), TransitionError> {
@@ -400,6 +455,88 @@ impl Vault {
 
     pub fn delete_voice_clip(&self, id: String) -> Result<(), TransitionError> {
         crate::voice::delete(&*self.db()?, id)
+    }
+
+    // -- Metric definitions / values (shared customizable sliders) -----------
+
+    pub fn list_metric_definitions(
+        &self,
+        domain: String,
+        include_archived: bool,
+    ) -> Result<Vec<crate::metrics::MetricDefinition>, TransitionError> {
+        crate::metrics::list_definitions(&*self.db()?, domain, include_archived)
+    }
+
+    pub fn add_metric_definition(
+        &self,
+        def: crate::metrics::NewMetricDefinition,
+    ) -> Result<crate::metrics::MetricDefinition, TransitionError> {
+        crate::metrics::add_definition(&*self.db()?, def)
+    }
+
+    pub fn update_metric_definition(
+        &self,
+        id: i64,
+        upd: crate::metrics::MetricDefinitionUpdate,
+    ) -> Result<(), TransitionError> {
+        crate::metrics::update_definition(&*self.db()?, id, upd)
+    }
+
+    pub fn archive_metric_definition(&self, id: i64) -> Result<(), TransitionError> {
+        crate::metrics::archive_definition(&*self.db()?, id)
+    }
+
+    pub fn list_metric_values(
+        &self,
+        entry_domain: String,
+        entry_id: i64,
+    ) -> Result<Vec<crate::metrics::MetricValue>, TransitionError> {
+        crate::metrics::list_values(&*self.db()?, entry_domain, entry_id)
+    }
+
+    pub fn replace_metric_values(
+        &self,
+        entry_domain: String,
+        entry_id: i64,
+        values: Vec<crate::metrics::MetricValue>,
+    ) -> Result<(), TransitionError> {
+        crate::metrics::replace_values(&*self.db()?, entry_domain, entry_id, values)
+    }
+
+    // -- Bleeding / cycle tracking -------------------------------------------
+
+    pub fn add_bleeding_entry(
+        &self,
+        entry: crate::bleeding::NewBleedingEntry,
+    ) -> Result<crate::bleeding::BleedingEntry, TransitionError> {
+        crate::bleeding::add(&*self.db()?, entry)
+    }
+
+    pub fn list_bleeding_entries(
+        &self,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<crate::bleeding::BleedingEntry>, TransitionError> {
+        crate::bleeding::list(&*self.db()?, offset, limit)
+    }
+
+    pub fn get_bleeding_entry(
+        &self,
+        id: i64,
+    ) -> Result<Option<crate::bleeding::BleedingEntry>, TransitionError> {
+        crate::bleeding::get(&*self.db()?, id)
+    }
+
+    pub fn update_bleeding_entry(
+        &self,
+        id: i64,
+        entry: crate::bleeding::NewBleedingEntry,
+    ) -> Result<crate::bleeding::BleedingEntry, TransitionError> {
+        crate::bleeding::update(&*self.db()?, id, entry)
+    }
+
+    pub fn delete_bleeding_entry(&self, id: i64) -> Result<(), TransitionError> {
+        crate::bleeding::delete(&*self.db()?, id)
     }
 
     // -- Generic blob encryption (for photos, voice clips, etc.) -------------

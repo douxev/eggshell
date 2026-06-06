@@ -89,9 +89,52 @@ pub fn get(db: &Database, id: i64) -> Result<Option<JournalEntry>, TransitionErr
         })
 }
 
+/// Update an entry in place, keeping its id stable. This is what lets child
+/// data (custom metric values keyed on the entry id) survive an edit — the
+/// previous delete-then-add path changed the id and orphaned them.
+pub fn update(db: &Database, id: i64, e: NewJournalEntry) -> Result<JournalEntry, TransitionError> {
+    let n = db
+        .conn()
+        .execute(
+            "UPDATE journal_entries SET
+                at_ms = ?1, mood = ?2, dysphoria = ?3, euphoria = ?4, libido = ?5,
+                energy = ?6, free_text = ?7, side_effects = ?8
+             WHERE id = ?9",
+            params![
+                e.at_ms, e.mood, e.dysphoria, e.euphoria, e.libido,
+                e.energy, e.free_text, e.side_effects, id,
+            ],
+        )
+        .map_err(map_sql)?;
+    if n == 0 {
+        return Err(TransitionError::Database(format!(
+            "no journal entry with id {id}"
+        )));
+    }
+    Ok(JournalEntry {
+        id,
+        at_ms: e.at_ms,
+        mood: e.mood,
+        dysphoria: e.dysphoria,
+        euphoria: e.euphoria,
+        libido: e.libido,
+        energy: e.energy,
+        free_text: e.free_text,
+        side_effects: e.side_effects,
+    })
+}
+
 pub fn delete(db: &Database, id: i64) -> Result<(), TransitionError> {
     db.conn()
         .execute("DELETE FROM journal_entries WHERE id = ?1", [id])
+        .map_err(map_sql)?;
+    // Drop custom slider values keyed on this entry (polymorphic entry_id has
+    // no FK to journal_entries, so clean up explicitly).
+    db.conn()
+        .execute(
+            "DELETE FROM metric_values WHERE entry_domain = 'journal' AND entry_id = ?1",
+            [id],
+        )
         .map_err(map_sql)?;
     Ok(())
 }

@@ -147,6 +147,16 @@ pub fn set_next_due(db: &Database, id: i64, next_due_at_ms: i64) -> Result<(), T
     Ok(())
 }
 
+/// Permanently remove a schedule. Dose history is unaffected — `dose_events`
+/// reference the medication, not the schedule, so deleting a reminder never
+/// touches logged doses.
+pub fn delete(db: &Database, id: i64) -> Result<(), TransitionError> {
+    db.conn()
+        .execute("DELETE FROM dose_schedules WHERE id = ?1", [id])
+        .map_err(map_sql)?;
+    Ok(())
+}
+
 fn validate(s: &NewDoseSchedule) -> Result<(), TransitionError> {
     match s.kind.as_str() {
         "interval" => {
@@ -410,6 +420,48 @@ mod tests {
         set_active(&db, s.id, false).unwrap();
         assert!(list_active(&db).unwrap().is_empty());
         assert_eq!(list_for_medication(&db, med_id, true).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn delete_removes_schedule_but_keeps_doses() {
+        let (_k, db) = fresh_db();
+        let med_id = sample_med(&db);
+        let s = add(
+            &db,
+            NewDoseSchedule {
+                medication_id: med_id,
+                kind: "interval".into(),
+                interval_minutes: Some(60),
+                daily_hour: None,
+                daily_minute: None,
+                interval_days: None,
+                next_due_at_ms: 10_000,
+            },
+            500,
+        )
+        .unwrap();
+        crate::medication::log_dose(
+            &db,
+            crate::medication::NewDoseEvent {
+                medication_id: med_id,
+                taken_at_ms: 9_000,
+                dose: None,
+                dose_unit: None,
+                route: None,
+                injection_site: None,
+                notes: None,
+                status: "taken".into(),
+                scheduled_at_ms: None,
+                schedule_id: Some(s.id),
+            },
+        )
+        .unwrap();
+        delete(&db, s.id).unwrap();
+        // Schedule gone from both active and inactive listings.
+        assert!(get(&db, s.id).unwrap().is_none());
+        assert!(list_for_medication(&db, med_id, true).unwrap().is_empty());
+        // Dose history survives — it belongs to the medication.
+        assert_eq!(crate::medication::list_doses(&db, med_id, 0, 10).unwrap().len(), 1);
     }
 
     #[test]

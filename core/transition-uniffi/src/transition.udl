@@ -82,6 +82,9 @@ dictionary DoseEvent {
     string? route;
     string? injection_site;
     string? notes;
+    string status;
+    i64? scheduled_at_ms;
+    i64? schedule_id;
 };
 
 dictionary NewDoseEvent {
@@ -92,6 +95,29 @@ dictionary NewDoseEvent {
     string? route;
     string? injection_site;
     string? notes;
+    // Defaulted so existing "log a taken dose" call sites need no change.
+    string status = "taken";
+    i64? scheduled_at_ms = null;
+    i64? schedule_id = null;
+};
+
+dictionary TreatmentChange {
+    i64 id;
+    i64 medication_id;
+    i64 at_ms;
+    string field;
+    string? old_value;
+    string? new_value;
+    string? note;
+};
+
+dictionary NewTreatmentChange {
+    i64 medication_id;
+    i64 at_ms;
+    string field;
+    string? old_value;
+    string? new_value;
+    string? note;
 };
 
 // -- VaultKey ----------------------------------------------------------------
@@ -137,12 +163,26 @@ interface Vault {
     [Throws=TransitionError]
     void set_medication_archived(i64 id, boolean archived);
 
+    [Throws=TransitionError]
+    void update_medication(i64 id, NewMedication med);
+
+    // Treatment-change audit (dose/route edits over time)
+    [Throws=TransitionError]
+    TreatmentChange log_treatment_change(NewTreatmentChange change);
+
+    [Throws=TransitionError]
+    sequence<TreatmentChange> list_treatment_changes(i64 from_ms, i64 to_ms);
+
     // Dose log
     [Throws=TransitionError]
     DoseEvent log_dose(NewDoseEvent dose);
 
     [Throws=TransitionError]
     sequence<DoseEvent> list_doses(i64 medication_id, i64 offset, i64 limit);
+
+    // All dose events across meds in a time window (for the correlation view).
+    [Throws=TransitionError]
+    sequence<DoseEvent> list_dose_events_between(i64 from_ms, i64 to_ms);
 
     [Throws=TransitionError]
     string? suggest_next_injection_site(i64 medication_id, i64 history_depth);
@@ -163,6 +203,9 @@ interface Vault {
     [Throws=TransitionError]
     void set_schedule_next_due(i64 id, i64 next_due_at_ms);
 
+    [Throws=TransitionError]
+    void delete_schedule(i64 id);
+
     // Journal
     [Throws=TransitionError]
     JournalEntry add_journal_entry(NewJournalEntry entry);
@@ -172,6 +215,9 @@ interface Vault {
 
     [Throws=TransitionError]
     JournalEntry? get_journal_entry(i64 id);
+
+    [Throws=TransitionError]
+    JournalEntry update_journal_entry(i64 id, NewJournalEntry entry);
 
     [Throws=TransitionError]
     void delete_journal_entry(i64 id);
@@ -208,6 +254,41 @@ interface Vault {
 
     [Throws=TransitionError]
     void delete_voice_clip(string id);
+
+    // Metric definitions / values (shared customizable sliders)
+    [Throws=TransitionError]
+    sequence<MetricDefinition> list_metric_definitions(string domain, boolean include_archived);
+
+    [Throws=TransitionError]
+    MetricDefinition add_metric_definition(NewMetricDefinition def);
+
+    [Throws=TransitionError]
+    void update_metric_definition(i64 id, MetricDefinitionUpdate upd);
+
+    [Throws=TransitionError]
+    void archive_metric_definition(i64 id);
+
+    [Throws=TransitionError]
+    sequence<MetricValue> list_metric_values(string entry_domain, i64 entry_id);
+
+    [Throws=TransitionError]
+    void replace_metric_values(string entry_domain, i64 entry_id, sequence<MetricValue> values);
+
+    // Bleeding / cycle tracking
+    [Throws=TransitionError]
+    BleedingEntry add_bleeding_entry(NewBleedingEntry entry);
+
+    [Throws=TransitionError]
+    sequence<BleedingEntry> list_bleeding_entries(i64 offset, i64 limit);
+
+    [Throws=TransitionError]
+    BleedingEntry? get_bleeding_entry(i64 id);
+
+    [Throws=TransitionError]
+    BleedingEntry update_bleeding_entry(i64 id, NewBleedingEntry entry);
+
+    [Throws=TransitionError]
+    void delete_bleeding_entry(i64 id);
 
     // Generic blob encryption (photos, future audio).
     [Throws=TransitionError]
@@ -315,4 +396,63 @@ dictionary NewDoseSchedule {
     u32? daily_minute;
     u32? interval_days;
     i64 next_due_at_ms;
+};
+
+// -- Customizable metric sliders (shared by journal + bleeding) --------------
+
+dictionary MetricDefinition {
+    i64 id;
+    string domain;
+    string metric_key;
+    string label;
+    string? emoji_left;
+    string? emoji_right;
+    u32 min_value;
+    u32 max_value;
+    i64 sort_order;
+    boolean builtin;
+    string? column_name;
+    boolean enabled;
+    boolean archived;
+    i64 created_at_ms;
+};
+
+dictionary NewMetricDefinition {
+    string domain;
+    string metric_key;
+    string label;
+    string? emoji_left;
+    string? emoji_right;
+    u32 min_value;
+    u32 max_value;
+    i64 sort_order;
+    i64 created_at_ms;
+};
+
+dictionary MetricDefinitionUpdate {
+    string label;
+    string? emoji_left;
+    string? emoji_right;
+    i64 sort_order;
+    boolean enabled;
+};
+
+dictionary MetricValue {
+    i64 metric_id;
+    u32 value;
+};
+
+// -- Bleeding / cycle tracking -----------------------------------------------
+
+dictionary BleedingEntry {
+    i64 id;
+    i64 at_ms;
+    boolean? is_spotting;
+    string? free_text;
+};
+
+dictionary NewBleedingEntry {
+    i64 at_ms;
+    boolean? is_spotting;
+    string? free_text;
 };

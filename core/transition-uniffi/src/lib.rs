@@ -12,10 +12,16 @@ use transition_core::vault as core_vault;
 pub use transition_core::TransitionError;
 // The medication types are simple data records — re-export so UniFFI scaffolds
 // them directly without an extra wrapper layer.
-pub use transition_core::medication::{DoseEvent, Medication, NewDoseEvent, NewMedication};
+pub use transition_core::medication::{
+    DoseEvent, Medication, NewDoseEvent, NewMedication, NewTreatmentChange, TreatmentChange,
+};
 pub use transition_core::dose_schedule::{DoseSchedule, NewDoseSchedule};
 pub use transition_core::hormones::{HormoneMeasurement, NewHormoneMeasurement};
 pub use transition_core::journal::{JournalEntry, NewJournalEntry};
+pub use transition_core::metrics::{
+    MetricDefinition, MetricDefinitionUpdate, MetricValue, NewMetricDefinition,
+};
+pub use transition_core::bleeding::{BleedingEntry, NewBleedingEntry};
 pub use transition_core::photos::{NewPhotoRecord, PhotoRecord};
 pub use transition_core::voice::{NewVoiceClip, VoiceClip};
 
@@ -197,6 +203,25 @@ impl Vault {
         self.inner.set_medication_archived(id, archived)
     }
 
+    pub fn update_medication(&self, id: i64, med: NewMedication) -> Result<(), TransitionError> {
+        self.inner.update_medication(id, med)
+    }
+
+    pub fn log_treatment_change(
+        &self,
+        change: NewTreatmentChange,
+    ) -> Result<TreatmentChange, TransitionError> {
+        self.inner.log_treatment_change(change)
+    }
+
+    pub fn list_treatment_changes(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<Vec<TreatmentChange>, TransitionError> {
+        self.inner.list_treatment_changes(from_ms, to_ms)
+    }
+
     pub fn log_dose(&self, dose: NewDoseEvent) -> Result<DoseEvent, TransitionError> {
         self.inner.log_dose(dose)
     }
@@ -208,6 +233,14 @@ impl Vault {
         limit: i64,
     ) -> Result<Vec<DoseEvent>, TransitionError> {
         self.inner.list_doses(medication_id, offset, limit)
+    }
+
+    pub fn list_dose_events_between(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<Vec<DoseEvent>, TransitionError> {
+        self.inner.list_dose_events_between(from_ms, to_ms)
     }
 
     pub fn suggest_next_injection_site(
@@ -250,8 +283,20 @@ impl Vault {
         self.inner.set_schedule_next_due(id, next_due_at_ms)
     }
 
+    pub fn delete_schedule(&self, id: i64) -> Result<(), TransitionError> {
+        self.inner.delete_schedule(id)
+    }
+
     pub fn add_journal_entry(&self, entry: NewJournalEntry) -> Result<JournalEntry, TransitionError> {
         self.inner.add_journal_entry(entry)
+    }
+
+    pub fn update_journal_entry(
+        &self,
+        id: i64,
+        entry: NewJournalEntry,
+    ) -> Result<JournalEntry, TransitionError> {
+        self.inner.update_journal_entry(id, entry)
     }
 
     pub fn list_journal_entries(&self, offset: i64, limit: i64) -> Result<Vec<JournalEntry>, TransitionError> {
@@ -323,6 +368,81 @@ impl Vault {
 
     pub fn delete_voice_clip(&self, id: String) -> Result<(), TransitionError> {
         self.inner.delete_voice_clip(id)
+    }
+
+    pub fn list_metric_definitions(
+        &self,
+        domain: String,
+        include_archived: bool,
+    ) -> Result<Vec<MetricDefinition>, TransitionError> {
+        self.inner.list_metric_definitions(domain, include_archived)
+    }
+
+    pub fn add_metric_definition(
+        &self,
+        def: NewMetricDefinition,
+    ) -> Result<MetricDefinition, TransitionError> {
+        self.inner.add_metric_definition(def)
+    }
+
+    pub fn update_metric_definition(
+        &self,
+        id: i64,
+        upd: MetricDefinitionUpdate,
+    ) -> Result<(), TransitionError> {
+        self.inner.update_metric_definition(id, upd)
+    }
+
+    pub fn archive_metric_definition(&self, id: i64) -> Result<(), TransitionError> {
+        self.inner.archive_metric_definition(id)
+    }
+
+    pub fn list_metric_values(
+        &self,
+        entry_domain: String,
+        entry_id: i64,
+    ) -> Result<Vec<MetricValue>, TransitionError> {
+        self.inner.list_metric_values(entry_domain, entry_id)
+    }
+
+    pub fn replace_metric_values(
+        &self,
+        entry_domain: String,
+        entry_id: i64,
+        values: Vec<MetricValue>,
+    ) -> Result<(), TransitionError> {
+        self.inner.replace_metric_values(entry_domain, entry_id, values)
+    }
+
+    pub fn add_bleeding_entry(
+        &self,
+        entry: NewBleedingEntry,
+    ) -> Result<BleedingEntry, TransitionError> {
+        self.inner.add_bleeding_entry(entry)
+    }
+
+    pub fn list_bleeding_entries(
+        &self,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<BleedingEntry>, TransitionError> {
+        self.inner.list_bleeding_entries(offset, limit)
+    }
+
+    pub fn get_bleeding_entry(&self, id: i64) -> Result<Option<BleedingEntry>, TransitionError> {
+        self.inner.get_bleeding_entry(id)
+    }
+
+    pub fn update_bleeding_entry(
+        &self,
+        id: i64,
+        entry: NewBleedingEntry,
+    ) -> Result<BleedingEntry, TransitionError> {
+        self.inner.update_bleeding_entry(id, entry)
+    }
+
+    pub fn delete_bleeding_entry(&self, id: i64) -> Result<(), TransitionError> {
+        self.inner.delete_bleeding_entry(id)
     }
 
     pub fn encrypt_blob(&self, plaintext: Vec<u8>) -> Result<Vec<u8>, TransitionError> {
