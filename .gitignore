@@ -57,3 +57,6 @@ apple/.bundle/
 *.mobileprovision
 *.p12
 *.p8
+
+# Local release artifacts (apk/aab)
+/dist/
