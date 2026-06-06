@@ -36,12 +36,20 @@ android {
         // Reminder for the next release: Play enforces strictly monotonic
         // versionCode across all tracks. Bump versionCode every upload,
         // even for a same-day re-build, otherwise Play refuses the AAB.
-        versionCode = 5
-        versionName = "0.0.5"
+        versionCode = 6
+        versionName = "0.0.6"
 
         ndk {
-            // Limit ABIs to common phone architectures; can extend to x86 for emulators
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            // Limit ABIs to common phone architectures; can extend to x86 for emulators.
+            // For fast local installs over (slow) wireless adb, package a single ABI:
+            //   ./gradlew installDebug -PdevAbi=arm64-v8a
+            // Default (no flag) bundles all three so release AABs stay complete.
+            val devAbi = (project.findProperty("devAbi") as String?)?.takeIf { it.isNotBlank() }
+            if (devAbi != null) {
+                abiFilters += devAbi
+            } else {
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            }
         }
     }
 

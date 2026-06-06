@@ -22,7 +22,7 @@ class HormoneUnitPrefs @Inject constructor(
     @ApplicationContext context: Context,
 ) {
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        SecurePrefs.get(context, PREFS_NAME)
 
     /**
      * Returns the unit the user explicitly picked from the Settings screen,

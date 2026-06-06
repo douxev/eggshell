@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bloodtype
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.LocalPharmacy
@@ -59,6 +60,7 @@ class FeaturesViewModel @Inject constructor(
     val weightTracking: StateFlow<Boolean> = prefs.weightTracking
     val photoTab: StateFlow<Boolean> = prefs.photoTab
     val voiceTab: StateFlow<Boolean> = prefs.voiceTab
+    val bleeding: StateFlow<Boolean> = prefs.bleeding
 
     fun setMedications(v: Boolean) = prefs.setMedications(v)
     fun setJournal(v: Boolean) = prefs.setJournal(v)
@@ -66,6 +68,7 @@ class FeaturesViewModel @Inject constructor(
     fun setWeightTracking(v: Boolean) = prefs.setWeightTracking(v)
     fun setPhotoTab(v: Boolean) = prefs.setPhotoTab(v)
     fun setVoiceTab(v: Boolean) = prefs.setVoiceTab(v)
+    fun setBleeding(v: Boolean) = prefs.setBleeding(v)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,6 +83,7 @@ fun FeaturesScreen(
     val weight by vm.weightTracking.collectAsState()
     val photo by vm.photoTab.collectAsState()
     val voice by vm.voiceTab.collectAsState()
+    val bleeding by vm.bleeding.collectAsState()
 
     Scaffold(
         topBar = {
@@ -162,6 +166,14 @@ fun FeaturesScreen(
                             sub = stringResource(R.string.feature_voice_sub),
                             checked = voice,
                             onCheckedChange = vm::setVoiceTab,
+                            showDivider = true,
+                        )
+                        FeatureSwitchRow(
+                            icon = Icons.Filled.Bloodtype,
+                            title = stringResource(R.string.feature_bleeding_title),
+                            sub = stringResource(R.string.feature_bleeding_sub),
+                            checked = bleeding,
+                            onCheckedChange = vm::setBleeding,
                             showDivider = false,
                         )
                     }

@@ -178,7 +178,10 @@ class EggshellWidgetProvider : AppWidgetProvider() {
                 Pair(
                     entry.nextDueAtMs,
                     WidgetRow(
-                        title = context.getString(R.string.widget_med_title),
+                        // Same opt-in label as the notification (null in the
+                        // privacy-default generic mode). The widget is hidden
+                        // whenever a decoy PIN is set, so this never leaks.
+                        title = entry.displayLabel ?: context.getString(R.string.widget_med_title),
                         whenLabel = relativeLabel(context, entry.nextDueAtMs),
                     ),
                 )

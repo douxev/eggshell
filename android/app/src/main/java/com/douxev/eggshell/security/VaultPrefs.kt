@@ -22,7 +22,7 @@ import javax.inject.Singleton
 class VaultPrefs @Inject constructor(@ApplicationContext context: Context) {
 
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        com.douxev.eggshell.data.SecurePrefs.get(context, PREFS_NAME)
 
     enum class Mode {
         KEYSTORE_ONLY,

@@ -37,13 +37,52 @@ class ReminderReceiver : BroadcastReceiver() {
     @Inject lateinit var priority: PriorityPrefs
     @Inject lateinit var schedules: ScheduleRepository
     @Inject lateinit var medications: MedicationRepository
+    @Inject lateinit var pendingDoses: PendingDosePrefs
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             AlarmScheduler.ACTION_REMINDER -> handleMed(context, intent)
             AlarmScheduler.ACTION_LAB_REMINDER -> handleLab(context, intent)
-            AlarmScheduler.ACTION_MARK_TAKEN -> handleMarkTaken(context, intent)
+            AlarmScheduler.ACTION_MARK_TAKEN -> handleMark(context, intent, status = "taken")
+            AlarmScheduler.ACTION_MARK_SKIPPED -> handleMark(context, intent, status = "skipped")
+            AlarmScheduler.ACTION_SNOOZE -> handleSnooze(context, intent)
+            AlarmScheduler.ACTION_SNOOZE_FIRE -> handleSnoozeFire(context, intent)
         }
+    }
+
+    /**
+     * "Rappeler plus tard" — dismiss the current notification and re-show the
+     * same reminder after [AlarmScheduler.SNOOZE_MS]. Deliberately touches
+     * neither the dose log nor the schedule's recurring cadence: the regular
+     * next-due was already advanced when the reminder first fired, so this is a
+     * one-off nudge independent of the cycle.
+     */
+    private fun handleSnooze(context: Context, intent: Intent) {
+        val scheduleId = intent.getLongExtra(AlarmScheduler.EXTRA_SCHEDULE_ID, -1L)
+        if (scheduleId < 0) return
+        val medNotifId = (0x0000_0000) or (scheduleId.toInt() and 0x0000_FFFF)
+        runCatching {
+            context.getSystemService(android.app.NotificationManager::class.java).cancel(medNotifId)
+        }
+        alarmScheduler.scheduleSnooze(scheduleId, System.currentTimeMillis() + AlarmScheduler.SNOOZE_MS)
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(
+                context.applicationContext,
+                context.getString(com.douxev.eggshell.R.string.reminder_snoozed_toast),
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+
+    /**
+     * The snooze one-shot fired: re-show the reminder. Reads the off-vault
+     * mirror only (works while locked) and does NOT recompute next-due.
+     */
+    private fun handleSnoozeFire(context: Context, intent: Intent) {
+        val scheduleId = intent.getLongExtra(AlarmScheduler.EXTRA_SCHEDULE_ID, -1L)
+        if (scheduleId < 0) return
+        val entry = ReminderPrefs(context).get(scheduleId) ?: return
+        notifier.showMed(scheduleId, entry.displayLabel, priority.isMedPriority(scheduleId))
     }
 
     private fun handleMed(context: Context, intent: Intent) {
@@ -53,7 +92,7 @@ class ReminderReceiver : BroadcastReceiver() {
         val prefs = ReminderPrefs(context)
         val entry = prefs.get(scheduleId) ?: return
 
-        notifier.showMed(scheduleId, priority.isMedPriority(scheduleId))
+        notifier.showMed(scheduleId, entry.displayLabel, priority.isMedPriority(scheduleId))
 
         val now = System.currentTimeMillis()
         val nextDue = NextDueCalculator.nextDueAfter(
@@ -62,6 +101,8 @@ class ReminderReceiver : BroadcastReceiver() {
             dailyHour = entry.dailyHour,
             dailyMinute = entry.dailyMinute,
             afterMs = now,
+            intervalDays = entry.intervalDays,
+            currentDueMs = entry.nextDueAtMs,
         )
         prefs.setNextDue(scheduleId, nextDue)
         alarmScheduler.schedule(scheduleId, nextDue)
@@ -82,17 +123,19 @@ class ReminderReceiver : BroadcastReceiver() {
     }
 
     /**
-     * "Pris" notification action — fired from the phone's notification shade
-     * or, via Wear OS notification bridging, from the user's paired watch.
+     * "Pris" / "Passer" notification action — fired from the phone's
+     * notification shade or, via Wear OS notification bridging, from the user's
+     * paired watch. [status] is "taken" or "skipped".
      *
      * Dismisses the notification immediately so the watch updates without
      * waiting on the IO work. Then, if the vault is unlocked, logs the dose
-     * + advances the schedule to its next occurrence (full DB write). If
-     * the vault is locked, we can't touch the encrypted dose log, so we
-     * just advance the alarm so the user doesn't get re-pinged for the
-     * same dose, and rely on them logging it manually next unlock.
+     * event (taken with the default dose, or a skip with no dose) + advances
+     * the schedule to its next occurrence (full DB write). If the vault is
+     * locked, we can't touch the encrypted dose log, so we queue the tap
+     * (sealed) and commit it on the next real unlock, and just advance the
+     * alarm so the user doesn't get re-pinged for the same dose.
      */
-    private fun handleMarkTaken(context: Context, intent: Intent) {
+    private fun handleMark(context: Context, intent: Intent, status: String) {
         val scheduleId = intent.getLongExtra(AlarmScheduler.EXTRA_SCHEDULE_ID, -1L)
         if (scheduleId < 0) return
 
@@ -111,34 +154,53 @@ class ReminderReceiver : BroadcastReceiver() {
                             .firstOrNull { it.id == scheduleId }
                             ?.let { sched -> medications.get(sched.medicationId) }
                         if (med != null) {
+                            val taken = status == "taken"
                             medications.logDose(
                                 uniffi.transition.NewDoseEvent(
                                     medicationId = med.id,
                                     takenAtMs = System.currentTimeMillis(),
-                                    dose = med.defaultDose,
-                                    doseUnit = med.defaultDoseUnit,
-                                    route = med.route,
+                                    dose = if (taken) med.defaultDose else null,
+                                    doseUnit = if (taken) med.defaultDoseUnit else null,
+                                    route = if (taken) med.route else null,
                                     injectionSite = null,
                                     notes = null,
+                                    status = status,
+                                    scheduledAtMs = null,
+                                    scheduleId = scheduleId,
                                 )
                             )
                         }
                         schedules.advanceToNextOccurrence(scheduleId)
                     }
                 } else {
-                    // Vault locked: we can't log the dose. Silently
-                    // dismissing the notification + advancing the alarm
-                    // would mean the user thinks they recorded the dose
-                    // (the watch / shade swallowed the tap) when they
-                    // didn't — they'd see no entry later and re-take.
-                    // Instead, surface a toast from the main thread and
-                    // do NOT advance the schedule, so the next alarm
-                    // still fires and the user gets a second chance to
-                    // log it after unlocking.
+                    // Vault locked: we can't touch the encrypted dose log, so
+                    // queue the tap (sealed at rest) and commit it on the next
+                    // real unlock. This works in every security mode, including
+                    // Paranoid / passphrase, since the queue defers all DB
+                    // writes. We need the medication id to log against later —
+                    // it lives in the plain alarm mirror, not the DB.
+                    val medId = ReminderPrefs(context).get(scheduleId)?.medicationId ?: -1L
+                    val queued = medId >= 0 && pendingDoses.add(
+                        PendingDosePrefs.Pending(
+                            scheduleId = scheduleId,
+                            medicationId = medId,
+                            takenAtMs = System.currentTimeMillis(),
+                            status = status,
+                        )
+                    )
+                    val toast = if (queued) {
+                        // Recorded — will be folded into the stats on unlock.
+                        com.douxev.eggshell.R.string.reminder_queued_toast
+                    } else {
+                        // Couldn't resolve the med or sealing failed: tell the
+                        // user to record it after unlocking rather than imply
+                        // it was saved.
+                        com.douxev.eggshell.R.string.reminder_locked_toast
+                    }
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         android.widget.Toast.makeText(
                             context.applicationContext,
-                            context.getString(com.douxev.eggshell.R.string.reminder_locked_toast),
+                            context.getString(toast),
                             android.widget.Toast.LENGTH_LONG,
                         ).show()
                     }

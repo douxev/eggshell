@@ -8,6 +8,8 @@ import uniffi.transition.DoseEvent
 import uniffi.transition.Medication
 import uniffi.transition.NewDoseEvent
 import uniffi.transition.NewMedication
+import uniffi.transition.NewTreatmentChange
+import uniffi.transition.TreatmentChange
 import uniffi.transition.standardInjectionSites
 
 /**
@@ -30,11 +32,25 @@ class MedicationRepository @Inject constructor(
     suspend fun setArchived(id: Long, archived: Boolean) =
         withContext(Dispatchers.IO) { vault.requireSession().setMedicationArchived(id, archived) }
 
+    /** Full overwrite of an existing medication (used by the edit screen). */
+    suspend fun update(id: Long, med: NewMedication) =
+        withContext(Dispatchers.IO) { vault.requireSession().updateMedication(id, med) }
+
     suspend fun logDose(dose: NewDoseEvent): DoseEvent =
         withContext(Dispatchers.IO) { vault.requireSession().logDose(dose) }
 
     suspend fun listDoses(medicationId: Long, offset: Long = 0, limit: Long = 50): List<DoseEvent> =
         withContext(Dispatchers.IO) { vault.requireSession().listDoses(medicationId, offset, limit) }
+
+    /** All dose events (taken / skipped / missed) across meds in a window. */
+    suspend fun listDoseEventsBetween(fromMs: Long, toMs: Long): List<DoseEvent> =
+        withContext(Dispatchers.IO) { vault.requireSession().listDoseEventsBetween(fromMs, toMs) }
+
+    suspend fun logTreatmentChange(change: NewTreatmentChange): TreatmentChange =
+        withContext(Dispatchers.IO) { vault.requireSession().logTreatmentChange(change) }
+
+    suspend fun listTreatmentChanges(fromMs: Long, toMs: Long): List<TreatmentChange> =
+        withContext(Dispatchers.IO) { vault.requireSession().listTreatmentChanges(fromMs, toMs) }
 
     suspend fun suggestNextInjectionSite(medicationId: Long, historyDepth: Long = 10): String? =
         withContext(Dispatchers.IO) {

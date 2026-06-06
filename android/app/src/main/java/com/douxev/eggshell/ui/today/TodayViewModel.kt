@@ -60,6 +60,10 @@ class TodayViewModel @Inject constructor(
         val items: List<TodayItem> = emptyList(),
         val moodTrend: List<Int> = emptyList(),
         val upcomingReminders: List<UpcomingReminder> = emptyList(),
+        /** Whether the user has any medication at all. Lets the Today screen
+         *  tell apart "no schedule yet" from "no medication yet" so the
+         *  hero-card CTA can route to the right setup screen. */
+        val hasMedications: Boolean = false,
         val gates: FeatureGates = FeatureGates(
             medications = true, journal = true, photos = false, voice = false,
         ),
@@ -90,10 +94,12 @@ class TodayViewModel @Inject constructor(
 
             // Medication-derived state is empty when the Médics feature is off
             // — saves a DB hit and short-circuits the upcoming-reminders mix.
+            var hasMeds = false
             val (items, futureMeds) = if (!gates.medications) {
                 emptyList<TodayItem>() to emptyList<UpcomingReminder>()
             } else {
                 val allMeds = runCatching { medications.list() }.getOrDefault(emptyList())
+                hasMeds = allMeds.isNotEmpty()
                 val medById = allMeds.associateBy { it.id }
                 val activeSchedules: List<DoseSchedule> = allMeds.flatMap { med ->
                     runCatching { schedules.listForMedication(med.id, includeInactive = false) }
@@ -162,6 +168,7 @@ class TodayViewModel @Inject constructor(
                 items = items,
                 moodTrend = mood,
                 upcomingReminders = upcoming,
+                hasMedications = hasMeds,
                 gates = gates,
             )
         }
@@ -174,6 +181,12 @@ class TodayViewModel @Inject constructor(
         }
         "daily" -> String.format(
             "Tous les jours à %02d:%02d",
+            s.dailyHour?.toInt() ?: 0,
+            s.dailyMinute?.toInt() ?: 0,
+        )
+        "days_interval" -> String.format(
+            "Tous les %d j à %02d:%02d",
+            s.intervalDays?.toInt() ?: 0,
             s.dailyHour?.toInt() ?: 0,
             s.dailyMinute?.toInt() ?: 0,
         )
@@ -208,6 +221,7 @@ class TodayViewModel @Inject constructor(
                         route = item.medication.route,
                         injectionSite = null,
                         notes = null,
+                        scheduleId = item.scheduleId,
                     )
                 )
                 schedules.advanceToNextOccurrence(item.scheduleId)

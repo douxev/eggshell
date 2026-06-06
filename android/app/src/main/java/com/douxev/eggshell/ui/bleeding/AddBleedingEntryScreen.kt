@@ -1,7 +1,8 @@
-package com.douxev.eggshell.ui.journal
+package com.douxev.eggshell.ui.bleeding
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,13 +11,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -26,10 +26,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateMap
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -44,67 +43,63 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
-import com.douxev.eggshell.data.JournalRepository
+import com.douxev.eggshell.data.BleedingRepository
 import com.douxev.eggshell.data.MetricsRepository
 import com.douxev.eggshell.ui.common.MetricSlidersColumn
 import com.douxev.eggshell.ui.common.clickToDismissKeyboard
-import uniffi.transition.JournalEntry
+import uniffi.transition.BleedingEntry
 import uniffi.transition.MetricDefinition
 import uniffi.transition.MetricValue
-import uniffi.transition.NewJournalEntry
+import uniffi.transition.NewBleedingEntry
 
 @HiltViewModel
-class AddJournalEntryViewModel @Inject constructor(
-    private val repo: JournalRepository,
+class AddBleedingEntryViewModel @Inject constructor(
+    private val repo: BleedingRepository,
     private val metrics: MetricsRepository,
     state: SavedStateHandle,
 ) : ViewModel() {
     enum class Status { Idle, Submitting, Done, Error }
 
-    /** Negative or -1L means "new entry". Positive id triggers edit mode. */
     val editingId: Long = state.get<Long>("id") ?: -1L
 
     private val _status = MutableStateFlow(Status.Idle)
     val status: StateFlow<Status> = _status.asStateFlow()
 
-    private val _loaded = MutableStateFlow<JournalEntry?>(null)
-    val loaded: StateFlow<JournalEntry?> = _loaded.asStateFlow()
+    private val _loaded = MutableStateFlow<BleedingEntry?>(null)
+    val loaded: StateFlow<BleedingEntry?> = _loaded.asStateFlow()
 
-    /** Enabled journal sliders to show, in order (built-ins + custom). */
     private val _definitions = MutableStateFlow<List<MetricDefinition>>(emptyList())
     val definitions: StateFlow<List<MetricDefinition>> = _definitions.asStateFlow()
 
-    /** Stored custom slider values (metric_id -> value) when editing. */
-    private val _customValues = MutableStateFlow<Map<Long, UInt>>(emptyMap())
-    val customValues: StateFlow<Map<Long, UInt>> = _customValues.asStateFlow()
+    private val _values = MutableStateFlow<Map<Long, UInt>>(emptyMap())
+    val values: StateFlow<Map<Long, UInt>> = _values.asStateFlow()
 
     init {
         refreshDefinitions()
         if (editingId > 0L) {
             viewModelScope.launch {
-                // Load custom values BEFORE the entry, so the screen's seed gate
-                // (which waits on `loaded`) sees a settled customValues map.
-                runCatching { metrics.values(MetricsRepository.DOMAIN_JOURNAL, editingId) }
-                    .onSuccess { vals -> _customValues.value = vals.associate { it.metricId to it.value } }
+                // Load slider values BEFORE the entry, so the screen's seed gate
+                // (which waits on `loaded`) sees a settled values map.
+                runCatching { metrics.values(MetricsRepository.DOMAIN_BLEEDING, editingId) }
+                    .onSuccess { v -> _values.value = v.associate { it.metricId to it.value } }
                 runCatching { repo.get(editingId) }.onSuccess { _loaded.value = it }
             }
         }
     }
 
-    /** Reloaded on resume so edits made in the metric editor show up. */
     fun refreshDefinitions() {
         viewModelScope.launch {
-            runCatching { metrics.definitions(MetricsRepository.DOMAIN_JOURNAL) }
+            runCatching { metrics.definitions(MetricsRepository.DOMAIN_BLEEDING) }
                 .onSuccess { defs -> _definitions.value = defs.filter { it.enabled } }
         }
     }
 
-    fun submit(entry: NewJournalEntry, customValues: List<MetricValue>) {
+    fun submit(entry: NewBleedingEntry, sliderValues: List<MetricValue>) {
         _status.value = Status.Submitting
         viewModelScope.launch {
             val result = runCatching {
-                val saved = if (editingId > 0L) repo.replace(editingId, entry) else repo.add(entry)
-                metrics.replaceValues(MetricsRepository.DOMAIN_JOURNAL, saved.id, customValues)
+                val saved = if (editingId > 0L) repo.update(editingId, entry) else repo.add(entry)
+                metrics.replaceValues(MetricsRepository.DOMAIN_BLEEDING, saved.id, sliderValues)
             }
             result
                 .onSuccess { _status.value = Status.Done }
@@ -125,53 +120,43 @@ class AddJournalEntryViewModel @Inject constructor(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddJournalEntryScreen(
+fun AddBleedingEntryScreen(
     onDone: () -> Unit,
-    onCustomize: () -> Unit,
-    vm: AddJournalEntryViewModel = hiltViewModel(),
+    vm: AddBleedingEntryViewModel = hiltViewModel(),
 ) {
     val status by vm.status.collectAsState()
     val loaded by vm.loaded.collectAsState()
     val definitions by vm.definitions.collectAsState()
-    val customValues by vm.customValues.collectAsState()
+    val storedValues by vm.values.collectAsState()
     val isEditing = vm.editingId > 0L
 
     LaunchedEffect(Unit) { vm.refreshDefinitions() }
 
-    if (status == AddJournalEntryViewModel.Status.Done) {
+    if (status == AddBleedingEntryViewModel.Status.Done) {
         onDone()
         return
     }
 
     val enabled = remember { mutableStateMapOf<Long, Boolean>() }
     val values = remember { mutableStateMapOf<Long, Float>() }
+    // null = unspecified, true = spotting, false = full bleed.
+    var isSpotting by remember { mutableStateOf<Boolean?>(null) }
     var freeText by remember { mutableStateOf("") }
-    var sideEffects by remember { mutableStateOf("") }
-    // Plain remember (not saveable): the slider maps aren't saveable either, so
-    // both reset together on rotation and re-seed from the ViewModel's data.
     var seeded by remember { mutableStateOf(false) }
 
-    // Seed slider state once both the definitions and (for edits) the stored
-    // values have arrived. Built-in values come from the entry columns; custom
-    // values from the metric_values map.
-    LaunchedEffect(definitions, loaded, customValues) {
+    LaunchedEffect(definitions, loaded, storedValues) {
         if (definitions.isEmpty()) return@LaunchedEffect
         if (seeded) return@LaunchedEffect
         if (isEditing && loaded == null) return@LaunchedEffect
         definitions.forEach { def ->
-            val stored: UInt? = if (def.columnName != null) {
-                columnValue(loaded, def.columnName!!)
-            } else {
-                customValues[def.id]
-            }
-            val on = if (isEditing) stored != null else def.builtin
-            enabled[def.id] = on
+            val stored = storedValues[def.id]
+            enabled[def.id] = if (isEditing) stored != null else def.builtin
             val mid = ((def.minValue.toInt() + def.maxValue.toInt()) / 2).toFloat()
             values[def.id] = stored?.toInt()?.toFloat() ?: mid
         }
         loaded?.let {
+            isSpotting = it.isSpotting
             freeText = it.freeText.orEmpty()
-            sideEffects = it.sideEffects.orEmpty()
         }
         seeded = true
     }
@@ -182,8 +167,7 @@ fun AddJournalEntryScreen(
                 title = {
                     Text(
                         stringResource(
-                            if (isEditing) R.string.journal_edit_title
-                            else R.string.journal_add_title
+                            if (isEditing) R.string.bleeding_edit_title else R.string.bleeding_add_title
                         )
                     )
                 },
@@ -218,86 +202,52 @@ fun AddJournalEntryScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            MetricSlidersColumn(definitions = definitions, enabled = enabled, values = values)
-
-            OutlinedButton(onClick = onCustomize, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-                Text(stringResource(R.string.metric_editor_open))
+            Text(stringResource(R.string.bleeding_kind_label), style = MaterialTheme.typography.titleSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = isSpotting == false,
+                    onClick = { isSpotting = if (isSpotting == false) null else false },
+                    label = { Text(stringResource(R.string.bleeding_kind_bleed)) },
+                )
+                FilterChip(
+                    selected = isSpotting == true,
+                    onClick = { isSpotting = if (isSpotting == true) null else true },
+                    label = { Text(stringResource(R.string.bleeding_kind_spotting)) },
+                )
             }
+
+            MetricSlidersColumn(definitions = definitions, enabled = enabled, values = values)
 
             OutlinedTextField(
                 value = freeText,
                 onValueChange = { freeText = it },
-                label = { Text(stringResource(R.string.journal_field_text)) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = sideEffects,
-                onValueChange = { sideEffects = it },
-                label = { Text(stringResource(R.string.journal_field_side_effects)) },
-                supportingText = { Text(stringResource(R.string.journal_field_side_effects_hint)) },
+                label = { Text(stringResource(R.string.bleeding_field_note)) },
                 modifier = Modifier.fillMaxWidth(),
             )
 
             Button(
                 onClick = {
+                    val sliderValues = definitions
+                        .filter { enabled[it.id] == true }
+                        .mapNotNull { def ->
+                            values[def.id]?.let { MetricValue(metricId = def.id, value = it.toInt().toUInt()) }
+                        }
                     vm.submit(
-                        NewJournalEntry(
+                        NewBleedingEntry(
                             atMs = loaded?.atMs ?: System.currentTimeMillis(),
-                            mood = columnState(definitions, enabled, values, "mood"),
-                            dysphoria = columnState(definitions, enabled, values, "dysphoria"),
-                            euphoria = columnState(definitions, enabled, values, "euphoria"),
-                            libido = columnState(definitions, enabled, values, "libido"),
-                            energy = columnState(definitions, enabled, values, "energy"),
+                            isSpotting = isSpotting,
                             freeText = freeText.ifBlank { null },
-                            sideEffects = sideEffects.ifBlank { null },
                         ),
-                        customMetricValues(definitions, enabled, values),
+                        sliderValues,
                     )
                 },
-                enabled = status != AddJournalEntryViewModel.Status.Submitting,
+                enabled = status != AddBleedingEntryViewModel.Status.Submitting,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.journal_save)) }
+            ) { Text(stringResource(R.string.bleeding_save)) }
 
-            if (status == AddJournalEntryViewModel.Status.Error) {
-                Text(
-                    stringResource(R.string.journal_error),
-                    color = MaterialTheme.colorScheme.error,
-                )
+            if (status == AddBleedingEntryViewModel.Status.Error) {
+                Text(stringResource(R.string.bleeding_error), color = MaterialTheme.colorScheme.error)
             }
         }
     }
 }
-
-/** Read a built-in gauge value off the loaded entry by its backing column. */
-private fun columnValue(entry: JournalEntry?, column: String): UInt? = when (column) {
-    "mood" -> entry?.mood
-    "dysphoria" -> entry?.dysphoria
-    "euphoria" -> entry?.euphoria
-    "libido" -> entry?.libido
-    "energy" -> entry?.energy
-    else -> null
-}
-
-/** Value to persist into a built-in journal column, or null if disabled. */
-private fun columnState(
-    definitions: List<MetricDefinition>,
-    enabled: SnapshotStateMap<Long, Boolean>,
-    values: SnapshotStateMap<Long, Float>,
-    column: String,
-): UInt? {
-    val def = definitions.firstOrNull { it.columnName == column } ?: return null
-    if (enabled[def.id] != true) return null
-    return values[def.id]?.toInt()?.toUInt()
-}
-
-/** Collect enabled custom (non-column-backed) sliders into MetricValues. */
-private fun customMetricValues(
-    definitions: List<MetricDefinition>,
-    enabled: SnapshotStateMap<Long, Boolean>,
-    values: SnapshotStateMap<Long, Float>,
-): List<MetricValue> = definitions
-    .filter { it.columnName == null && enabled[it.id] == true }
-    .mapNotNull { def ->
-        values[def.id]?.let { MetricValue(metricId = def.id, value = it.toInt().toUInt()) }
-    }

@@ -30,7 +30,7 @@ class PinRateLimiter @Inject constructor(
     @ApplicationContext context: Context,
 ) {
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        com.douxev.eggshell.data.SecurePrefs.get(context, PREFS_NAME)
 
     /** True if the user must wait before the next attempt is accepted. */
     fun lockedOutMs(): Long {

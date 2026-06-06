@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -97,6 +98,7 @@ fun JournalListScreen(
     onAdd: () -> Unit,
     onEdit: (Long) -> Unit,
     onOpenSettings: () -> Unit = {},
+    onOpenCorrelation: () -> Unit = {},
     vm: JournalListViewModel = hiltViewModel(),
 ) {
     val items by vm.items.collectAsState()
@@ -142,6 +144,20 @@ fun JournalListScreen(
                     title = stringResource(R.string.journal_title),
                     onOpenSettings = onOpenSettings,
                 )
+            }
+
+            item {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onOpenCorrelation,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        Icons.Filled.Insights,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 6.dp),
+                    )
+                    Text(stringResource(R.string.correlation_open))
+                }
             }
 
             item {

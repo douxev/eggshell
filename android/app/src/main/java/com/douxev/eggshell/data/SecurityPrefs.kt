@@ -23,7 +23,7 @@ class SecurityPrefs @Inject constructor(
     @ApplicationContext context: Context,
 ) {
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        SecurePrefs.get(context, PREFS_NAME)
 
     // Default ON: the recents thumbnail, screenshots, casting and screen
     // recording all expose med names, hormone values, journal entries by

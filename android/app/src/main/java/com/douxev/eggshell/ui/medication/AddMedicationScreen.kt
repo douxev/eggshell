@@ -29,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -39,45 +40,117 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.MedicationRepository
+import com.douxev.eggshell.reminders.MedAliasPrefs
 import com.douxev.eggshell.ui.common.clickToDismissKeyboard
+import uniffi.transition.Medication
 import uniffi.transition.NewMedication
+import uniffi.transition.NewTreatmentChange
 
 @HiltViewModel
 class AddMedicationViewModel @Inject constructor(
     private val repo: MedicationRepository,
+    private val medAlias: MedAliasPrefs,
+    state: SavedStateHandle,
 ) : ViewModel() {
     enum class Status { Idle, Submitting, Done, Error }
+
+    /** -1 = create a new medication; positive = edit that medication. */
+    val editingId: Long = state.get<Long>("id") ?: -1L
+    val isEditing: Boolean = editingId > 0L
 
     private val _status = MutableStateFlow(Status.Idle)
     val status: StateFlow<Status> = _status.asStateFlow()
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+    /** Id of the medication just created/edited, so the caller can chain into
+     *  its schedule setup (create) or pop back (edit). */
+    private val _newId = MutableStateFlow<Long?>(null)
+    val newId: StateFlow<Long?> = _newId.asStateFlow()
 
-    fun submit(med: NewMedication) {
+    private val _loaded = MutableStateFlow<Medication?>(null)
+    val loaded: StateFlow<Medication?> = _loaded.asStateFlow()
+    private val _alias = MutableStateFlow<String?>(null)
+    val alias: StateFlow<String?> = _alias.asStateFlow()
+
+    init {
+        if (isEditing) {
+            viewModelScope.launch {
+                runCatching { repo.get(editingId) }.onSuccess { _loaded.value = it }
+                _alias.value = medAlias.get(editingId)
+            }
+        }
+    }
+
+    fun submit(med: NewMedication, notifAlias: String?) {
         _status.value = Status.Submitting
         _error.value = null
         viewModelScope.launch {
-            runCatching { repo.add(med) }
-                .onSuccess { _status.value = Status.Done }
+            runCatching {
+                if (isEditing) {
+                    repo.update(editingId, med)
+                    logTreatmentChanges(_loaded.value, med)
+                    medAlias.set(editingId, notifAlias)
+                    editingId
+                } else {
+                    val created = repo.add(med)
+                    // Alias lives in plain prefs keyed by med id (it's a fake
+                    // name) so the locked reminder path can read it.
+                    medAlias.set(created.id, notifAlias)
+                    created.id
+                }
+            }
+                .onSuccess {
+                    _newId.value = it
+                    _status.value = Status.Done
+                }
                 .onFailure {
                     _error.value = it.message ?: it::class.simpleName.orEmpty()
                     _status.value = Status.Error
                 }
         }
     }
+
+    /** Record dose/unit/route edits as timestamped audit rows for the
+     *  correlation timeline. No-op when nothing dose-related changed. */
+    private suspend fun logTreatmentChanges(old: Medication?, new: NewMedication) {
+        old ?: return
+        val now = System.currentTimeMillis()
+        suspend fun change(field: String, oldV: String?, newV: String?) {
+            if (oldV != newV) {
+                runCatching {
+                    repo.logTreatmentChange(
+                        NewTreatmentChange(
+                            medicationId = editingId,
+                            atMs = now,
+                            field = field,
+                            oldValue = oldV,
+                            newValue = newV,
+                            note = null,
+                        )
+                    )
+                }
+            }
+        }
+        change("dose", old.defaultDose?.toString(), new.defaultDose?.toString())
+        change("unit", old.defaultDoseUnit, new.defaultDoseUnit)
+        change("route", old.route, new.route)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddMedicationScreen(
-    onDone: () -> Unit,
+    onDone: (Long) -> Unit,
     vm: AddMedicationViewModel = hiltViewModel(),
 ) {
     val status by vm.status.collectAsState()
     val error by vm.error.collectAsState()
+    val newId by vm.newId.collectAsState()
+    val loaded by vm.loaded.collectAsState()
+    val loadedAlias by vm.alias.collectAsState()
 
-    if (status == AddMedicationViewModel.Status.Done) {
-        onDone()
+    if (status == AddMedicationViewModel.Status.Done && newId != null) {
+        onDone(newId!!)
         return
     }
 
@@ -87,11 +160,38 @@ fun AddMedicationScreen(
     var dose by rememberSaveable { mutableStateOf("") }
     var unit by rememberSaveable { mutableStateOf("") }
     var notes by rememberSaveable { mutableStateOf("") }
+    var notifAlias by rememberSaveable { mutableStateOf("") }
+    var seeded by rememberSaveable { mutableStateOf(false) }
+
+    // Prefill once the existing medication loads (edit mode only).
+    androidx.compose.runtime.LaunchedEffect(loaded, loadedAlias) {
+        val m = loaded
+        if (vm.isEditing && m != null && !seeded) {
+            name = m.name
+            kind = m.kind
+            route = m.route
+            dose = m.defaultDose?.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() }.orEmpty()
+            unit = m.defaultDoseUnit.orEmpty()
+            notes = m.notes.orEmpty()
+            notifAlias = loadedAlias.orEmpty()
+            seeded = true
+        }
+    }
 
     val canSubmit = name.isNotBlank() && status != AddMedicationViewModel.Status.Submitting
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.med_add_title)) }) }
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        stringResource(
+                            if (vm.isEditing) R.string.med_edit_title else R.string.med_add_title
+                        )
+                    )
+                }
+            )
+        }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -148,6 +248,15 @@ fun AddMedicationScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            OutlinedTextField(
+                value = notifAlias,
+                onValueChange = { notifAlias = it.take(40) },
+                label = { Text(stringResource(R.string.med_field_notif_alias)) },
+                supportingText = { Text(stringResource(R.string.med_field_notif_alias_hint)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             Button(
                 enabled = canSubmit,
                 onClick = {
@@ -160,12 +269,13 @@ fun AddMedicationScreen(
                             defaultDoseUnit = unit.ifBlank { null },
                             color = null,
                             notes = notes.ifBlank { null },
-                        )
+                        ),
+                        notifAlias = notifAlias.ifBlank { null },
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(stringResource(R.string.med_create))
+                Text(stringResource(if (vm.isEditing) R.string.action_save else R.string.med_create))
             }
 
             error?.let {

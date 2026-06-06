@@ -39,6 +39,19 @@ class AlarmScheduler @Inject constructor(
         alarmManager.cancel(labPendingIntentFor(labId))
     }
 
+    /**
+     * One-shot "remind me later" alarm. Distinct from the recurring schedule
+     * alarm (different action), so it never advances the schedule's cadence —
+     * it just re-shows the same reminder at [atMs].
+     */
+    fun scheduleSnooze(scheduleId: Long, atMs: Long) {
+        setAlarm(snoozePendingIntentFor(scheduleId), atMs, "snooze=$scheduleId")
+    }
+
+    fun cancelSnooze(scheduleId: Long) {
+        alarmManager.cancel(snoozePendingIntentFor(scheduleId))
+    }
+
     private fun setAlarm(pi: PendingIntent, atMs: Long, tag: String) {
         val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             alarmManager.canScheduleExactAlarms()
@@ -53,6 +66,23 @@ class AlarmScheduler @Inject constructor(
     private fun pendingIntentFor(scheduleId: Long): PendingIntent {
         val intent = Intent(context, ReminderReceiver::class.java).apply {
             action = ACTION_REMINDER
+            putExtra(EXTRA_SCHEDULE_ID, scheduleId)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            scheduleId.toInt(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    // Snooze re-fire uses its own action so the PendingIntent is distinct from
+    // the recurring ACTION_REMINDER one (same request code, different action =
+    // different PendingIntent), and re-showing the reminder never advances the
+    // schedule's next-due.
+    private fun snoozePendingIntentFor(scheduleId: Long): PendingIntent {
+        val intent = Intent(context, ReminderReceiver::class.java).apply {
+            action = ACTION_SNOOZE_FIRE
             putExtra(EXTRA_SCHEDULE_ID, scheduleId)
         }
         return PendingIntent.getBroadcast(
@@ -86,6 +116,18 @@ class AlarmScheduler @Inject constructor(
         /** Notification-action broadcast: the user tapped "Pris" on a med
          *  reminder (on phone or, via Wear bridging, on a paired watch). */
         const val ACTION_MARK_TAKEN = "com.douxev.eggshell.MARK_TAKEN"
+        /** Notification-action broadcast: the user tapped "Passer" (skip) — the
+         *  dose was deliberately not taken. Recorded so it can be correlated
+         *  with mood, distinct from a silent miss (no log at all). */
+        const val ACTION_MARK_SKIPPED = "com.douxev.eggshell.MARK_SKIPPED"
+        /** Notification-action broadcast: the user tapped "Rappeler plus tard" —
+         *  re-show this reminder after [SNOOZE_MS], without touching the
+         *  schedule's cadence or logging anything. */
+        const val ACTION_SNOOZE = "com.douxev.eggshell.SNOOZE"
+        /** One-shot alarm that re-shows a snoozed reminder. */
+        const val ACTION_SNOOZE_FIRE = "com.douxev.eggshell.SNOOZE_FIRE"
+        /** Snooze delay: 30 minutes. */
+        const val SNOOZE_MS = 30L * 60L * 1000L
         private const val TAG = "AlarmScheduler"
     }
 }

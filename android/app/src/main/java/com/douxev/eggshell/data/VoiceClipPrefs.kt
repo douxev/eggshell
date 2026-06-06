@@ -23,7 +23,7 @@ import android.content.SharedPreferences
 class VoiceClipPrefs(context: Context) {
 
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        SecurePrefs.get(context, PREFS_NAME)
 
     data class Entry(
         val id: String,

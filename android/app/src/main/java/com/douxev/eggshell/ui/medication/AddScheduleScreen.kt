@@ -15,9 +15,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -84,12 +88,24 @@ class AddScheduleViewModel @Inject constructor(
                 }
         }
     }
+
+    fun submitDaysInterval(intervalDays: Int, hour: Int, minute: Int, startDateMs: Long) {
+        _status.value = Status.Submitting
+        viewModelScope.launch {
+            runCatching { repo.createDaysInterval(medicationId, intervalDays, hour, minute, startDateMs) }
+                .onSuccess { _status.value = Status.Done }
+                .onFailure {
+                    _error.value = it.message; _status.value = Status.Error
+                }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddScheduleScreen(
     onDone: () -> Unit,
+    onBack: () -> Unit = {},
     vm: AddScheduleViewModel = hiltViewModel(),
 ) {
     val status by vm.status.collectAsState()
@@ -105,6 +121,9 @@ fun AddScheduleScreen(
     var hoursStr by rememberSaveable { mutableStateOf("12") }
     var hourStr by rememberSaveable { mutableStateOf("8") }
     var minuteStr by rememberSaveable { mutableStateOf("0") }
+    var daysStr by rememberSaveable { mutableStateOf("3") }
+    var startDateMs by rememberSaveable { mutableStateOf(todayStartMs()) }
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
 
     // Ask the user for POST_NOTIFICATIONS if needed.
     val notifLauncher = rememberLauncherForActivityResult(
@@ -118,7 +137,19 @@ fun AddScheduleScreen(
     val needsExactAlarmPermission = needsExactAlarmPermission(context)
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.schedule_add_title)) }) }
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.schedule_add_title)) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
+                    }
+                },
+            )
+        }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -129,19 +160,22 @@ fun AddScheduleScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             ChipGroup(
-                options = listOf("interval", "daily"),
+                options = listOf("interval", "daily", "days_interval"),
                 selected = kind,
                 labelOf = {
                     stringResource(
-                        if (it == "interval") R.string.schedule_kind_interval
-                        else R.string.schedule_kind_daily
+                        when (it) {
+                            "interval" -> R.string.schedule_kind_interval
+                            "daily" -> R.string.schedule_kind_daily
+                            else -> R.string.schedule_kind_days_interval
+                        }
                     )
                 },
                 onSelected = { kind = it },
             )
 
-            if (kind == "interval") {
-                OutlinedTextField(
+            when (kind) {
+                "interval" -> OutlinedTextField(
                     value = hoursStr,
                     onValueChange = { hoursStr = it.filter(Char::isDigit).take(3) },
                     label = { Text(stringResource(R.string.schedule_field_interval_hours)) },
@@ -149,34 +183,67 @@ fun AddScheduleScreen(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-            } else {
-                OutlinedTextField(
-                    value = hourStr,
-                    onValueChange = { hourStr = it.filter(Char::isDigit).take(2) },
-                    label = { Text(stringResource(R.string.schedule_field_hour)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = minuteStr,
-                    onValueChange = { minuteStr = it.filter(Char::isDigit).take(2) },
-                    label = { Text(stringResource(R.string.schedule_field_minute)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                else -> {
+                    // Shared by "daily" and "days_interval": the time of day.
+                    if (kind == "days_interval") {
+                        OutlinedTextField(
+                            value = daysStr,
+                            onValueChange = { daysStr = it.filter(Char::isDigit).take(3) },
+                            label = { Text(stringResource(R.string.schedule_field_interval_days)) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    OutlinedTextField(
+                        value = hourStr,
+                        onValueChange = { hourStr = it.filter(Char::isDigit).take(2) },
+                        label = { Text(stringResource(R.string.schedule_field_hour)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = minuteStr,
+                        onValueChange = { minuteStr = it.filter(Char::isDigit).take(2) },
+                        label = { Text(stringResource(R.string.schedule_field_minute)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (kind == "days_interval") {
+                        OutlinedButton(
+                            onClick = { showDatePicker = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                stringResource(R.string.schedule_start_date_fmt, formatDate(startDateMs)),
+                            )
+                        }
+                    }
+                }
             }
 
             Button(
                 onClick = {
-                    if (kind == "interval") {
-                        val h = hoursStr.toIntOrNull()?.takeIf { it > 0 }
-                        if (h != null) vm.submitInterval(h)
-                    } else {
-                        val h = hourStr.toIntOrNull()?.takeIf { it in 0..23 }
-                        val m = minuteStr.toIntOrNull()?.takeIf { it in 0..59 }
-                        if (h != null && m != null) vm.submitDaily(h, m)
+                    when (kind) {
+                        "interval" -> {
+                            val h = hoursStr.toIntOrNull()?.takeIf { it > 0 }
+                            if (h != null) vm.submitInterval(h)
+                        }
+                        "days_interval" -> {
+                            val d = daysStr.toIntOrNull()?.takeIf { it > 0 }
+                            val h = hourStr.toIntOrNull()?.takeIf { it in 0..23 }
+                            val m = minuteStr.toIntOrNull()?.takeIf { it in 0..59 }
+                            if (d != null && h != null && m != null) {
+                                vm.submitDaysInterval(d, h, m, startDateMs)
+                            }
+                        }
+                        else -> {
+                            val h = hourStr.toIntOrNull()?.takeIf { it in 0..23 }
+                            val m = minuteStr.toIntOrNull()?.takeIf { it in 0..59 }
+                            if (h != null && m != null) vm.submitDaily(h, m)
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -202,7 +269,65 @@ fun AddScheduleScreen(
             }
         }
     }
+
+    if (showDatePicker) {
+        StartDatePickerDialog(
+            initialMs = startDateMs,
+            onDismiss = { showDatePicker = false },
+            onPick = { startDateMs = it; showDatePicker = false },
+        )
+    }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StartDatePickerDialog(
+    initialMs: Long,
+    onDismiss: () -> Unit,
+    onPick: (Long) -> Unit,
+) {
+    val state = androidx.compose.material3.rememberDatePickerState(initialSelectedDateMillis = initialMs)
+    androidx.compose.material3.DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    val picked = state.selectedDateMillis
+                    if (picked == null) {
+                        onDismiss()
+                    } else {
+                        // DatePicker reports UTC midnight; reinterpret those
+                        // calendar y/m/d at local midnight so the day can't
+                        // shift in negative-offset zones.
+                        val date = java.time.Instant.ofEpochMilli(picked)
+                            .atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                        onPick(
+                            date.atStartOfDay(java.time.ZoneId.systemDefault())
+                                .toInstant().toEpochMilli()
+                        )
+                    }
+                },
+            ) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    ) {
+        androidx.compose.material3.DatePicker(state = state)
+    }
+}
+
+/** Local midnight today, in epoch ms — the default start day. */
+private fun todayStartMs(): Long =
+    java.time.LocalDate.now(java.time.ZoneId.systemDefault())
+        .atStartOfDay(java.time.ZoneId.systemDefault())
+        .toInstant().toEpochMilli()
+
+private fun formatDate(ms: Long): String =
+    java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault())
+        .format(java.util.Date(ms))
 
 private fun needsExactAlarmPermission(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false

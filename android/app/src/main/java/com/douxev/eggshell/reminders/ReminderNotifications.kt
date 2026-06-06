@@ -18,8 +18,10 @@ import com.douxev.eggshell.R
  * Priority OFF (default) → default-importance channel: shade-only, silent.
  * Priority ON              → high-importance channel: heads-up, vibration, sound.
  *
- * The body stays intentionally generic ("Time for a dose") with no medication
- * name on the lock screen, in line with the privacy-first stance.
+ * The body is generic ("Time for a dose") by default. If the user opted into
+ * showing the medication name/alias (see `NotifContentPrefs`), the resolved
+ * `displayLabel` is shown in the private (unlocked-screen) version, while the
+ * public lock-screen version stays generic via `setPublicVersion`.
  *
  * Medication reminders ship with a "Pris" action button. Since Wear OS
  * automatically bridges phone notifications onto a paired watch (including
@@ -35,16 +37,28 @@ class ReminderNotifications @Inject constructor(
 ) {
     init { ensureChannels() }
 
-    /** Used by med-schedule alarms. `title`/`body` come from string resources. */
-    fun showMed(scheduleId: Long, priority: Boolean) {
-        val title = context.getString(R.string.reminder_title)
-        val body = context.getString(R.string.reminder_body)
+    /**
+     * Used by med-schedule alarms. [displayLabel] is the opt-in name/alias to
+     * show (null = the privacy-default generic copy). It only ever shows in the
+     * private notification; the lock-screen public version stays generic.
+     */
+    fun showMed(scheduleId: Long, displayLabel: String?, priority: Boolean) {
+        val title = displayLabel ?: context.getString(R.string.reminder_title)
+        val body = if (displayLabel != null) {
+            context.getString(R.string.reminder_body_named)
+        } else {
+            context.getString(R.string.reminder_body)
+        }
         post(
             notifId = MED_NOTIF_BASE + (scheduleId.toInt() and ID_MASK),
             title = title,
             body = body,
             priority = priority,
-            actions = listOf(markTakenAction(scheduleId)),
+            actions = listOf(
+                markTakenAction(scheduleId),
+                snoozeAction(scheduleId),
+                markSkippedAction(scheduleId),
+            ),
         )
     }
 
@@ -120,23 +134,78 @@ class ReminderNotifications @Inject constructor(
         mgr.notify(notifId, builder.build())
     }
 
-    private fun markTakenAction(scheduleId: Long): NotificationCompat.Action {
+    /**
+     * Cancel a med reminder's visible notification AND its "Pris" action
+     * PendingIntent. Called when a schedule is deleted so a lingering shade /
+     * Wear action can't fire a mark-taken for a reminder that no longer exists.
+     */
+    fun cancelMed(scheduleId: Long) {
+        val mgr = context.getSystemService(NotificationManager::class.java)
+        mgr.cancel(MED_NOTIF_BASE + (scheduleId.toInt() and ID_MASK))
+        cancelActionPi(scheduleId, AlarmScheduler.ACTION_MARK_TAKEN, MARK_TAKEN_BASE)
+        cancelActionPi(scheduleId, AlarmScheduler.ACTION_MARK_SKIPPED, MARK_SKIPPED_BASE)
+        cancelActionPi(scheduleId, AlarmScheduler.ACTION_SNOOZE, MARK_SNOOZE_BASE)
+    }
+
+    private fun cancelActionPi(scheduleId: Long, action: String, base: Int) {
         val intent = Intent(context, ReminderReceiver::class.java).apply {
-            action = AlarmScheduler.ACTION_MARK_TAKEN
+            this.action = action
+            putExtra(AlarmScheduler.EXTRA_SCHEDULE_ID, scheduleId)
+        }
+        PendingIntent.getBroadcast(
+            context,
+            base + (scheduleId.toInt() and ID_MASK),
+            intent,
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+        )?.cancel()
+    }
+
+    private fun markTakenAction(scheduleId: Long): NotificationCompat.Action =
+        broadcastAction(
+            scheduleId,
+            AlarmScheduler.ACTION_MARK_TAKEN,
+            MARK_TAKEN_BASE,
+            android.R.drawable.checkbox_on_background,
+            R.string.reminder_action_mark_taken,
+        )
+
+    private fun markSkippedAction(scheduleId: Long): NotificationCompat.Action =
+        broadcastAction(
+            scheduleId,
+            AlarmScheduler.ACTION_MARK_SKIPPED,
+            MARK_SKIPPED_BASE,
+            android.R.drawable.ic_menu_close_clear_cancel,
+            R.string.reminder_action_skip,
+        )
+
+    private fun snoozeAction(scheduleId: Long): NotificationCompat.Action =
+        broadcastAction(
+            scheduleId,
+            AlarmScheduler.ACTION_SNOOZE,
+            MARK_SNOOZE_BASE,
+            android.R.drawable.ic_menu_recent_history,
+            R.string.reminder_action_snooze,
+        )
+
+    private fun broadcastAction(
+        scheduleId: Long,
+        action: String,
+        base: Int,
+        icon: Int,
+        labelRes: Int,
+    ): NotificationCompat.Action {
+        val intent = Intent(context, ReminderReceiver::class.java).apply {
+            this.action = action
             putExtra(AlarmScheduler.EXTRA_SCHEDULE_ID, scheduleId)
         }
         val pi = PendingIntent.getBroadcast(
             context,
             // Disjoint range from MED/LAB alarm PIs (which sit in 0..LAB_BASE).
-            MARK_TAKEN_BASE + (scheduleId.toInt() and ID_MASK),
+            base + (scheduleId.toInt() and ID_MASK),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Action.Builder(
-            android.R.drawable.checkbox_on_background,
-            context.getString(R.string.reminder_action_mark_taken),
-            pi,
-        ).build()
+        return NotificationCompat.Action.Builder(icon, context.getString(labelRes), pi).build()
     }
 
     private fun ensureChannels() {
@@ -179,5 +248,7 @@ class ReminderNotifications @Inject constructor(
         private const val MED_NOTIF_BASE = 0x0000_0000
         private const val LAB_NOTIF_BASE = 0x0001_0000
         private const val MARK_TAKEN_BASE = 0x0002_0000
+        private const val MARK_SKIPPED_BASE = 0x0003_0000
+        private const val MARK_SNOOZE_BASE = 0x0004_0000
     }
 }

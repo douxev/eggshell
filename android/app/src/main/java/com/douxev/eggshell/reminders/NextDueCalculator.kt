@@ -17,6 +17,10 @@ object NextDueCalculator {
         dailyHour: Int?,
         dailyMinute: Int?,
         afterMs: Long,
+        intervalDays: Int? = null,
+        // The current occurrence (a valid one, set at creation or last advance).
+        // Used to keep the N-day phase for "days_interval"; ignored otherwise.
+        currentDueMs: Long? = null,
         zone: ZoneId = ZoneId.systemDefault(),
     ): Long = when (kind) {
         "interval" -> {
@@ -33,6 +37,23 @@ object NextDueCalculator {
             var next = local.withHour(dailyHour).withMinute(dailyMinute)
                 .withSecond(0).withNano(0)
             if (!next.isAfter(local)) next = next.plusDays(1)
+            next.toInstant().toEpochMilli()
+        }
+        "days_interval" -> {
+            require(intervalDays != null && intervalDays > 0) {
+                "days_interval schedule needs positive interval_days"
+            }
+            require(dailyHour != null && dailyMinute != null) {
+                "days_interval schedule needs dailyHour + dailyMinute"
+            }
+            // Step the N-day cadence forward from the current occurrence so the
+            // phase (which day in the cycle) is preserved even if the alarm
+            // fired late or the app was off for several cycles. plusDays keeps
+            // the wall-clock HH:MM across DST (java.time handles the offset).
+            val after = Instant.ofEpochMilli(afterMs).atZone(zone)
+            var next = Instant.ofEpochMilli(currentDueMs ?: afterMs).atZone(zone)
+                .withHour(dailyHour).withMinute(dailyMinute).withSecond(0).withNano(0)
+            while (!next.isAfter(after)) next = next.plusDays(intervalDays.toLong())
             next.toInstant().toEpochMilli()
         }
         else -> error("unknown schedule kind: $kind")

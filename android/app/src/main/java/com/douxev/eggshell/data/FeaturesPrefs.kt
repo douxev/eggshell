@@ -32,7 +32,7 @@ class FeaturesPrefs @Inject constructor(
     @ApplicationContext context: Context,
 ) {
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        SecurePrefs.get(context, PREFS_NAME)
 
     private val _medications = MutableStateFlow(prefs.getBoolean(KEY_MEDS, true))
     val medications: StateFlow<Boolean> = _medications.asStateFlow()
@@ -52,6 +52,11 @@ class FeaturesPrefs @Inject constructor(
 
     private val _voiceTab = MutableStateFlow(prefs.getBoolean(KEY_VOICE, false))
     val voiceTab: StateFlow<Boolean> = _voiceTab.asStateFlow()
+
+    /** Bleeding / cycle tracking. Opt-in and off by default: bleeding is a
+     *  strong sex-assigned-at-birth signal, so it stays hidden until enabled. */
+    private val _bleeding = MutableStateFlow(prefs.getBoolean(KEY_BLEEDING, false))
+    val bleeding: StateFlow<Boolean> = _bleeding.asStateFlow()
 
     fun setMedications(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_MEDS, enabled).apply()
@@ -83,6 +88,11 @@ class FeaturesPrefs @Inject constructor(
         _voiceTab.value = enabled
     }
 
+    fun setBleeding(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_BLEEDING, enabled).apply()
+        _bleeding.value = enabled
+    }
+
     companion object {
         // Pref-file name unchanged so existing installs keep their photo/voice
         // tab + weight-tracking choices across the rename.
@@ -93,5 +103,6 @@ class FeaturesPrefs @Inject constructor(
         private const val KEY_WEIGHT = "weight_tracking"
         private const val KEY_PHOTO = "show_photo"
         private const val KEY_VOICE = "show_voice"
+        private const val KEY_BLEEDING = "feature_bleeding"
     }
 }

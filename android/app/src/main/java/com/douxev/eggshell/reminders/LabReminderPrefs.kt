@@ -12,7 +12,7 @@ import android.content.SharedPreferences
 class LabReminderPrefs(context: Context) {
 
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        com.douxev.eggshell.data.SecurePrefs.get(context, PREFS_NAME)
 
     /** Free-form category tag: "lab" (default), "photo", "voice". The category
      *  is what lets the Reminders screen group entries into separate sections

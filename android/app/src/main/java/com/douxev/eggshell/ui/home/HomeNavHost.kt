@@ -3,6 +3,7 @@ package com.douxev.eggshell.ui.home
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bloodtype
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Home
@@ -37,6 +38,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.douxev.eggshell.R
+import com.douxev.eggshell.ui.bleeding.AddBleedingEntryScreen
+import com.douxev.eggshell.ui.bleeding.BleedingScreen
+import com.douxev.eggshell.ui.correlation.CorrelationScreen
+import com.douxev.eggshell.ui.metrics.MetricEditorScreen
 import com.douxev.eggshell.ui.hormones.AddHormoneMeasurementScreen
 import com.douxev.eggshell.ui.hormones.HormoneUnitsScreen
 import com.douxev.eggshell.ui.hormones.HormonesScreen
@@ -76,8 +81,9 @@ fun HomeNavHost(
     val showHormones by prefsVm.showHormones.collectAsState()
     val showPhoto by prefsVm.showPhoto.collectAsState()
     val showVoice by prefsVm.showVoice.collectAsState()
-    val tabs = remember(showMeds, showJournal, showHormones, showPhoto, showVoice) {
-        bottomTabs(showMeds, showJournal, showHormones, showPhoto, showVoice)
+    val showBleeding by prefsVm.showBleeding.collectAsState()
+    val tabs = remember(showMeds, showJournal, showHormones, showPhoto, showVoice, showBleeding) {
+        bottomTabs(showMeds, showJournal, showHormones, showPhoto, showVoice, showBleeding)
     }
 
     val pendingLink by (deepLinkProvider?.pendingDeepLink ?: kotlinx.coroutines.flow.MutableStateFlow(null)).collectAsState()
@@ -142,6 +148,8 @@ fun HomeNavHost(
                     onOpenJournalEntry = { nav.navigate(Routes.JOURNAL_ADD) },
                     onOpenLabs = { nav.navigate(Routes.HORMONES) },
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                    onAddMedication = { nav.navigate(Routes.MED_ADD) },
+                    onOpenMedList = { nav.navigate(Routes.MED_LIST) },
                 )
             }
             composable(Routes.MED_LIST) {
@@ -152,6 +160,18 @@ fun HomeNavHost(
                 )
             }
             composable(Routes.MED_ADD) {
+                // After creating a medication, land straight on its schedule
+                // setup — otherwise the new med never surfaces a "next dose"
+                // and the Today hero card stays empty. The schedule screen is
+                // skippable (back arrow), and dropping MED_ADD from the stack
+                // means "back" returns to the medication list, not the form.
+                AddMedicationScreen(onDone = { medId ->
+                    nav.navigate(Routes.medSchedule(medId)) {
+                        popUpTo(Routes.MED_ADD) { inclusive = true }
+                    }
+                })
+            }
+            composable(Routes.MED_EDIT, arguments = listOf(navArgument("id") { type = NavType.LongType })) {
                 AddMedicationScreen(onDone = { nav.popBackStack() })
             }
             composable(
@@ -162,6 +182,7 @@ fun HomeNavHost(
                 MedicationDetailScreen(
                     onLogDose = { nav.navigate(Routes.medLog(id)) },
                     onAddSchedule = { nav.navigate(Routes.medSchedule(id)) },
+                    onEditMedication = { nav.navigate(Routes.medEdit(id)) },
                     onBack = { nav.popBackStack() },
                 )
             }
@@ -172,23 +193,56 @@ fun HomeNavHost(
             composable(
                 Routes.MED_ADD_SCHEDULE,
                 arguments = listOf(navArgument("id") { type = NavType.LongType }),
-            ) { AddScheduleScreen(onDone = { nav.popBackStack() }) }
+            ) { AddScheduleScreen(onDone = { nav.popBackStack() }, onBack = { nav.popBackStack() }) }
 
             composable(Routes.JOURNAL) {
                 JournalListScreen(
                     onAdd = { nav.navigate(Routes.JOURNAL_ADD) },
                     onEdit = { id -> nav.navigate(Routes.journalEdit(id)) },
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                    onOpenCorrelation = { nav.navigate(Routes.CORRELATION) },
                 )
             }
             composable(Routes.JOURNAL_ADD) {
-                AddJournalEntryScreen(onDone = { nav.popBackStack() })
+                AddJournalEntryScreen(
+                    onDone = { nav.popBackStack() },
+                    onCustomize = { nav.navigate(Routes.metricEditor("journal")) },
+                )
             }
             composable(
                 Routes.JOURNAL_EDIT,
                 arguments = listOf(navArgument("id") { type = NavType.LongType }),
             ) {
-                AddJournalEntryScreen(onDone = { nav.popBackStack() })
+                AddJournalEntryScreen(
+                    onDone = { nav.popBackStack() },
+                    onCustomize = { nav.navigate(Routes.metricEditor("journal")) },
+                )
+            }
+
+            composable(Routes.BLEEDING) {
+                BleedingScreen(
+                    onAdd = { nav.navigate(Routes.BLEEDING_ADD) },
+                    onEdit = { id -> nav.navigate(Routes.bleedingEdit(id)) },
+                    onCustomize = { nav.navigate(Routes.metricEditor("bleeding")) },
+                )
+            }
+            composable(Routes.BLEEDING_ADD) {
+                AddBleedingEntryScreen(onDone = { nav.popBackStack() })
+            }
+            composable(
+                Routes.BLEEDING_EDIT,
+                arguments = listOf(navArgument("id") { type = NavType.LongType }),
+            ) {
+                AddBleedingEntryScreen(onDone = { nav.popBackStack() })
+            }
+            composable(
+                Routes.METRIC_EDITOR,
+                arguments = listOf(navArgument("domain") { type = NavType.StringType }),
+            ) {
+                MetricEditorScreen(onBack = { nav.popBackStack() })
+            }
+            composable(Routes.CORRELATION) {
+                CorrelationScreen(onBack = { nav.popBackStack() })
             }
 
             composable(Routes.HORMONES) {
@@ -283,12 +337,18 @@ object Routes {
     const val TODAY = "today"
     const val MED_LIST = "med/list"
     const val MED_ADD = "med/add"
+    const val MED_EDIT = "med/edit/{id}"
     const val MED_DETAIL = "med/detail/{id}"
     const val MED_LOG_DOSE = "med/log/{id}"
     const val MED_ADD_SCHEDULE = "med/schedule/{id}"
     const val JOURNAL = "journal"
     const val JOURNAL_ADD = "journal/add"
     const val JOURNAL_EDIT = "journal/edit/{id}"
+    const val BLEEDING = "bleeding"
+    const val BLEEDING_ADD = "bleeding/add"
+    const val BLEEDING_EDIT = "bleeding/edit/{id}"
+    const val METRIC_EDITOR = "metrics/editor/{domain}"
+    const val CORRELATION = "correlation"
     const val HORMONES = "hormones"
     const val HORMONES_ADD = "hormones/add"
     const val HORMONES_IMPORT = "hormones/import"
@@ -304,9 +364,12 @@ object Routes {
     const val FEATURES = "settings/features"
 
     fun medDetail(id: Long) = "med/detail/$id"
+    fun medEdit(id: Long) = "med/edit/$id"
     fun medLog(id: Long) = "med/log/$id"
     fun medSchedule(id: Long) = "med/schedule/$id"
     fun journalEdit(id: Long) = "journal/edit/$id"
+    fun bleedingEdit(id: Long) = "bleeding/edit/$id"
+    fun metricEditor(domain: String) = "metrics/editor/$domain"
 }
 
 private data class BottomTab(
@@ -359,10 +422,12 @@ private fun bottomTabs(
     showHormones: Boolean,
     showPhoto: Boolean,
     showVoice: Boolean,
+    showBleeding: Boolean,
 ): List<BottomTab> = buildList {
     add(BottomTab(Routes.TODAY, { Icons.Filled.Home }, R.string.nav_today))
     if (showMeds) add(BottomTab(Routes.MED_LIST, { Icons.Filled.LocalPharmacy }, R.string.nav_medications))
     if (showJournal) add(BottomTab(Routes.JOURNAL, { Icons.Filled.EditNote }, R.string.nav_journal))
+    if (showBleeding) add(BottomTab(Routes.BLEEDING, { Icons.Filled.Bloodtype }, R.string.nav_bleeding))
     if (showHormones) add(BottomTab(Routes.HORMONES, { Icons.Filled.Timeline }, R.string.nav_hormones))
     if (showPhoto) add(BottomTab(Routes.PHOTOS, { Icons.Filled.PhotoCamera }, R.string.nav_photos))
     if (showVoice) add(BottomTab(Routes.VOICE, { Icons.Filled.GraphicEq }, R.string.nav_voice))
@@ -377,4 +442,5 @@ class HomeTabsViewModel @javax.inject.Inject constructor(
     val showHormones: kotlinx.coroutines.flow.StateFlow<Boolean> = prefs.hormones
     val showPhoto: kotlinx.coroutines.flow.StateFlow<Boolean> = prefs.photoTab
     val showVoice: kotlinx.coroutines.flow.StateFlow<Boolean> = prefs.voiceTab
+    val showBleeding: kotlinx.coroutines.flow.StateFlow<Boolean> = prefs.bleeding
 }

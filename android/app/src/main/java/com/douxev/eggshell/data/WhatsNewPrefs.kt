@@ -21,7 +21,7 @@ class WhatsNewPrefs @Inject constructor(
     @ApplicationContext context: Context,
 ) {
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        SecurePrefs.get(context, PREFS_NAME)
 
     fun lastSeen(): Int = prefs.getInt(KEY_LAST_SEEN, 0)
 

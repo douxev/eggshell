@@ -24,13 +24,11 @@ class JournalRepository @Inject constructor(
         withContext(Dispatchers.IO) { vault.requireSession().getJournalEntry(id) }
 
     /**
-     * Replace an entry. The core's UDL doesn't expose a true update yet, so
-     * we delete-then-add. The returned entry has a fresh id.
+     * Update an entry in place. The id stays stable, so any custom slider
+     * values keyed on it (see [MetricsRepository]) survive the edit.
      */
     suspend fun replace(id: Long, entry: NewJournalEntry): JournalEntry =
         withContext(Dispatchers.IO) {
-            val session = vault.requireSession()
-            session.deleteJournalEntry(id)
-            session.addJournalEntry(entry)
+            vault.requireSession().updateJournalEntry(id, entry)
         }
 }

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MoodBad
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Vaccines
@@ -70,6 +71,8 @@ fun TodayScreen(
     onOpenJournalEntry: () -> Unit,
     onOpenLabs: () -> Unit,
     onOpenSettings: () -> Unit = {},
+    onAddMedication: () -> Unit = {},
+    onOpenMedList: () -> Unit = {},
     vm: TodayViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
@@ -77,7 +80,6 @@ fun TodayScreen(
 
     val items = state.items
     val done = items.count { it.done }
-    val total = items.size.coerceAtLeast(1)
     val next = items.firstOrNull { !it.done }
 
     LazyColumn(
@@ -97,6 +99,11 @@ fun TodayScreen(
                     totalCount = items.size,
                     next = next,
                     onMarkTaken = { next?.let(vm::markDoneNow) },
+                    onSetupSchedule = {
+                        // Route to the right setup screen: pick an existing med
+                        // to schedule, or create the first one if there's none.
+                        if (state.hasMedications) onOpenMedList() else onAddMedication()
+                    },
                 )
             }
         }
@@ -306,7 +313,12 @@ private fun HeroCard(
     totalCount: Int,
     next: TodayViewModel.TodayItem?,
     onMarkTaken: () -> Unit,
+    onSetupSchedule: () -> Unit,
 ) {
+    // No schedule yet: a "0/0" ring next to "Tout est pris ✓" reads as
+    // contradictory and dead-ends the user. Show a dedicated empty state with
+    // a clear call-to-action instead.
+    val empty = totalCount == 0
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -324,28 +336,37 @@ private fun HeroCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ProgressRing(
-                    value = if (totalCount == 0) 0f else doneCount / totalCount.toFloat(),
+                    value = if (empty) 0f else doneCount / totalCount.toFloat(),
                     color = MaterialTheme.colorScheme.primary,
                     track = MaterialTheme.colorScheme.primary.copy(alpha = 0.20f),
                     diameter = 70.dp,
                     stroke = 7.dp,
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            Text("$doneCount", fontSize = 20.sp, fontWeight = FontWeight.W700)
+                    if (empty) {
+                        Icon(
+                            Icons.Filled.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            modifier = Modifier.size(26.dp),
+                        )
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text("$doneCount", fontSize = 20.sp, fontWeight = FontWeight.W700)
+                                Text(
+                                    "/$totalCount",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
+                                )
+                            }
                             Text(
-                                "/${totalCount.coerceAtLeast(0)}",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
+                                stringResource(R.string.today_ring_label),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.W700,
+                                letterSpacing = 0.5.sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                             )
                         }
-                        Text(
-                            stringResource(R.string.today_ring_label),
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.W700,
-                            letterSpacing = 0.5.sp,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                        )
                     }
                 }
                 Column(modifier = Modifier.weight(1f)) {
@@ -354,31 +375,45 @@ private fun HeroCard(
                         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.5.sp),
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                     )
-                    if (next != null) {
-                        Text(next.medication.name, style = MaterialTheme.typography.titleLarge)
-                        val sub = buildString {
-                            next.medication.defaultDose?.let { append("${formatNumber(it)} ") }
-                            append(next.medication.defaultDoseUnit.orEmpty())
-                            append(" · à ")
-                            append(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(next.scheduledAtMs)))
+                    when {
+                        empty -> {
+                            Text(
+                                stringResource(R.string.today_no_schedule_title),
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+                            Text(
+                                stringResource(R.string.today_no_schedule_sub),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                            )
                         }
-                        Text(
-                            sub.trim(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                        )
-                    } else {
-                        Text(
-                            stringResource(R.string.today_all_taken),
-                            style = MaterialTheme.typography.titleLarge,
-                        )
+                        next != null -> {
+                            Text(next.medication.name, style = MaterialTheme.typography.titleLarge)
+                            val sub = buildString {
+                                next.medication.defaultDose?.let { append("${formatNumber(it)} ") }
+                                append(next.medication.defaultDoseUnit.orEmpty())
+                                append(" · à ")
+                                append(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(next.scheduledAtMs)))
+                            }
+                            Text(
+                                sub.trim(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                            )
+                        }
+                        else -> {
+                            Text(
+                                stringResource(R.string.today_all_taken),
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+                        }
                     }
                 }
             }
-            if (next != null) {
+            if (empty || next != null) {
                 Box(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
                     Button(
-                        onClick = onMarkTaken,
+                        onClick = if (empty) onSetupSchedule else onMarkTaken,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -386,9 +421,14 @@ private fun HeroCard(
                         shape = CircleShape,
                         modifier = Modifier.fillMaxWidth().height(48.dp),
                     ) {
-                        Icon(Icons.Filled.CheckCircle, contentDescription = null)
+                        Icon(
+                            if (empty) Icons.Filled.Schedule else Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                        )
                         Text(
-                            "  " + stringResource(R.string.today_mark_taken),
+                            "  " + stringResource(
+                                if (empty) R.string.today_setup_schedule else R.string.today_mark_taken,
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                         )
                     }

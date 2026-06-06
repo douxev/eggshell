@@ -1,5 +1,6 @@
 package com.douxev.eggshell.ui.reminders
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -67,6 +69,7 @@ import com.douxev.eggshell.data.MedicationRepository
 import com.douxev.eggshell.data.ScheduleRepository
 import com.douxev.eggshell.reminders.LabReminderManager
 import com.douxev.eggshell.reminders.LabReminderPrefs
+import com.douxev.eggshell.reminders.NotifContentPrefs
 import com.douxev.eggshell.ui.medication.MedicationCatalog
 import uniffi.transition.DoseSchedule
 import uniffi.transition.Medication
@@ -76,7 +79,17 @@ class RemindersViewModel @Inject constructor(
     private val scheduleRepo: ScheduleRepository,
     private val medsRepo: MedicationRepository,
     private val labs: LabReminderManager,
+    private val notifContent: NotifContentPrefs,
 ) : ViewModel() {
+
+    val notifMode: StateFlow<NotifContentPrefs.Mode> = notifContent.mode
+
+    /** Switch what reminders reveal, then re-resolve the plain-text mirror
+     *  labels so already-scheduled reminders pick up the new mode. */
+    fun setNotifMode(mode: NotifContentPrefs.Mode) {
+        notifContent.setMode(mode)
+        viewModelScope.launch { runCatching { scheduleRepo.syncFromDb() } }
+    }
 
     data class MedReminder(
         val schedule: DoseSchedule,
@@ -156,7 +169,7 @@ class RemindersViewModel @Inject constructor(
 
     fun deleteMedSchedule(scheduleId: Long) {
         viewModelScope.launch {
-            runCatching { scheduleRepo.setActive(scheduleId, false) }
+            runCatching { scheduleRepo.deleteSchedule(scheduleId) }
             refresh()
         }
     }
@@ -169,9 +182,13 @@ fun RemindersScreen(
     vm: RemindersViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
+    val notifMode by vm.notifMode.collectAsState()
     // Null = no dialog open. Set to a LabDialogTarget to open the lab-reminder
     // dialog in either "create new" or "edit existing" mode.
     var dialogTarget by remember { mutableStateOf<LabDialogTarget?>(null) }
+    // Med reminder pending a delete confirmation (delete is irreversible and
+    // visually similar to the pause/resume that lives on the medication screen).
+    var confirmDelete by remember { mutableStateOf<RemindersViewModel.MedReminder?>(null) }
 
     Scaffold(
         topBar = {
@@ -196,6 +213,19 @@ fun RemindersScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            SectionHeader(stringResource(R.string.reminders_section_notif_content))
+            Text(
+                stringResource(R.string.reminders_notif_content_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            NotifContentSelector(
+                selected = notifMode,
+                onSelect = vm::setNotifMode,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
             SectionHeader(stringResource(R.string.reminders_section_meds))
             Text(
                 stringResource(R.string.reminders_section_meds_hint),
@@ -210,7 +240,7 @@ fun RemindersScreen(
                     MedReminderCard(
                         item = item,
                         onTogglePriority = { vm.setMedPriority(item.schedule.id, it) },
-                        onDelete = { vm.deleteMedSchedule(item.schedule.id) },
+                        onDelete = { confirmDelete = item },
                     )
                 }
             }
@@ -314,6 +344,27 @@ fun RemindersScreen(
             },
         )
     }
+
+    confirmDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text(stringResource(R.string.reminders_delete_confirm_title)) },
+            text = {
+                Text(stringResource(R.string.reminders_delete_confirm_body, target.medication.name))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteMedSchedule(target.schedule.id)
+                    confirmDelete = null
+                }) { Text(stringResource(R.string.reminders_delete_confirm_action)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
 }
 
 private sealed interface LabDialogTarget {
@@ -382,6 +433,65 @@ private fun SectionHeader(text: String) {
 }
 
 @Composable
+private fun NotifContentSelector(
+    selected: NotifContentPrefs.Mode,
+    onSelect: (NotifContentPrefs.Mode) -> Unit,
+) {
+    val options = listOf(
+        Triple(
+            NotifContentPrefs.Mode.GENERIC,
+            R.string.reminders_notif_mode_generic,
+            R.string.reminders_notif_mode_generic_desc,
+        ),
+        Triple(
+            NotifContentPrefs.Mode.NAME,
+            R.string.reminders_notif_mode_name,
+            R.string.reminders_notif_mode_name_desc,
+        ),
+        Triple(
+            NotifContentPrefs.Mode.ALIAS,
+            R.string.reminders_notif_mode_alias,
+            R.string.reminders_notif_mode_alias_desc,
+        ),
+    )
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = RoundedCornerShape(20.dp),
+    ) {
+        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+            options.forEachIndexed { index, (mode, titleRes, descRes) ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(mode) }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    RadioButton(selected = mode == selected, onClick = { onSelect(mode) })
+                    Column(modifier = Modifier
+                        .padding(start = 8.dp)
+                        .weight(1f)) {
+                        Text(stringResource(titleRes), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(descRes),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (index < options.size - 1) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun EmptyHint(text: String) {
     Text(
         text,
@@ -410,6 +520,12 @@ private fun MedReminderCard(
         }
         "daily" -> stringResource(
             R.string.schedule_daily_fmt,
+            item.schedule.dailyHour?.toInt() ?: 0,
+            item.schedule.dailyMinute?.toInt() ?: 0,
+        )
+        "days_interval" -> stringResource(
+            R.string.schedule_days_interval_fmt,
+            item.schedule.intervalDays?.toInt() ?: 0,
             item.schedule.dailyHour?.toInt() ?: 0,
             item.schedule.dailyMinute?.toInt() ?: 0,
         )

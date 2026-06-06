@@ -26,6 +26,30 @@
 # interface metadata so the runtime can find them.
 -keepclassmembers class * implements uniffi.** { *; }
 
+# ── (Opt-in) Obfuscate the UniFFI *data model* class names ──────────────────
+# The broad `-keep class uniffi.**` above leaves the whole domain model
+# readable in the DEX (uniffi.transition.Medication, Vault, DoseSchedule,
+# Journal…), which is a forensic-comprehension leak. Most of those are plain
+# Kotlin data classes that R8 *could* rename; only the JNA-touched FFI plumbing
+# (RustBuffer/ForeignBytes structures, the `_UniFFILib` JNA interface, the
+# top-level FFI functions, and callback interfaces) truly needs stable names.
+#
+# To narrow it, REPLACE the two `-keep` rules above with the block below — but
+# only with on-device testing, because an over-aggressive rename here surfaces
+# as runtime FFI crashes (UnsatisfiedLinkError / NPE in an FfiConverter) that
+# CANNOT be caught at compile time. Left disabled by default for that reason.
+#
+#   -keep class uniffi.**$Companion { *; }
+#   -keep,allowobfuscation class uniffi.** { *; }
+#   -keepclassmembers class uniffi.** {
+#       <init>(...);
+#       public static ** INSTANCE;
+#   }
+#   # JNA maps these by reflection on field names/order — never rename them:
+#   -keep class * extends com.sun.jna.Structure { *; }
+#   -keep interface uniffi.**Lib { *; }
+#   -keepclassmembers class * implements uniffi.** { *; }
+
 # ── SQLCipher (net.zetetic:sqlcipher-android) ───────────────────────────────
 # Native JNI entry points must keep their exact class + method names.
 -keep class net.sqlcipher.** { *; }

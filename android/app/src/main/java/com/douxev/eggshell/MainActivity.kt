@@ -201,6 +201,10 @@ class AppRootViewModel @Inject constructor(
             val r = initialRoute()
             _route.value = r
             if (r == Route.Home) {
+                // Drain any "Pris" taps that were queued while locked into the
+                // now-open vault BEFORE reconciling, so the advanced schedules
+                // are what syncFromDb sees.
+                runCatching { schedules.flushPendingDoses() }
                 runCatching { schedules.syncFromDb() }
                 // Move legacy voice-clip metadata from plain prefs into the
                 // encrypted vault on first unlock after upgrade. No-op if

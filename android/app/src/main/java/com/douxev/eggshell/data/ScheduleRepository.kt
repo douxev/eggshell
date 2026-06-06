@@ -7,10 +7,15 @@ import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.douxev.eggshell.reminders.AlarmScheduler
+import com.douxev.eggshell.reminders.MedAliasPrefs
 import com.douxev.eggshell.reminders.NextDueCalculator
+import com.douxev.eggshell.reminders.NotifContentPrefs
+import com.douxev.eggshell.reminders.PendingDosePrefs
 import com.douxev.eggshell.reminders.PriorityPrefs
+import com.douxev.eggshell.reminders.ReminderNotifications
 import com.douxev.eggshell.reminders.ReminderPrefs
 import uniffi.transition.DoseSchedule
+import uniffi.transition.NewDoseEvent
 import uniffi.transition.NewDoseSchedule
 
 /**
@@ -22,6 +27,10 @@ class ScheduleRepository @Inject constructor(
     private val vault: VaultRepository,
     private val alarmScheduler: AlarmScheduler,
     private val priority: PriorityPrefs,
+    private val notifContent: NotifContentPrefs,
+    private val medAlias: MedAliasPrefs,
+    private val pendingDoses: PendingDosePrefs,
+    private val notifications: ReminderNotifications,
     @ApplicationContext private val context: Context,
 ) {
     private val prefs = ReminderPrefs(context)
@@ -57,6 +66,7 @@ class ScheduleRepository @Inject constructor(
                 intervalMinutes = intervalMinutes.toUInt(),
                 dailyHour = null,
                 dailyMinute = null,
+                intervalDays = null,
                 nextDueAtMs = nextDue,
             ),
             now,
@@ -77,6 +87,52 @@ class ScheduleRepository @Inject constructor(
                 intervalMinutes = null,
                 dailyHour = hour.toUInt(),
                 dailyMinute = minute.toUInt(),
+                intervalDays = null,
+                nextDueAtMs = nextDue,
+            ),
+            now,
+        )
+        installAlarm(schedule)
+    }
+
+    /**
+     * Create an "every N days at HH:MM" schedule, anchored at [startDateMs]
+     * (a local midnight epoch ms for the chosen start day). The first
+     * occurrence is that day at HH:MM if it's still in the future, else the
+     * next N-day step after now — so picking "today" but a time already passed
+     * rolls to the first future occurrence while keeping the cadence phase.
+     */
+    suspend fun createDaysInterval(
+        medicationId: Long,
+        intervalDays: Int,
+        hour: Int,
+        minute: Int,
+        startDateMs: Long,
+    ) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        // Anchor = chosen start day at HH:MM. nextDueAfter steps the phase from
+        // this anchor until strictly after `now`.
+        val zone = java.time.ZoneId.systemDefault()
+        val anchor = java.time.Instant.ofEpochMilli(startDateMs).atZone(zone)
+            .withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+            .toInstant().toEpochMilli()
+        val nextDue = NextDueCalculator.nextDueAfter(
+            kind = "days_interval",
+            intervalMinutes = null,
+            dailyHour = hour,
+            dailyMinute = minute,
+            afterMs = now - 1,
+            intervalDays = intervalDays,
+            currentDueMs = anchor,
+        )
+        val schedule = vault.requireSession().addSchedule(
+            NewDoseSchedule(
+                medicationId = medicationId,
+                kind = "days_interval",
+                intervalMinutes = null,
+                dailyHour = hour.toUInt(),
+                dailyMinute = minute.toUInt(),
+                intervalDays = intervalDays.toUInt(),
                 nextDueAtMs = nextDue,
             ),
             now,
@@ -93,11 +149,13 @@ class ScheduleRepository @Inject constructor(
         val all = vault.requireSession().listActiveSchedules()
         val s = all.firstOrNull { it.id == scheduleId } ?: return@withContext
         val next = NextDueCalculator.nextDueAfter(
-            s.kind,
-            s.intervalMinutes?.toInt(),
-            s.dailyHour?.toInt(),
-            s.dailyMinute?.toInt(),
-            System.currentTimeMillis(),
+            kind = s.kind,
+            intervalMinutes = s.intervalMinutes?.toInt(),
+            dailyHour = s.dailyHour?.toInt(),
+            dailyMinute = s.dailyMinute?.toInt(),
+            afterMs = System.currentTimeMillis(),
+            intervalDays = s.intervalDays?.toInt(),
+            currentDueMs = s.nextDueAtMs,
         )
         vault.requireSession().setScheduleNextDue(scheduleId, next)
         prefs.setNextDue(scheduleId, next)
@@ -117,6 +175,24 @@ class ScheduleRepository @Inject constructor(
             prefs.remove(scheduleId)
             priority.removeMed(scheduleId)
         }
+        refreshWidget()
+    }
+
+    /**
+     * Permanently delete a schedule (a true delete, not a pause). Removes the
+     * DB row AND every off-vault trace that references its id, so it can't be
+     * resurrected by [com.douxev.eggshell.reminders.BootReceiver] after a
+     * reboot or reappear in the widget while the vault is locked. Dose history
+     * is untouched — it belongs to the medication, not the schedule.
+     */
+    suspend fun deleteSchedule(scheduleId: Long) = withContext(Dispatchers.IO) {
+        vault.requireSession().deleteSchedule(scheduleId)
+        alarmScheduler.cancel(scheduleId)
+        alarmScheduler.cancelSnooze(scheduleId)
+        prefs.remove(scheduleId)
+        priority.removeMed(scheduleId)
+        notifications.cancelMed(scheduleId)
+        pendingDoses.removeForSchedule(scheduleId)
         refreshWidget()
     }
 
@@ -141,13 +217,70 @@ class ScheduleRepository @Inject constructor(
         prefs.put(
             ReminderPrefs.Entry(
                 scheduleId = s.id,
+                medicationId = s.medicationId,
                 kind = s.kind,
                 intervalMinutes = s.intervalMinutes?.toInt(),
                 dailyHour = s.dailyHour?.toInt(),
                 dailyMinute = s.dailyMinute?.toInt(),
                 nextDueAtMs = s.nextDueAtMs,
+                displayLabel = resolveDisplayLabel(s.medicationId),
+                intervalDays = s.intervalDays?.toInt(),
             )
         )
         alarmScheduler.schedule(s.id, s.nextDueAtMs)
+    }
+
+    /**
+     * The text a reminder is allowed to show for this medication, per the
+     * global [NotifContentPrefs] mode. GENERIC → null (nothing identifying in
+     * clear); NAME → the real name; ALIAS → the user's per-medication alias,
+     * or null (generic) when none is set — never the real name as a fallback.
+     */
+    private fun resolveDisplayLabel(medicationId: Long): String? =
+        when (notifContent.current) {
+            NotifContentPrefs.Mode.GENERIC -> null
+            NotifContentPrefs.Mode.NAME ->
+                runCatching { vault.requireSession().getMedication(medicationId)?.name }.getOrNull()
+            NotifContentPrefs.Mode.ALIAS -> medAlias.get(medicationId)
+        }
+
+    /**
+     * Drain the locked-while-taken dose queue into the encrypted vault. Called
+     * on real unlock (never under a decoy PIN — that path never opens a
+     * session). Logs each queued dose and advances its schedule, mirroring the
+     * unlocked "Pris" path, then clears the queue. Runs before [syncFromDb] so
+     * the freshly advanced schedules are what gets reconciled.
+     */
+    suspend fun flushPendingDoses() = withContext(Dispatchers.IO) {
+        val items = pendingDoses.all()
+        if (items.isEmpty()) return@withContext
+        val session = vault.requireSession()
+        val affectedSchedules = mutableSetOf<Long>()
+        items.forEach { p ->
+            runCatching {
+                val med = session.getMedication(p.medicationId) ?: return@forEach
+                val taken = p.status == "taken"
+                session.logDose(
+                    NewDoseEvent(
+                        medicationId = med.id,
+                        takenAtMs = p.takenAtMs,
+                        dose = if (taken) med.defaultDose else null,
+                        doseUnit = if (taken) med.defaultDoseUnit else null,
+                        route = if (taken) med.route else null,
+                        injectionSite = null,
+                        notes = null,
+                        status = p.status,
+                        scheduledAtMs = null,
+                        scheduleId = p.scheduleId,
+                    )
+                )
+                affectedSchedules += p.scheduleId
+            }
+        }
+        // Clear unconditionally: a med deleted while locked can't be logged and
+        // must not wedge the queue into retrying forever.
+        pendingDoses.clear()
+        affectedSchedules.forEach { runCatching { advanceToNextOccurrence(it) } }
+        refreshWidget()
     }
 }

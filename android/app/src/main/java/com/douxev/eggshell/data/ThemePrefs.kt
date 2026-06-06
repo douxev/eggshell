@@ -23,7 +23,7 @@ class ThemePrefs @Inject constructor(
     @ApplicationContext context: Context,
 ) {
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        SecurePrefs.get(context, PREFS_NAME)
 
     private val _theme = MutableStateFlow(AppTheme.fromId(prefs.getString(KEY_THEME, null)))
     val theme: StateFlow<AppTheme> = _theme.asStateFlow()

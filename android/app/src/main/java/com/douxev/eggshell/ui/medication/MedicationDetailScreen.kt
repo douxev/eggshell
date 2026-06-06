@@ -2,6 +2,7 @@ package com.douxev.eggshell.ui.medication
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -23,7 +25,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -42,6 +47,7 @@ import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.MedicationRepository
 import com.douxev.eggshell.data.ScheduleRepository
+import com.douxev.eggshell.reminders.MedAliasPrefs
 import uniffi.transition.DoseEvent
 import uniffi.transition.DoseSchedule
 import uniffi.transition.Medication
@@ -51,6 +57,7 @@ class MedicationDetailViewModel @Inject constructor(
     state: SavedStateHandle,
     private val repo: MedicationRepository,
     private val schedules: ScheduleRepository,
+    private val medAlias: MedAliasPrefs,
 ) : ViewModel() {
 
     private val medicationId: Long = state.get<Long>("id") ?: error("missing medication id")
@@ -61,6 +68,8 @@ class MedicationDetailViewModel @Inject constructor(
     val doses: StateFlow<List<DoseEvent>> = _doses.asStateFlow()
     private val _schedules = MutableStateFlow<List<DoseSchedule>>(emptyList())
     val schedulesState: StateFlow<List<DoseSchedule>> = _schedules.asStateFlow()
+    private val _alias = MutableStateFlow<String?>(null)
+    val alias: StateFlow<String?> = _alias.asStateFlow()
 
     init { refresh() }
 
@@ -70,7 +79,16 @@ class MedicationDetailViewModel @Inject constructor(
             _doses.value = runCatching { repo.listDoses(medicationId, 0, 50) }.getOrDefault(emptyList())
             _schedules.value = runCatching { schedules.listForMedication(medicationId, includeInactive = true) }
                 .getOrDefault(emptyList())
+            _alias.value = medAlias.get(medicationId)
         }
+    }
+
+    fun setAlias(alias: String?) {
+        medAlias.set(medicationId, alias)
+        _alias.value = alias?.takeIf { it.isNotBlank() }
+        // Re-resolve the plain-text mirror so the new alias takes effect on
+        // already-scheduled reminders (only visible in ALIAS mode).
+        viewModelScope.launch { runCatching { schedules.syncFromDb() } }
     }
 
     fun toggleSchedule(id: Long, active: Boolean) {
@@ -86,12 +104,15 @@ class MedicationDetailViewModel @Inject constructor(
 fun MedicationDetailScreen(
     onLogDose: () -> Unit,
     onAddSchedule: () -> Unit,
+    onEditMedication: () -> Unit,
     onBack: () -> Unit,
     vm: MedicationDetailViewModel = hiltViewModel(),
 ) {
     val med by vm.medication.collectAsState()
     val doses by vm.doses.collectAsState()
     val schedules by vm.schedulesState.collectAsState()
+    val alias by vm.alias.collectAsState()
+    var editingAlias by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.refresh() }
 
@@ -102,6 +123,14 @@ fun MedicationDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onEditMedication) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = stringResource(R.string.action_edit),
+                        )
                     }
                 },
             )
@@ -120,6 +149,9 @@ fun MedicationDetailScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             med?.let { MedHeader(it) }
+            HorizontalDivider()
+
+            AliasRow(alias = alias, onEdit = { editingAlias = true })
             HorizontalDivider()
 
             SchedulesSection(
@@ -146,6 +178,71 @@ fun MedicationDetailScreen(
             }
         }
     }
+
+    if (editingAlias) {
+        AliasDialog(
+            initial = alias.orEmpty(),
+            onDismiss = { editingAlias = false },
+            onSave = {
+                vm.setAlias(it.ifBlank { null })
+                editingAlias = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun AliasRow(alias: String?, onEdit: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(stringResource(R.string.med_alias_section), style = MaterialTheme.typography.titleMedium)
+            Text(
+                alias?.takeIf { it.isNotBlank() } ?: stringResource(R.string.med_alias_none),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        androidx.compose.material3.TextButton(onClick = onEdit) {
+            Text(stringResource(R.string.med_alias_edit))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AliasDialog(
+    initial: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var text by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(initial) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.med_alias_dialog_title)) },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.take(40) },
+                label = { Text(stringResource(R.string.med_field_notif_alias)) },
+                supportingText = { Text(stringResource(R.string.med_field_notif_alias_hint)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = { onSave(text.trim()) }) {
+                Text(stringResource(R.string.action_save))
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
 }
 
 @Composable
@@ -174,6 +271,12 @@ private fun SchedulesSection(
                         )
                         "daily" -> stringResource(
                             R.string.schedule_daily_fmt,
+                            s.dailyHour?.toInt() ?: 0,
+                            s.dailyMinute?.toInt() ?: 0,
+                        )
+                        "days_interval" -> stringResource(
+                            R.string.schedule_days_interval_fmt,
+                            s.intervalDays?.toInt() ?: 0,
                             s.dailyHour?.toInt() ?: 0,
                             s.dailyMinute?.toInt() ?: 0,
                         )
