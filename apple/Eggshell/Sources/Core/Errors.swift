@@ -23,6 +23,8 @@ func describe(_ error: Error) -> String {
         let hint = status == -34018 ? " — build non signé ? Teste via TestFlight." : ""
         return "Trousseau indisponible (code \(status))\(hint)"
     case VaultError.missingPassphrase: return "Phrase secrète requise."
+    case VaultError.paranoidRequiresRekey:
+        return "Le mode paranoïaque n'est pas disponible pour un import ou un changement de mode."
     default: return (error as NSError).localizedDescription
     }
 }

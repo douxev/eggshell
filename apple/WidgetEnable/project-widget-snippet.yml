@@ -1,0 +1,78 @@
+# =============================================================================
+# Snippet XcodeGen — à FUSIONNER dans apple/Eggshell/project.yml pour activer
+# l'extension widget "prochaine dose".
+#
+# Étapes (détaillées dans WidgetEnable/README.md) :
+#   1. Copier les fichiers depuis WidgetEnable/ vers la cible app/widget :
+#        WidgetEnable/NextDoseWidget.swift  -> Eggshell/Sources/Widget/NextDoseWidget.swift  (CIBLE WIDGET)
+#        WidgetEnable/WidgetMirror.swift     -> Eggshell/Sources/Platform/WidgetMirror.swift  (CIBLE APP)
+#        WidgetEnable/Info-Widget.plist      -> Eggshell/Resources/Info-Widget.plist
+#   2. Créer les 2 fichiers .entitlements (cf. blocs en bas de ce snippet).
+#   3. Coller les ajouts ci-dessous dans project.yml, puis :
+#        cd apple/Eggshell && xcodegen generate
+#   4. Régénérer les profils match pour les DEUX identifiants (app + widget)
+#      avec la capability App Groups activée dans le portail Developer.
+# =============================================================================
+
+# --- 1) Ajout à la cible application existante `Eggshell` -------------------
+#     (ajouter UNIQUEMENT le bloc `dependencies` ; le reste de la cible app
+#      reste tel quel — l'app embarque l'extension widget).
+targets:
+  Eggshell:
+    # ... (conserver type/platform/sources/settings existants) ...
+    # NOTE : l'app doit aussi utiliser des entitlements incluant le groupe
+    # App Groups `group.com.douxev.eggshell` (cf. bloc Eggshell.entitlements
+    # plus bas) — fusionner avec keychain-access-groups déjà présent.
+    dependencies:
+      - package: TransitionCore
+        product: TransitionCore
+      - target: EggshellWidgetExtension   # embarque l'extension dans l'app
+
+  # --- 2) Nouvelle cible : extension WidgetKit ------------------------------
+  EggshellWidgetExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/Widget        # contient NextDoseWidget.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.douxev.eggshell.widget
+        INFOPLIST_FILE: Resources/Info-Widget.plist
+        CODE_SIGN_ENTITLEMENTS: EggshellWidget.entitlements
+        CODE_SIGN_STYLE: Manual
+        TARGETED_DEVICE_FAMILY: "1"
+        # WidgetKit nécessite SwiftUI ; l'extension ne lie PAS TransitionCore
+        # (NextDoseWidget.swift est autonome et ne lit que le miroir App Group).
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+
+# ============================================================================
+# Fichiers .entitlements à créer À LA MAIN (XcodeGen ne les génère pas) :
+# ----------------------------------------------------------------------------
+# apple/Eggshell/Eggshell.entitlements  (FUSIONNER avec l'existant) :
+#
+#   <key>keychain-access-groups</key>
+#   <array>
+#     <string>$(AppIdentifierPrefix)com.douxev.eggshell</string>
+#   </array>
+#   <key>com.apple.security.application-groups</key>
+#   <array>
+#     <string>group.com.douxev.eggshell</string>
+#   </array>
+#
+# ----------------------------------------------------------------------------
+# apple/Eggshell/EggshellWidget.entitlements  (NOUVEAU) :
+#
+#   <?xml version="1.0" encoding="UTF-8"?>
+#   <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+#       "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+#   <plist version="1.0">
+#   <dict>
+#     <key>com.apple.security.application-groups</key>
+#     <array>
+#       <string>group.com.douxev.eggshell</string>
+#     </array>
+#   </dict>
+#   </plist>
+# ============================================================================

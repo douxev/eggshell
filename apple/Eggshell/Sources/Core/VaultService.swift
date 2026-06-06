@@ -27,11 +27,27 @@ actor VaultService {
     func setMedicationArchived(_ id: Int64, _ archived: Bool) throws {
         try vault.setMedicationArchived(id: id, archived: archived)
     }
+    func updateMedication(_ id: Int64, _ med: NewMedication) throws {
+        try vault.updateMedication(id: id, med: med)
+    }
+
+    // MARK: Treatment changes (dose/route edit audit, feeds the correlation view)
+    @discardableResult
+    func logTreatmentChange(_ change: NewTreatmentChange) throws -> TreatmentChange {
+        try vault.logTreatmentChange(change: change)
+    }
+    func listTreatmentChanges(fromMs: Int64, toMs: Int64) throws -> [TreatmentChange] {
+        try vault.listTreatmentChanges(fromMs: fromMs, toMs: toMs)
+    }
 
     // MARK: Doses
     func logDose(_ dose: NewDoseEvent) throws -> DoseEvent { try vault.logDose(dose: dose) }
     func listDoses(medicationId: Int64, offset: Int64 = 0, limit: Int64 = 50) throws -> [DoseEvent] {
         try vault.listDoses(medicationId: medicationId, offset: offset, limit: limit)
+    }
+    /// All dose events across meds in a time window (for the correlation view).
+    func listDoseEventsBetween(fromMs: Int64, toMs: Int64) throws -> [DoseEvent] {
+        try vault.listDoseEventsBetween(fromMs: fromMs, toMs: toMs)
     }
     func suggestNextInjectionSite(medicationId: Int64, historyDepth: Int64 = 8) throws -> String? {
         try vault.suggestNextInjectionSite(medicationId: medicationId, historyDepth: historyDepth)
@@ -49,6 +65,7 @@ actor VaultService {
     func setScheduleNextDue(_ id: Int64, _ nextDueAtMs: Int64) throws {
         try vault.setScheduleNextDue(id: id, nextDueAtMs: nextDueAtMs)
     }
+    func deleteSchedule(_ id: Int64) throws { try vault.deleteSchedule(id: id) }
 
     // MARK: Journal
     func addJournalEntry(_ e: NewJournalEntry) throws -> JournalEntry { try vault.addJournalEntry(entry: e) }
@@ -56,7 +73,45 @@ actor VaultService {
         try vault.listJournalEntries(offset: offset, limit: limit)
     }
     func getJournalEntry(_ id: Int64) throws -> JournalEntry? { try vault.getJournalEntry(id: id) }
+    /// Non-destructive in-place update — keeps the entry id (and its linked
+    /// MetricValues) instead of delete+recreate.
+    @discardableResult
+    func updateJournalEntry(_ id: Int64, _ e: NewJournalEntry) throws -> JournalEntry {
+        try vault.updateJournalEntry(id: id, entry: e)
+    }
     func deleteJournalEntry(_ id: Int64) throws { try vault.deleteJournalEntry(id: id) }
+
+    // MARK: Customizable metric definitions / values (shared by journal + bleeding)
+    func listMetricDefinitions(domain: String, includeArchived: Bool = false) throws -> [MetricDefinition] {
+        try vault.listMetricDefinitions(domain: domain, includeArchived: includeArchived)
+    }
+    @discardableResult
+    func addMetricDefinition(_ def: NewMetricDefinition) throws -> MetricDefinition {
+        try vault.addMetricDefinition(def: def)
+    }
+    func updateMetricDefinition(_ id: Int64, _ upd: MetricDefinitionUpdate) throws {
+        try vault.updateMetricDefinition(id: id, upd: upd)
+    }
+    func archiveMetricDefinition(_ id: Int64) throws { try vault.archiveMetricDefinition(id: id) }
+    func listMetricValues(entryDomain: String, entryId: Int64) throws -> [MetricValue] {
+        try vault.listMetricValues(entryDomain: entryDomain, entryId: entryId)
+    }
+    func replaceMetricValues(entryDomain: String, entryId: Int64, values: [MetricValue]) throws {
+        try vault.replaceMetricValues(entryDomain: entryDomain, entryId: entryId, values: values)
+    }
+
+    // MARK: Bleeding / cycle tracking
+    @discardableResult
+    func addBleedingEntry(_ e: NewBleedingEntry) throws -> BleedingEntry { try vault.addBleedingEntry(entry: e) }
+    func listBleedingEntries(offset: Int64 = 0, limit: Int64 = 500) throws -> [BleedingEntry] {
+        try vault.listBleedingEntries(offset: offset, limit: limit)
+    }
+    func getBleedingEntry(_ id: Int64) throws -> BleedingEntry? { try vault.getBleedingEntry(id: id) }
+    @discardableResult
+    func updateBleedingEntry(_ id: Int64, _ e: NewBleedingEntry) throws -> BleedingEntry {
+        try vault.updateBleedingEntry(id: id, entry: e)
+    }
+    func deleteBleedingEntry(_ id: Int64) throws { try vault.deleteBleedingEntry(id: id) }
 
     // MARK: Hormones
     func addHormoneMeasurement(_ m: NewHormoneMeasurement) throws -> HormoneMeasurement {

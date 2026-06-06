@@ -2,33 +2,34 @@ import SwiftUI
 import TransitionCore
 
 // ===========================================================================
-// PUSHED screen — per-hormone preferred display unit.
+// PUSHED screen — per-hormone preferred display unit. Mirrors
+// HormoneUnitsScreen.kt.
 //
-// Each hormone gets a SectionCard with its French label and a row of choice
-// chips: "Par défaut" (clears the override → HormoneUnitStore returns nil and
-// callers fall back to the conventional unit) plus the explicit units that
-// make clinical sense for that hormone (same table as AddHormoneMeasurementView).
-// Selecting a chip calls HormoneUnitStore.setUnit(_:for:); the current choice
-// is read back via HormoneUnitStore.unit(for:).
+// Each hormone (HormoneCatalog.kinds) gets a SectionCard with its French label
+// (HormoneCatalog.kindLabel) and a row of choice chips:
+//   • "Par défaut"      → units.setUnit(nil, for:) ; the chip shows the
+//                         conventional default unit as a suffix when there is
+//                         one (HormoneCatalog.defaultUnit).
+//   • "Telle que saisie" → units.setAsRecorded(for:) (no conversion).
+//   • each explicit unit → units.setUnit(u, for:).
+// The current choice is highlighted by reading units.unit(for:) /
+// units.isAsRecorded(for:).
 // ===========================================================================
 
 struct HormoneUnitsView: View {
     @EnvironmentObject private var units: HormoneUnitStore
     @Environment(\.palette) private var palette
 
-    // Hormones surfaced here, in display order.
-    private let hormones = ["estradiol", "testosterone", "progesterone", "lh", "fsh", "prolactin", "shbg"]
-
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.m) {
-                Text("Choisis l'unité d'affichage pour chaque hormone. « Par défaut » utilise l'unité conventionnelle.")
+                Text("Choisis l'unité d'affichage pour chaque hormone. « Par défaut » utilise l'unité conventionnelle ; « Telle que saisie » n'applique aucune conversion.")
                     .font(.eggCaption)
                     .foregroundStyle(palette.onSurface.opacity(0.6))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, Spacing.xs)
 
-                ForEach(hormones, id: \.self) { hormone in
+                ForEach(HormoneCatalog.kinds, id: \.self) { hormone in
                     hormoneCard(hormone)
                 }
             }
@@ -38,18 +39,25 @@ struct HormoneUnitsView: View {
     }
 
     private func hormoneCard(_ hormone: String) -> some View {
-        let current = units.unit(for: hormone)
+        let asRecorded = units.isAsRecorded(for: hormone)
+        let explicit = units.unit(for: hormone)
+        let isDefault = !asRecorded && explicit == nil
+        let defaultUnit = units.defaultUnit(for: hormone)
+
         return SectionCard {
-            Text(Self.label(for: hormone))
+            Text(HormoneCatalog.kindLabel(hormone))
                 .font(.eggHeadline)
                 .foregroundStyle(palette.onSurface)
 
             HormoneUnitsFlow(spacing: Spacing.xs) {
-                ChoiceChip(label: "Par défaut", selected: current == nil) {
+                ChoiceChip(label: defaultLabel(defaultUnit), selected: isDefault) {
                     units.setUnit(nil, for: hormone)
                 }
-                ForEach(Self.units(for: hormone), id: \.self) { unit in
-                    ChoiceChip(label: unit, selected: current == unit) {
+                ChoiceChip(label: "Telle que saisie", selected: asRecorded) {
+                    units.setAsRecorded(for: hormone)
+                }
+                ForEach(unitOptions(for: hormone), id: \.self) { unit in
+                    ChoiceChip(label: unit, selected: explicit == unit) {
                         units.setUnit(unit, for: hormone)
                     }
                 }
@@ -57,22 +65,14 @@ struct HormoneUnitsView: View {
         }
     }
 
-    // French display labels for the known hormones.
-    private static func label(for hormone: String) -> String {
-        switch hormone {
-        case "estradiol":    return "Œstradiol"
-        case "testosterone": return "Testostérone"
-        case "progesterone": return "Progestérone"
-        case "lh":           return "LH"
-        case "fsh":          return "FSH"
-        case "prolactin":    return "Prolactine"
-        case "shbg":         return "SHBG"
-        default:             return hormone.capitalized
-        }
+    private func defaultLabel(_ defaultUnit: String?) -> String {
+        if let u = defaultUnit, !u.isEmpty { return "Par défaut · \(u)" }
+        return "Par défaut"
     }
 
-    // Clinically meaningful units per hormone — same table as the entry screen.
-    private static func units(for hormone: String) -> [String] {
+    // Clinically meaningful units per hormone, from the shared catalog. "other"
+    // exposes the full HormoneCatalog.units list (sans the catch-all "other").
+    private func unitOptions(for hormone: String) -> [String] {
         switch hormone {
         case "estradiol":    return ["pg/mL", "pmol/L"]
         case "testosterone": return ["ng/dL", "nmol/L", "ng/mL"]
@@ -81,7 +81,7 @@ struct HormoneUnitsView: View {
         case "fsh":          return ["mIU/mL"]
         case "prolactin":    return ["ng/mL"]
         case "shbg":         return ["nmol/L"]
-        default:             return ["pg/mL", "pmol/L", "ng/dL", "nmol/L", "ng/mL", "mIU/mL"]
+        default:             return HormoneCatalog.units.filter { $0 != "other" }
         }
     }
 }

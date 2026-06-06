@@ -17,26 +17,9 @@ final class MedicationListViewModel: ObservableObject {
         loading = false
     }
 
-    func kindLabel(_ raw: String) -> String {
-        switch raw {
-        case "hrt": return "THS"
-        case "blocker": return "Anti-androgène"
-        case "supplement": return "Complément"
-        default: return "Autre"
-        }
-    }
+    func kindLabel(_ raw: String) -> String { MedCatalog.kindLabel(raw) }
 
-    func routeLabel(_ raw: String) -> String {
-        switch raw {
-        case "oral": return "Oral"
-        case "injection_im": return "Injection IM"
-        case "injection_sc": return "Injection SC"
-        case "transdermal": return "Transdermique"
-        case "topical": return "Topique"
-        case "sublingual": return "Sublingual"
-        default: return "Autre"
-        }
-    }
+    func routeLabel(_ raw: String) -> String { MedCatalog.routeLabel(raw) }
 
     func routeIcon(_ raw: String) -> String {
         if raw.hasPrefix("injection_") { return "syringe" }

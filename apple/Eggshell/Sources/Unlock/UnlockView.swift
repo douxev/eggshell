@@ -16,6 +16,11 @@ final class UnlockViewModel: ObservableObject {
     @Published var pin = ""
     @Published var passphrase = ""
     @Published var error: String?
+    /// Drives the neutral "Notes" re-skin of the lock screen. When a decoy PIN
+    /// is configured the lock screen must not betray the real app (no lavender
+    /// flash before the fake notes app appears), so the View reads this to swap
+    /// the header + palette for a generic notes look.
+    @Published private(set) var decoyConfigured = false
 
     private weak var app: AppState?
     private var manager: VaultManager { app!.manager }
@@ -29,6 +34,7 @@ final class UnlockViewModel: ObservableObject {
     func start() async {
         mode = await manager.currentMode ?? .keystoreOnly
         hasDecoy = await manager.hasDecoy
+        decoyConfigured = hasDecoy
         if let ms = throttleRemainingMs(), ms > 0 {
             step = .throttled(Int(ms / 1000)); return
         }
@@ -142,9 +148,36 @@ struct UnlockView: View {
     @Environment(\.palette) private var palette
     @StateObject private var vm = UnlockViewModel()
 
+    // Neutral teal "Notes" palette, identical in spirit to DecoyNotesView /
+    // android DecoyColors. When a decoy is configured we paint the whole lock
+    // screen with these so the lock-screen → fake-notes transition shows no
+    // colour jump and the app reads as a plain notes app's passcode gate.
+    private static let decoyTeal = Color(hex: 0x006A6A)
+    private static let decoySurface = Color(hex: 0xFAFDFC)
+    private static let decoyContainer = Color(hex: 0xB2ECEC)
+    private static let decoyOnSurface = Color(hex: 0x191C1C)
+    private static let decoyOutline = Color(hex: 0xBEC9C8)
+    private static let decoyError = Color(hex: 0xBA1A1A)
+
+    private var decoySkin: Bool { vm.decoyConfigured }
+
+    // Resolved colours: real lavender palette by default, neutral teal when a
+    // decoy is configured.
+    private var accent: Color { decoySkin ? Self.decoyTeal : palette.primary }
+    private var onAccent: Color { decoySkin ? .white : palette.onPrimary }
+    private var surfaceTop: Color { decoySkin ? Self.decoySurface : palette.surface }
+    private var surfaceBottom: Color {
+        decoySkin ? Self.decoySurface : palette.primaryContainer.opacity(0.5)
+    }
+    private var dotFilled: Color { decoySkin ? Self.decoyTeal : palette.primary }
+    private var dotEmpty: Color { decoySkin ? Self.decoyOutline : palette.outlineVariant }
+    private var keyBackground: Color { decoySkin ? Self.decoyContainer.opacity(0.45) : palette.surfaceContainerHigh }
+    private var foreground: Color { decoySkin ? Self.decoyOnSurface : palette.onSurface }
+    private var errorColor: Color { decoySkin ? Self.decoyError : palette.error }
+
     var body: some View {
         ZStack {
-            LinearGradient(colors: [palette.surface, palette.primaryContainer.opacity(0.5)],
+            LinearGradient(colors: [surfaceTop, surfaceBottom],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
             VStack(spacing: Spacing.xl) {
@@ -161,10 +194,14 @@ struct UnlockView: View {
 
     private var header: some View {
         VStack(spacing: Spacing.s) {
-            Image(systemName: "heart.fill")
+            // Generic lock icon + "Notes" label when disguised; branded heart +
+            // "eggshell" only on the real, unmasked lock screen.
+            Image(systemName: decoySkin ? "lock.fill" : "heart.fill")
                 .font(.system(size: 40))
-                .foregroundStyle(palette.primary)
-            Text("eggshell").font(.eggTitle).foregroundStyle(palette.onSurface)
+                .foregroundStyle(accent)
+            Text(decoySkin ? "Notes" : "eggshell")
+                .font(.eggTitle)
+                .foregroundStyle(foreground)
         }
     }
 
@@ -172,16 +209,20 @@ struct UnlockView: View {
     private var content: some View {
         switch vm.step {
         case .loading, .working:
-            ProgressView().tint(palette.primary)
+            ProgressView().tint(accent)
         case .pin:
             PinPad(pin: vm.pin,
+                   filledColor: dotFilled,
+                   emptyColor: dotEmpty,
+                   keyBackground: keyBackground,
+                   foreground: foreground,
                    onDigit: { vm.appendPin($0) },
                    onBackspace: { vm.backspacePin() })
         case .biometric:
             Button { Task { await vm.runBiometric() } } label: {
                 Label("Authentifier", systemImage: "faceid").padding(.horizontal)
             }
-            .glassProminentButton().tint(palette.primary)
+            .glassProminentButton().tint(accent)
         case .passphrase:
             VStack(spacing: Spacing.m) {
                 SecureField("Phrase secrète", text: $vm.passphrase)
@@ -190,21 +231,25 @@ struct UnlockView: View {
                 Button { Task { await vm.submitPassphrase() } } label: {
                     Text("Déverrouiller").padding(.horizontal)
                 }
-                .glassProminentButton().tint(palette.primary)
+                .glassProminentButton().tint(accent)
                 .disabled(vm.passphrase.isEmpty)
             }
         case .throttled(let secs):
             Text("Trop de tentatives. Réessayez dans \(secs) s")
                 .font(.eggCallout)
-                .foregroundStyle(palette.error)
+                .foregroundStyle(errorColor)
         }
     }
 }
 
-/// 4-dot display + 3×4 keypad.
+/// 4-dot display + 3×4 keypad. Colours are injected so the lock screen can
+/// re-skin to the neutral decoy palette without leaking the real app's theme.
 struct PinPad: View {
-    @Environment(\.palette) private var palette
     let pin: String
+    let filledColor: Color
+    let emptyColor: Color
+    let keyBackground: Color
+    let foreground: Color
     let onDigit: (String) -> Void
     let onBackspace: () -> Void
 
@@ -215,7 +260,7 @@ struct PinPad: View {
             HStack(spacing: Spacing.l) {
                 ForEach(0..<4, id: \.self) { i in
                     Circle()
-                        .fill(i < pin.count ? palette.primary : palette.outlineVariant)
+                        .fill(i < pin.count ? filledColor : emptyColor)
                         .frame(width: 14, height: 14)
                 }
             }
@@ -227,13 +272,13 @@ struct PinPad: View {
                         Button(action: onBackspace) {
                             Image(systemName: "delete.left").font(.title2)
                                 .frame(maxWidth: .infinity, minHeight: 64)
-                        }.buttonStyle(.plain).foregroundStyle(palette.onSurface)
+                        }.buttonStyle(.plain).foregroundStyle(foreground)
                     } else {
                         Button { onDigit(key) } label: {
                             Text(key).font(.title.weight(.medium))
                                 .frame(maxWidth: .infinity, minHeight: 64)
-                                .background(palette.surfaceContainerHigh, in: Circle())
-                        }.buttonStyle(.plain).foregroundStyle(palette.onSurface)
+                                .background(keyBackground, in: Circle())
+                        }.buttonStyle(.plain).foregroundStyle(foreground)
                     }
                 }
             }

@@ -2,37 +2,44 @@ import SwiftUI
 
 // Bottom tab bar (adopts Liquid Glass automatically on iOS 26). Tabs are gated by
 // FeaturesStore, mirroring the Android bottom-nav. Each tab is its own
-// NavigationStack and shares the Route destination table.
+// NavigationStack and shares the Route destination table. Selection is bound to
+// TabRouter so the Today quick-log can jump to the Photos/Voice tabs.
 struct HomeTabView: View {
     @EnvironmentObject private var features: FeaturesStore
+    @EnvironmentObject private var tabRouter: TabRouter
 
     var body: some View {
-        TabView {
-            Tab("Aujourd'hui", systemImage: "sun.max.fill") {
+        TabView(selection: $tabRouter.selection) {
+            Tab("Aujourd'hui", systemImage: "sun.max.fill", value: HomeTab.today) {
                 TabStack { TodayView() }
             }
             if features.medications {
-                Tab("Médicaments", systemImage: "pills.fill") {
+                Tab("Médicaments", systemImage: "pills.fill", value: HomeTab.medications) {
                     TabStack { MedicationListView() }
                 }
             }
             if features.journal {
-                Tab("Journal", systemImage: "book.fill") {
+                Tab("Journal", systemImage: "book.fill", value: HomeTab.journal) {
                     TabStack { JournalView() }
                 }
             }
             if features.hormones {
-                Tab("Hormones", systemImage: "chart.xyaxis.line") {
+                Tab("Hormones", systemImage: "chart.xyaxis.line", value: HomeTab.hormones) {
                     TabStack { HormonesView() }
                 }
             }
+            if features.bleeding {
+                Tab("Saignements", systemImage: "drop.fill", value: HomeTab.bleeding) {
+                    TabStack { BleedingView() }
+                }
+            }
             if features.photos {
-                Tab("Photos", systemImage: "photo.fill") {
+                Tab("Photos", systemImage: "photo.fill", value: HomeTab.photos) {
                     TabStack { PhotosView() }
                 }
             }
             if features.voice {
-                Tab("Voix", systemImage: "waveform") {
+                Tab("Voix", systemImage: "waveform", value: HomeTab.voice) {
                     TabStack { VoiceView() }
                 }
             }

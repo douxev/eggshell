@@ -15,11 +15,16 @@ final class Router: ObservableObject {
 enum Route: Hashable {
     case medicationList
     case addMedication
+    case editMedication(id: Int64)
     case medicationDetail(id: Int64)
     case addSchedule(medId: Int64)
     case logDose(medId: Int64)
 
     case addJournal(id: Int64?)
+    case correlation
+    case metricEditor(domain: String)
+
+    case addBleeding(id: Int64?)
 
     case addHormone
     case hormoneUnits
@@ -41,11 +46,16 @@ func routeDestination(_ route: Route) -> some View {
     switch route {
     case .medicationList:            MedicationListView()
     case .addMedication:             AddMedicationView()
+    case .editMedication(let id):    AddMedicationView(editId: id)
     case .medicationDetail(let id):  MedicationDetailView(medId: id)
     case .addSchedule(let medId):    AddScheduleView(medId: medId)
     case .logDose(let medId):        LogDoseView(medId: medId)
 
     case .addJournal(let id):        AddJournalEntryView(entryId: id)
+    case .correlation:               CorrelationView()
+    case .metricEditor(let domain):  MetricEditorView(domain: domain)
+
+    case .addBleeding(let id):       AddBleedingEntryView(entryId: id)
 
     case .addHormone:                AddHormoneMeasurementView()
     case .hormoneUnits:              HormoneUnitsView()

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import TransitionCore
 
 enum AppRoute: Equatable {
     case launching
@@ -12,10 +13,16 @@ enum AppRoute: Equatable {
 // Root observable. Owns the navigation phase and the opened vault session.
 @MainActor
 final class AppState: ObservableObject {
+    /// Weak global handle so NotificationCoordinator can ask us to drain queued
+    /// reminder actions. Set in init; the app only ever has one AppState.
+    static weak var shared: AppState?
+
     @Published var route: AppRoute = .launching
     @Published private(set) var session: VaultService?
 
     let manager = VaultManager()
+
+    init() { Self.shared = self }
 
     func bootstrap() async {
         let provisioned = await manager.isProvisioned
@@ -25,13 +32,36 @@ final class AppState: ObservableObject {
     func completeOnboarding(session: VaultService) {
         self.session = session
         route = .home
-        Task { await refreshNotifications() }
+        Task { await refreshNotifications(); await drainPendingDoses() }
     }
 
     func unlocked(session: VaultService) {
         self.session = session
         route = .home
-        Task { await refreshNotifications() }
+        Task { await refreshNotifications(); await drainPendingDoses() }
+    }
+
+    /// Commit reminder actions ("Pris"/"Passer") taken while the vault was
+    /// locked. No-op without an open session.
+    func drainPendingDoses() async {
+        guard let session else { return }
+        let pending = PendingDoseStore.drainAll()
+        guard !pending.isEmpty else { return }
+        do {
+            let schedules = try await session.listActiveSchedules()
+            let byId = Dictionary(uniqueKeysWithValues: schedules.map { ($0.id, $0) })
+            for p in pending {
+                let dose = NewDoseEvent(
+                    medicationId: p.medId, takenAtMs: p.atMs,
+                    dose: nil, doseUnit: nil, route: nil, injectionSite: nil, notes: nil,
+                    status: p.taken ? "taken" : "skipped", scheduledAtMs: nil, scheduleId: p.scheduleId)
+                _ = try await session.logDose(dose)
+                if let sched = byId[p.scheduleId] {
+                    try await session.setScheduleNextDue(p.scheduleId, NextDueCalculator.advance(sched))
+                }
+            }
+            await refreshNotifications()
+        } catch { /* best-effort; queue already drained */ }
     }
 
     /// (Re)schedule local reminders from the active schedules. Call after unlock

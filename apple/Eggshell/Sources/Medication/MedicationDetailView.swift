@@ -2,9 +2,11 @@ import SwiftUI
 import TransitionCore
 
 // ===========================================================================
-// PUSHED screen: medication detail. Shows header, schedules (with pause/resume
-// + add), and dose history. Follows the reference VM/View shape from
-// Today/TodayView.swift. All UI strings in French.
+// PUSHED screen: medication detail. Shows header (kind/route via MedCatalog),
+// schedules (pause/resume + delete), dose history (with injection site),
+// and the treatment-change timeline. Buttons: Modifier, Noter une prise,
+// Ajouter planning, Archiver. Parity with Android MedicationDetailScreen.
+// All UI strings in French.
 // ===========================================================================
 
 @MainActor
@@ -13,6 +15,7 @@ final class MedicationDetailViewModel: ObservableObject {
     @Published var med: Medication?
     @Published var schedules: [DoseSchedule] = []
     @Published var doses: [DoseEvent] = []
+    @Published var changes: [TreatmentChange] = []
     @Published var error: String?
 
     let medId: Int64
@@ -28,18 +31,46 @@ final class MedicationDetailViewModel: ObservableObject {
             schedules = try await session.listSchedulesForMedication(medId, includeInactive: true)
             doses = try await session.listDoses(medicationId: medId, limit: 50)
                 .sorted { $0.takenAtMs > $1.takenAtMs }
+            // Treatment changes over a wide window (~10 years back → now).
+            let now = Time.nowMs()
+            let tenYears: Int64 = 10 * 365 * 24 * 60 * 60 * 1000
+            changes = try await session.listTreatmentChanges(fromMs: now - tenYears, toMs: now)
+                .filter { $0.medicationId == medId }
+                .sorted { $0.atMs > $1.atMs }
         } catch {
             self.error = describe(error)
         }
         loading = false
     }
 
-    func toggleActive(_ schedule: DoseSchedule, session: VaultService) async {
+    func toggleActive(_ schedule: DoseSchedule, session: VaultService, app: AppState) async {
         do {
             try await session.setScheduleActive(schedule.id, !schedule.active)
+            await app.refreshNotifications()
             await load(session)
         } catch {
             self.error = describe(error)
+        }
+    }
+
+    func deleteSchedule(_ schedule: DoseSchedule, session: VaultService, app: AppState) async {
+        do {
+            try await session.deleteSchedule(schedule.id)
+            await app.refreshNotifications()
+            await load(session)
+        } catch {
+            self.error = describe(error)
+        }
+    }
+
+    func archive(_ session: VaultService, app: AppState) async -> Bool {
+        do {
+            try await session.setMedicationArchived(medId, true)
+            await app.refreshNotifications()
+            return true
+        } catch {
+            self.error = describe(error)
+            return false
         }
     }
 }
@@ -50,6 +81,7 @@ struct MedicationDetailView: View {
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var router: Router
     @Environment(\.palette) private var palette
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var vm: MedicationDetailViewModel
 
     init(medId: Int64) {
@@ -64,8 +96,10 @@ struct MedicationDetailView: View {
                     ProgressView().tint(palette.primary).frame(maxWidth: .infinity).padding()
                 } else {
                     headerCard
+                    actionsCard
                     schedulesCard
                     historyCard
+                    if !vm.changes.isEmpty { changesCard }
                 }
                 if let e = vm.error { ErrorBanner(message: e) }
             }
@@ -92,8 +126,8 @@ struct MedicationDetailView: View {
             Text("Informations").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
             if let m = vm.med {
                 HStack(spacing: Spacing.s) {
-                    Pill(text: kindLabel(m.kind))
-                    Pill(text: routeLabel(m.route))
+                    Pill(text: MedCatalog.kindLabel(m.kind))
+                    Pill(text: MedCatalog.routeLabel(m.route))
                 }
                 if let dose = m.defaultDose {
                     Text("Dose par défaut : \(doseLabel(dose, m.defaultDoseUnit))")
@@ -105,6 +139,39 @@ struct MedicationDetailView: View {
             } else {
                 Text("Médicament introuvable").font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.6))
             }
+        }
+    }
+
+    // MARK: - Actions
+
+    private var actionsCard: some View {
+        SectionCard {
+            Text("Actions").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
+            NavigationLink(value: Route.editMedication(id: medId)) {
+                Label("Modifier", systemImage: "pencil").frame(maxWidth: .infinity)
+            }
+            .glassButton().tint(palette.primary)
+
+            Button {
+                router.push(.logDose(medId: medId))
+            } label: {
+                Label("Noter une prise", systemImage: "checkmark.circle").frame(maxWidth: .infinity)
+            }
+            .glassButton().tint(palette.primary)
+
+            Button {
+                router.push(.addSchedule(medId: medId))
+            } label: {
+                Label("Ajouter un planning", systemImage: "clock").frame(maxWidth: .infinity)
+            }
+            .glassButton().tint(palette.primary)
+
+            Button(role: .destructive) {
+                archive()
+            } label: {
+                Label("Archiver", systemImage: "archivebox").frame(maxWidth: .infinity)
+            }
+            .glassButton().tint(palette.error)
         }
     }
 
@@ -123,38 +190,41 @@ struct MedicationDetailView: View {
                     }
                 }
             }
-            Button("Ajouter un planning") {
-                router.push(.addSchedule(medId: medId))
-            }
-            .glassButton().tint(palette.primary)
         }
     }
 
     private func scheduleRow(_ s: DoseSchedule) -> some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(NextDueCalculator.describe(s)).font(.eggCallout).foregroundStyle(palette.onSurface)
-                Text("Prochaine : \(formatDateTime(s.nextDueAtMs))")
-                    .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
-                if !s.active {
-                    Text("En pause").font(.eggCaption).foregroundStyle(palette.error)
-                }
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(NextDueCalculator.describe(s)).font(.eggCallout).foregroundStyle(palette.onSurface)
+            Text("Prochaine : \(formatDateTime(s.nextDueAtMs))")
+                .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+            if !s.active {
+                Text("En pause").font(.eggCaption).foregroundStyle(palette.error)
             }
-            Spacer()
-            Button(s.active ? "Pause" : "Reprendre") {
-                if let session = app.session {
-                    Task { await vm.toggleActive(s, session: session) }
+            HStack(spacing: Spacing.s) {
+                Button(s.active ? "Pause" : "Reprendre") {
+                    if let session = app.session {
+                        Task { await vm.toggleActive(s, session: session, app: app) }
+                    }
                 }
+                .glassButton().tint(palette.primary)
+
+                Button("Supprimer", role: .destructive) {
+                    if let session = app.session {
+                        Task { await vm.deleteSchedule(s, session: session, app: app) }
+                    }
+                }
+                .glassButton().tint(palette.error)
             }
-            .glassButton().tint(palette.primary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - History
 
     private var historyCard: some View {
         SectionCard {
-            Text("Historique").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
+            Text("Historique des prises").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
             if vm.doses.isEmpty {
                 Text("Aucune prise enregistrée").font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.6))
             } else {
@@ -177,8 +247,8 @@ struct MedicationDetailView: View {
                     Text(doseLabel(dose, d.doseUnit)).font(.eggCallout).foregroundStyle(palette.primary)
                 }
             }
-            if let site = injectionDescription(d) {
-                Text(site).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.7))
+            if let detail = doseDetail(d) {
+                Text(detail).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.7))
             }
             if let notes = d.notes, !notes.isEmpty {
                 Text(notes).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
@@ -186,7 +256,36 @@ struct MedicationDetailView: View {
         }
     }
 
+    // MARK: - Treatment changes timeline
+
+    private var changesCard: some View {
+        SectionCard {
+            Text("Historique des modifications").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
+            ForEach(vm.changes, id: \.id) { c in
+                changeRow(c)
+                if c.id != vm.changes.last?.id {
+                    Divider().overlay(palette.outlineVariant)
+                }
+            }
+        }
+    }
+
+    private func changeRow(_ c: TreatmentChange) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(formatDateTime(c.atMs)).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+            Text(changeDescription(c)).font(.eggCallout).foregroundStyle(palette.onSurface)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     // MARK: - Formatting helpers
+
+    private func archive() {
+        guard let session = app.session else { return }
+        Task {
+            if await vm.archive(session, app: app) { dismiss() }
+        }
+    }
 
     private func formatDateTime(_ ms: Int64) -> String {
         let date = Date(timeIntervalSince1970: Double(ms) / 1000)
@@ -207,41 +306,27 @@ struct MedicationDetailView: View {
         return value
     }
 
-    private func injectionDescription(_ d: DoseEvent) -> String? {
-        let routeText = d.route.map { routeLabel($0) }
-        let siteText = d.injectionSite
+    private func doseDetail(_ d: DoseEvent) -> String? {
+        let routeText = d.route.map { MedCatalog.routeLabel($0) }
+        let siteText = d.injectionSite.map { MedCatalog.injectionSiteLabel($0) }
         switch (routeText, siteText) {
-        case let (r?, s?):
-            return "\(r) · \(s)"
-        case let (r?, nil):
-            return r
-        case let (nil, s?):
-            return s
-        default:
-            return nil
+        case let (r?, s?): return "\(r) · \(s)"
+        case let (r?, nil): return r
+        case let (nil, s?): return s
+        default: return nil
         }
     }
 
-    private func kindLabel(_ kind: String) -> String {
-        switch kind {
-        case "hrt": return "THS"
-        case "blocker": return "Anti-androgène"
-        case "supplement": return "Complément"
-        case "other": return "Autre"
-        default: return kind
+    private func changeDescription(_ c: TreatmentChange) -> String {
+        let field: String
+        switch c.field {
+        case "dose": field = "Dose"
+        case "unit": field = "Unité"
+        case "route": field = "Voie"
+        default: field = c.field
         }
-    }
-
-    private func routeLabel(_ route: String) -> String {
-        switch route {
-        case "oral": return "Orale"
-        case "injection_im": return "Injection IM"
-        case "injection_sc": return "Injection SC"
-        case "transdermal": return "Transdermique"
-        case "topical": return "Topique"
-        case "sublingual": return "Sublinguale"
-        case "other": return "Autre"
-        default: return route
-        }
+        let old = c.oldValue ?? "—"
+        let new = c.newValue ?? "—"
+        return "\(field) : \(old) → \(new)"
     }
 }

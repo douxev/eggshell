@@ -1,9 +1,11 @@
 import SwiftUI
 import TransitionCore
 
-// Pushed screen: log a new hormone measurement. Hormone & unit are chosen via
-// ChoiceChips (units depend on the selected hormone); "Autre" reveals a custom
-// hormone TextField. Save builds a NewHormoneMeasurement and dismisses.
+// PUSHED screen — log a new hormone measurement. Hormone is chosen via
+// ChoiceChips (HormoneCatalog.kinds / kindLabel); the unit list is also the
+// shared catalog (HormoneCatalog.units) but pre-filters down to the units that
+// make clinical sense for the selected hormone. Save builds a
+// NewHormoneMeasurement and dismisses. Mirrors AddHormoneMeasurementScreen.kt.
 
 @MainActor
 final class AddHormoneMeasurementViewModel: ObservableObject {
@@ -28,37 +30,25 @@ struct AddHormoneMeasurementView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var vm = AddHormoneMeasurementViewModel()
 
-    // Canonical hormone keys (stored) paired with their French display labels.
-    private static let hormones: [(key: String, label: String)] = [
-        ("estradiol", "Œstradiol"),
-        ("testosterone", "Testostérone"),
-        ("progesterone", "Progestérone"),
-        ("lh", "LH"),
-        ("fsh", "FSH"),
-        ("prolactin", "Prolactine"),
-        ("shbg", "SHBG"),
-        ("other", "Autre"),
-    ]
-
-    private static let allUnits = ["pg/mL", "pmol/L", "ng/dL", "nmol/L", "ng/mL", "mIU/mL"]
-
-    @State private var hormone: String = "estradiol"
-    @State private var customHormone: String = ""
+    @State private var hormone: String = HormoneCatalog.kinds.first ?? "estradiol"
     @State private var valueText: String = ""
-    @State private var unit: String = "pg/mL"
+    @State private var unit: String = HormoneCatalog.defaultUnit(HormoneCatalog.kinds.first ?? "estradiol")
+        ?? HormoneCatalog.units.first ?? "pg/mL"
     @State private var date: Date = Date()
     @State private var labName: String = ""
     @State private var notes: String = ""
 
+    // Clinically meaningful units per hormone, drawn from the shared catalog.
+    // "other" falls back to the full HormoneCatalog.units list.
     private func units(for hormone: String) -> [String] {
         switch hormone {
-        case "estradiol": return ["pg/mL", "pmol/L"]
+        case "estradiol":    return ["pg/mL", "pmol/L"]
         case "testosterone": return ["ng/dL", "nmol/L", "ng/mL"]
         case "progesterone": return ["ng/mL", "nmol/L"]
-        case "lh", "fsh": return ["mIU/mL"]
-        case "prolactin": return ["ng/mL"]
-        case "shbg": return ["nmol/L"]
-        default: return Self.allUnits
+        case "lh", "fsh":    return ["mIU/mL"]
+        case "prolactin":    return ["ng/mL"]
+        case "shbg":         return ["nmol/L"]
+        default:             return HormoneCatalog.units
         }
     }
 
@@ -66,13 +56,9 @@ struct AddHormoneMeasurementView: View {
         Double(valueText.replacingOccurrences(of: ",", with: "."))
     }
 
-    private var resolvedHormone: String {
-        let trimmed = customHormone.trimmingCharacters(in: .whitespacesAndNewlines)
-        return hormone == "other" ? trimmed : hormone
-    }
-
     private var canSave: Bool {
-        parsedValue != nil && !resolvedHormone.isEmpty && !unit.isEmpty && !vm.status.isSubmitting
+        guard let v = parsedValue, v > 0 else { return false }
+        return !unit.isEmpty && !vm.status.isSubmitting
     }
 
     var body: some View {
@@ -95,18 +81,15 @@ struct AddHormoneMeasurementView: View {
             Text("Hormone").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: Spacing.s)],
                       alignment: .leading, spacing: Spacing.s) {
-                ForEach(Self.hormones, id: \.key) { item in
-                    ChoiceChip(label: item.label, selected: hormone == item.key) {
-                        hormone = item.key
-                        let opts = units(for: item.key)
-                        if !opts.contains(unit) { unit = opts.first ?? unit }
+                ForEach(HormoneCatalog.kinds, id: \.self) { id in
+                    ChoiceChip(label: HormoneCatalog.kindLabel(id), selected: hormone == id) {
+                        hormone = id
+                        let opts = units(for: id)
+                        if !opts.contains(unit) {
+                            unit = HormoneCatalog.defaultUnit(id) ?? opts.first ?? unit
+                        }
                     }
                 }
-            }
-            if hormone == "other" {
-                TextField("Nom de l'hormone", text: $customHormone)
-                    .font(.eggBody)
-                    .textFieldStyle(.roundedBorder)
             }
         }
     }
@@ -157,7 +140,7 @@ struct AddHormoneMeasurementView: View {
             let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
             let measurement = NewHormoneMeasurement(
                 atMs: Int64(date.timeIntervalSince1970 * 1000),
-                hormone: resolvedHormone,
+                hormone: hormone,
                 value: value,
                 unit: unit,
                 labName: trimmedLab.isEmpty ? nil : trimmedLab,

@@ -30,7 +30,12 @@ enum SecurityMode: String, CaseIterable, Identifiable {
     }
 }
 
-enum VaultError: Error { case notProvisioned, unknownMode, missingPassphrase, missingWrappedKey }
+enum VaultError: Error {
+    case notProvisioned, unknownMode, missingPassphrase, missingWrappedKey
+    /// Paranoid derives the DB key from the passphrase, so it can't be applied to
+    /// an existing DB (restore/mode-change) without re-keying — unsupported here.
+    case paranoidRequiresRekey
+}
 
 // iOS analogue of android/.../data/VaultRepository.kt — owns vault creation,
 // unlock, mode changes and wipe. An actor so the (blocking) SQLCipher open runs
@@ -47,10 +52,7 @@ actor VaultManager {
 
     func create(mode: SecurityMode, passphrase: String?, biometricContext: LAContext? = nil) throws -> VaultService {
         let mat = freshKdfMaterial()
-        prefs.kdfSalt = mat.salt
-        prefs.kdfMCostKib = mat.mCostKib
-        prefs.kdfTCost = mat.tCost
-        prefs.kdfPCost = mat.pCost
+        persistKdf(mat)
 
         let key: VaultKey
         switch mode {
@@ -59,34 +61,81 @@ actor VaultManager {
             key = try VaultKey.deriveFromPassphrase(
                 passphrase: passphrase, salt: mat.salt,
                 mCostKib: mat.mCostKib, tCost: mat.tCost, pCost: mat.pCost)
-            prefs.wrappedKey = nil   // never persisted
+        default:
+            key = VaultKey.random()
+        }
 
+        try wrapAndPersist(key: key, mode: mode, passphrase: passphrase, mat: mat, biometricContext: biometricContext)
+        prefs.modeRaw = mode.rawValue
+        let vault = try Vault(dbPath: dbPath, key: key)
+        return VaultService(vault: vault, isDecoy: false)
+    }
+
+    // MARK: Restore (import an encrypted .transition.enc bundle)
+
+    /// Decrypt `bundle` with `bundlePassphrase`, write the DB to disk, then
+    /// re-wrap the embedded master key under the chosen local `mode`. Paranoid
+    /// is unsupported here (it would require re-keying the DB).
+    func restore(fromBundle bundle: Data, bundlePassphrase: String,
+                 mode: SecurityMode, localPassphrase: String?,
+                 biometricContext: LAContext? = nil) throws -> VaultService {
+        guard mode != .paranoid else { throw VaultError.paranoidRequiresRekey }
+        let imported = try importEncrypted(bundle: bundle, passphrase: bundlePassphrase, targetDbPath: dbPath)
+        let key = try VaultKey.fromRaw(raw: imported.masterKey)
+
+        let mat = freshKdfMaterial()
+        persistKdf(mat)
+        try wrapAndPersist(key: key, mode: mode, passphrase: localPassphrase, mat: mat, biometricContext: biometricContext)
+        prefs.modeRaw = mode.rawValue
+        let vault = try Vault(dbPath: dbPath, key: key)
+        return VaultService(vault: vault, isDecoy: false)
+    }
+
+    // MARK: Change security mode (re-wrap the master key, no DB re-key)
+
+    func changeMode(to newMode: SecurityMode, currentPassphrase: String?,
+                    newPassphrase: String?, biometricContext: LAContext? = nil) throws {
+        guard newMode != .paranoid else { throw VaultError.paranoidRequiresRekey }
+        guard let oldMode = currentMode else { throw VaultError.unknownMode }
+        let key = try resolveKey(mode: oldMode, passphrase: currentPassphrase, biometricContext: biometricContext)
+        let mat = freshKdfMaterial()
+        persistKdf(mat)
+        try wrapAndPersist(key: key, mode: newMode, passphrase: newPassphrase, mat: mat, biometricContext: biometricContext)
+        prefs.modeRaw = newMode.rawValue
+    }
+
+    // MARK: Wrapping helpers
+
+    private func persistKdf(_ mat: FreshKdfMaterial) {
+        prefs.kdfSalt = mat.salt
+        prefs.kdfMCostKib = mat.mCostKib
+        prefs.kdfTCost = mat.tCost
+        prefs.kdfPCost = mat.pCost
+    }
+
+    /// Wrap `key` under `mode` and persist `prefs.wrappedKey` accordingly. For
+    /// paranoid the key is not persisted (it's re-derived on unlock); the caller
+    /// must have derived `key` from the passphrase.
+    private func wrapAndPersist(key: VaultKey, mode: SecurityMode, passphrase: String?,
+                                mat: FreshKdfMaterial, biometricContext: LAContext?) throws {
+        switch mode {
+        case .paranoid:
+            guard passphrase != nil else { throw VaultError.missingPassphrase }
+            prefs.wrappedKey = nil
         case .keystoreOnly:
-            let k = VaultKey.random()
             try Keystore.ensureWrappingKey(biometric: false)
-            prefs.wrappedKey = try Keystore.wrap(k.exportRaw(), biometric: false)
-            key = k
-
+            prefs.wrappedKey = try Keystore.wrap(key.exportRaw(), biometric: false)
         case .keystoreBiometric:
-            let k = VaultKey.random()
             try Keystore.ensureWrappingKey(biometric: true)
-            prefs.wrappedKey = try Keystore.wrap(k.exportRaw(), biometric: true, context: biometricContext)
-            key = k
-
+            prefs.wrappedKey = try Keystore.wrap(key.exportRaw(), biometric: true, context: biometricContext)
         case .keystorePassphrase:
             guard let passphrase else { throw VaultError.missingPassphrase }
-            let k = VaultKey.random()
-            let passWrapped = try k.wrapWithPassphrase(
+            let passWrapped = try key.wrapWithPassphrase(
                 passphrase: passphrase, salt: mat.salt,
                 mCostKib: mat.mCostKib, tCost: mat.tCost, pCost: mat.pCost)
             try Keystore.ensureWrappingKey(biometric: false)
             prefs.wrappedKey = try Keystore.wrap(passWrapped, biometric: false)  // double-wrap
-            key = k
         }
-
-        prefs.modeRaw = mode.rawValue
-        let vault = try Vault(dbPath: dbPath, key: key)
-        return VaultService(vault: vault, isDecoy: false)
     }
 
     // MARK: Unlock
