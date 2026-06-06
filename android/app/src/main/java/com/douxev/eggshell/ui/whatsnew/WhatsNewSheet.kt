@@ -11,13 +11,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Bloodtype
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -60,44 +60,44 @@ data class WhatsNewRelease(
  */
 object WhatsNewCatalog {
     val LATEST: WhatsNewRelease = WhatsNewRelease(
-        versionCode = 1,
-        versionName = "0.0.1",
+        versionCode = 9,
+        versionName = "0.0.9",
         title = "Quoi de neuf",
         highlights = listOf(
             WhatsNewHighlight(
+                icon = Icons.Filled.Bloodtype,
+                title = "Menstruations",
+                sub = "Nouvel onglet pour noter tes règles, le spotting et tes symptômes.",
+            ),
+            WhatsNewHighlight(
+                icon = Icons.Filled.Tune,
+                title = "Jauges personnalisables",
+                sub = "Renomme, réordonne et ajoute tes propres curseurs dans le journal et les menstruations.",
+            ),
+            WhatsNewHighlight(
+                icon = Icons.Filled.Insights,
+                title = "Corrélations",
+                sub = "Ton humeur en regard de tes prises, changements de traitement et jours de règles.",
+            ),
+            WhatsNewHighlight(
+                icon = Icons.Filled.Edit,
+                title = "Édition de traitement",
+                sub = "Modifie un traitement ; les changements de dose ou de voie sont gardés pour les corrélations.",
+            ),
+            WhatsNewHighlight(
                 icon = Icons.Filled.Palette,
-                title = "13 thèmes",
-                sub = "Lavender, Catppuccin, Gruvbox, Dracula, Nord, Tokyo Night… dans Réglages → Thème.",
-            ),
-            WhatsNewHighlight(
-                icon = Icons.Filled.GraphicEq,
-                title = "Hauteur de voix",
-                sub = "F0 calculé localement pour chaque enregistrement, courbe d'évolution dans le suivi voix.",
-            ),
-            WhatsNewHighlight(
-                icon = Icons.Filled.Widgets,
-                title = "Widget d'accueil",
-                sub = "Trois prochains rappels + bouton « Noter » pour ajouter une entrée journal en un tap.",
-            ),
-            WhatsNewHighlight(
-                icon = Icons.Filled.Notifications,
-                title = "Rappels photo & voix",
-                sub = "Catégories séparées avec notification prioritaire optionnelle.",
-            ),
-            WhatsNewHighlight(
-                icon = Icons.Filled.PhotoCamera,
-                title = "Lightbox + zoom",
-                sub = "Pinch-to-zoom, partage et sauvegarde dans la galerie système depuis la timeline photo.",
+                title = "Couleur des traitements",
+                sub = "Choisis une couleur pour repérer chaque traitement d'un coup d'œil.",
             ),
             WhatsNewHighlight(
                 icon = Icons.Filled.Security,
-                title = "Blocage screenshots",
-                sub = "Toggle dans Confidentialité pour cacher l'app dans les apps récentes et bloquer les captures.",
+                title = "Leurre persistant",
+                sub = "L'appli de notes leurre garde tes notes entre les sessions, isolée de ton vrai coffre.",
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Public,
-                title = "Ressources",
-                sub = "Nouvelle page dans Réglages avec sites et associations utiles.",
+                icon = Icons.Filled.Notifications,
+                title = "Rappels sur mesure",
+                sub = "Mode d'affichage (générique, nom ou alias) et priorité, rappel par rappel.",
             ),
         ),
     )

@@ -9,7 +9,7 @@ import SwiftUI
 
 enum WhatsNewCatalog {
     /// Highest version code. Compared against WhatsNewStore.lastSeen.
-    static let latestVersion: Int = 1
+    static let latestVersion: Int = 9
 
     struct Release: Identifiable {
         var id: Int { version }
@@ -21,16 +21,16 @@ enum WhatsNewCatalog {
     /// Releases, newest first.
     static let releases: [Release] = [
         Release(
-            version: 1,
+            version: 9,
             title: "Quoi de neuf",
             highlights: [
-                "13 thèmes — Lavande, Catppuccin, Gruvbox, Dracula, Nord, Tokyo Night… dans Plus → Thème.",
-                "Hauteur de voix — F0 calculé localement pour chaque enregistrement, courbe d'évolution dans le suivi voix.",
-                "Rappels labo, photo & voix — catégories séparées avec notification prioritaire optionnelle.",
-                "Lightbox + zoom — pince pour zoomer, partage et sauvegarde dans la galerie depuis la timeline photo.",
-                "Blocage des captures d'écran — bascule dans Avancé pour cacher l'app et bloquer les captures.",
-                "Menstruations — suivi optionnel des règles et du spotting.",
-                "Ressources — sites et associations utiles dans Plus → Ressources.",
+                "Menstruations — nouvel onglet pour noter tes règles, le spotting et tes symptômes.",
+                "Jauges personnalisables — renomme, réordonne et ajoute tes propres curseurs dans le journal et les menstruations.",
+                "Corrélations — ton humeur en regard de tes prises, changements de traitement et jours de règles.",
+                "Édition de traitement — modifie un traitement ; les changements de dose ou de voie sont gardés pour les corrélations.",
+                "Couleur des traitements — choisis une couleur pour repérer chaque traitement d'un coup d'œil.",
+                "Leurre persistant — l'appli de notes leurre garde tes notes entre les sessions, isolée de ton vrai coffre.",
+                "Rappels sur mesure — mode d'affichage (générique, nom ou alias) et priorité, rappel par rappel.",
             ]
         ),
     ]
