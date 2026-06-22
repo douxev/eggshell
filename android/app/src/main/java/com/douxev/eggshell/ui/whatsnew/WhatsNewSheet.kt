@@ -11,13 +11,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bloodtype
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Insights
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Mood
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -60,44 +60,44 @@ data class WhatsNewRelease(
  */
 object WhatsNewCatalog {
     val LATEST: WhatsNewRelease = WhatsNewRelease(
-        versionCode = 9,
-        versionName = "0.0.9",
+        versionCode = 10,
+        versionName = "0.1.0",
         title = "Quoi de neuf",
         highlights = listOf(
             WhatsNewHighlight(
-                icon = Icons.Filled.Bloodtype,
-                title = "Menstruations",
-                sub = "Nouvel onglet pour noter tes règles, le spotting et tes symptômes.",
-            ),
-            WhatsNewHighlight(
-                icon = Icons.Filled.Tune,
-                title = "Jauges personnalisables",
-                sub = "Renomme, réordonne et ajoute tes propres curseurs dans le journal et les menstruations.",
+                icon = Icons.Filled.Event,
+                title = "Rendez-vous",
+                sub = "Nouvel onglet pour noter tes RDV, les professionnel·les et ce qu'il y a à faire.",
             ),
             WhatsNewHighlight(
                 icon = Icons.Filled.Insights,
-                title = "Corrélations",
-                sub = "Ton humeur en regard de tes prises, changements de traitement et jours de règles.",
+                title = "Résumé",
+                sub = "Compare ta semaine ou ton mois au précédent : humeur, prises notées vs prévues, symptômes.",
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Edit,
-                title = "Édition de traitement",
-                sub = "Modifie un traitement ; les changements de dose ou de voie sont gardés pour les corrélations.",
+                icon = Icons.Filled.Schedule,
+                title = "Historique des prises",
+                sub = "Supprime une prise, et note l'heure exacte d'une prise oubliée (antidatage).",
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Palette,
-                title = "Couleur des traitements",
-                sub = "Choisis une couleur pour repérer chaque traitement d'un coup d'œil.",
+                icon = Icons.Filled.DeleteOutline,
+                title = "Supprimer un traitement",
+                sub = "Archive un traitement, ou supprime-le définitivement avec tout son historique.",
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Security,
-                title = "Leurre persistant",
-                sub = "L'appli de notes leurre garde tes notes entre les sessions, isolée de ton vrai coffre.",
+                icon = Icons.Filled.Lock,
+                title = "Bilans labo protégés",
+                sub = "Importe tes résultats même quand le PDF du labo est verrouillé par un mot de passe.",
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Notifications,
-                title = "Rappels sur mesure",
-                sub = "Mode d'affichage (générique, nom ou alias) et priorité, rappel par rappel.",
+                icon = Icons.Filled.PictureAsPdf,
+                title = "Export PDF médecin",
+                sub = "Le récapitulatif PDF pour ton médecin ne plante plus et s'ouvre dans le partage.",
+            ),
+            WhatsNewHighlight(
+                icon = Icons.Filled.Mood,
+                title = "Humeur confirmée",
+                sub = "Un petit mot confirme l'enregistrement de ton ressenti, avec un accès au journal.",
             ),
         ),
     )

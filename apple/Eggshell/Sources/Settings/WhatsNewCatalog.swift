@@ -9,7 +9,7 @@ import SwiftUI
 
 enum WhatsNewCatalog {
     /// Highest version code. Compared against WhatsNewStore.lastSeen.
-    static let latestVersion: Int = 9
+    static let latestVersion: Int = 10
 
     struct Release: Identifiable {
         var id: Int { version }
@@ -20,6 +20,19 @@ enum WhatsNewCatalog {
 
     /// Releases, newest first.
     static let releases: [Release] = [
+        Release(
+            version: 10,
+            title: "Quoi de neuf",
+            highlights: [
+                "Rendez-vous — nouvel onglet pour noter tes RDV, les professionnel·les et ce qu'il y a à faire.",
+                "Résumé — compare ta semaine ou ton mois au précédent : humeur, prises notées vs prévues, symptômes.",
+                "Historique des prises — supprime une prise, et note l'heure exacte d'une prise oubliée (antidatage).",
+                "Supprimer un traitement — archive-le, ou supprime-le définitivement avec tout son historique.",
+                "Bilans labo protégés — importe tes résultats même quand le PDF du labo est verrouillé par un mot de passe.",
+                "Export PDF médecin — le récapitulatif pour ton médecin ne plante plus et s'ouvre dans le partage.",
+                "Humeur confirmée — un petit mot confirme l'enregistrement de ton ressenti, avec un accès au journal.",
+            ]
+        ),
         Release(
             version: 9,
             title: "Quoi de neuf",
