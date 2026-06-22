@@ -158,6 +158,7 @@ struct TodayView: View {
                     if !vm.items.isEmpty { doseListCard }
                 }
                 if features.journal { journalCTA }
+                if features.journal || features.medications { summaryCTA }
                 remindersCard
             }
         }
@@ -313,6 +314,28 @@ struct TodayView: View {
             .buttonStyle(.plain)
             .padding(.horizontal, Spacing.xs)
         }
+    }
+
+    // (4b) Carte d'accès au résumé hebdo/mensuel.
+    private var summaryCTA: some View {
+        NavigationLink(value: Route.summary) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ton résumé")
+                        .font(.eggHeadline).foregroundStyle(palette.onPrimaryContainer)
+                    Text("Compare cette période à la précédente")
+                        .font(.eggCaption).foregroundStyle(palette.onPrimaryContainer.opacity(0.8))
+                }
+                Spacer()
+                Image(systemName: "chart.bar.xaxis")
+                    .font(.title2).foregroundStyle(palette.onPrimaryContainer)
+            }
+            .padding(Spacing.l)
+            .frame(maxWidth: .infinity)
+            .background(palette.primaryContainer,
+                        in: RoundedRectangle(cornerRadius: Corner.large, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 
     // (5) Carte "Rappels à venir" agrégée : plannings médoc + rappels labo/photo/voix.

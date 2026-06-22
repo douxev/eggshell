@@ -56,8 +56,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.HormonesRepository
+import com.douxev.eggshell.data.lab.EncryptedPdfException
 import com.douxev.eggshell.data.lab.LabResultOcrService
 import com.douxev.eggshell.data.lab.LabResultParser
+import com.douxev.eggshell.ui.common.PasswordField
 import uniffi.transition.NewHormoneMeasurement
 
 @HiltViewModel
@@ -69,6 +71,8 @@ class ImportLabResultViewModel @Inject constructor(
     sealed interface Phase {
         data object Idle : Phase
         data object Processing : Phase
+        /** The picked PDF is encrypted; we need a password to continue. */
+        data class PasswordRequired(val uri: Uri, val wrongPassword: Boolean) : Phase
         data class Preview(
             val entries: List<EditableEntry>,
             val rawText: String,
@@ -93,8 +97,20 @@ class ImportLabResultViewModel @Inject constructor(
 
     fun process(uri: Uri) {
         _phase.value = Phase.Processing
+        runRecognition(uri, null)
+    }
+
+    /** Retry recognition with the password the user just entered. */
+    fun submitPassword(password: String) {
+        val uri = (_phase.value as? Phase.PasswordRequired)?.uri ?: return
+        if (password.isBlank()) return
+        _phase.value = Phase.Processing
+        runRecognition(uri, password)
+    }
+
+    private fun runRecognition(uri: Uri, password: String?) {
         viewModelScope.launch {
-            runCatching { ocr.recognize(uri) }
+            runCatching { ocr.recognize(uri, password) }
                 .onSuccess { text ->
                     val parsed = LabResultParser.parse(text)
                     _phase.value = Phase.Preview(
@@ -106,8 +122,12 @@ class ImportLabResultViewModel @Inject constructor(
                         dateAutoDetected = parsed.dateMs != null,
                     )
                 }
-                .onFailure {
-                    _phase.value = Phase.Error(it.message ?: "OCR failed")
+                .onFailure { e ->
+                    _phase.value = if (e is EncryptedPdfException) {
+                        Phase.PasswordRequired(uri, wrongPassword = e.wrongPassword)
+                    } else {
+                        Phase.Error(e.message ?: "OCR failed")
+                    }
                 }
         }
     }
@@ -212,6 +232,12 @@ fun ImportLabResultScreen(
 
                 ImportLabResultViewModel.Phase.Processing -> ProcessingStep()
 
+                is ImportLabResultViewModel.Phase.PasswordRequired -> PasswordStep(
+                    wrongPassword = p.wrongPassword,
+                    onUnlock = vm::submitPassword,
+                    onCancel = vm::reset,
+                )
+
                 is ImportLabResultViewModel.Phase.Preview -> PreviewStep(
                     entries = p.entries,
                     atMs = p.atMs,
@@ -315,6 +341,61 @@ private fun ColumnScope.ProcessingStep() {
         )
     }
     Spacer(Modifier.weight(1f))
+}
+
+@Composable
+private fun ColumnScope.PasswordStep(
+    wrongPassword: Boolean,
+    onUnlock: (String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var password by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf("")
+    }
+    Spacer(Modifier.height(8.dp))
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                stringResource(R.string.import_lab_password_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                stringResource(R.string.import_lab_password_sub),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            PasswordField(
+                value = password,
+                onValueChange = { password = it },
+                label = stringResource(R.string.import_lab_password_label),
+                isError = wrongPassword,
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = if (wrongPassword) {
+                    { Text(stringResource(R.string.import_lab_password_wrong)) }
+                } else null,
+            )
+        }
+    }
+    Spacer(Modifier.weight(1f))
+    Button(
+        onClick = { onUnlock(password) },
+        enabled = password.isNotBlank(),
+        modifier = Modifier.fillMaxWidth().height(56.dp),
+        shape = RoundedCornerShape(50),
+    ) { Text(stringResource(R.string.import_lab_unlock)) }
+    androidx.compose.material3.TextButton(
+        onClick = onCancel,
+        modifier = Modifier.fillMaxWidth(),
+    ) { Text(stringResource(R.string.action_cancel)) }
+    Spacer(Modifier.height(8.dp))
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)

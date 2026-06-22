@@ -15,6 +15,7 @@
     <string name="action_unlock">Déverrouiller</string>
     <string name="action_save">Enregistrer</string>
     <string name="action_ok">OK</string>
+    <string name="datetime_pick_time">Heure</string>
 
     <!-- Onboarding -->
     <string name="onboarding_title">Configuration rapide</string>
@@ -149,9 +150,18 @@
     <string name="med_history">Historique</string>
     <string name="med_history_empty">Aucune prise enregistrée pour ce traitement.</string>
     <string name="med_default_dose_fmt">Dose habituelle : %1$s %2$s</string>
+    <string name="med_dose_delete">Supprimer cette prise</string>
+    <string name="med_dose_delete_title">Supprimer cette prise ?</string>
+    <string name="med_dose_delete_message">Cette prise sera retirée de l\'historique. Cette action est définitive.</string>
+    <string name="med_archive">Archiver le traitement</string>
+    <string name="med_delete">Supprimer le traitement</string>
+    <string name="med_delete_title">Supprimer ce traitement ?</string>
+    <string name="med_delete_message">Le traitement, tout son historique de prises et ses rappels seront définitivement supprimés. Pour le masquer sans perdre l\'historique, choisis plutôt « Archiver ».</string>
+    <string name="med_delete_confirm">Supprimer définitivement</string>
 
     <!-- Log dose -->
     <string name="med_log_dose_title">Noter une prise</string>
+    <string name="med_dose_datetime">Date et heure de la prise</string>
     <string name="med_save_dose">Enregistrer</string>
     <string name="med_injection_site">Site d\'injection</string>
     <string name="med_injection_suggested">Suggéré : %1$s</string>
@@ -284,6 +294,8 @@
     <string name="journal_empty">Aucune entrée pour le moment.</string>
     <string name="journal_add_title">Comment tu vas ?</string>
     <string name="journal_save">Enregistrer</string>
+    <string name="journal_saved">Ressenti enregistré ✨</string>
+    <string name="journal_saved_view">Voir le journal</string>
     <string name="journal_error">Une erreur s\'est produite.</string>
     <string name="journal_field_text">Note libre (facultatif)</string>
     <string name="journal_field_side_effects">Effets secondaires</string>
@@ -318,7 +330,7 @@
     <string name="import_lab_entry">Importer un PDF ou une photo</string>
     <string name="import_lab_title">Importer un résultat</string>
     <string name="import_lab_intro_title">Importe ton bilan (PDF ou photo)</string>
-    <string name="import_lab_intro_sub">Tout est analysé localement (ML Kit on-device). Le fichier ne quitte jamais ton téléphone.</string>
+    <string name="import_lab_intro_sub">Tout est analysé localement sur ton téléphone. Le fichier ne le quitte jamais.</string>
     <string name="import_lab_supported_hint">Reconnaît : œstradiol, testostérone, progestérone, LH, FSH, prolactine, SHBG.</string>
     <string name="import_lab_pick">Choisir un fichier</string>
     <string name="import_lab_processing">Lecture du document…</string>
@@ -335,6 +347,11 @@
     <string name="import_lab_done_fmt">%1$d valeur(s) ajoutée(s).</string>
     <string name="import_lab_close">Fermer</string>
     <string name="import_lab_error_title">Échec de la lecture</string>
+    <string name="import_lab_password_title">PDF protégé par mot de passe</string>
+    <string name="import_lab_password_sub">Beaucoup de labos verrouillent leurs PDF. Saisis le mot de passe fourni par le laboratoire pour le déverrouiller. Il n\'est jamais enregistré.</string>
+    <string name="import_lab_password_label">Mot de passe du PDF</string>
+    <string name="import_lab_password_wrong">Mot de passe incorrect. Réessaie.</string>
+    <string name="import_lab_unlock">Déverrouiller</string>
     <string name="hormones_new">Ajouter un résultat</string>
     <string name="hormones_empty">Saisis tes résultats de labo pour voir l\'évolution.</string>
     <string name="hormones_add_title">Nouveau résultat</string>
@@ -634,6 +651,7 @@
     <string name="metric_editor_delete_title">Supprimer l\'indicateur ?</string>
     <string name="metric_editor_delete_body">« %1$s » sera retiré des nouvelles entrées. Les valeurs déjà enregistrées sont conservées.</string>
     <string name="action_edit">Modifier</string>
+    <string name="action_more">Plus d\'options</string>
 
     <!-- Dose ↔ mood correlation (feature 6) -->
     <string name="reminder_action_skip">Passer</string>
@@ -652,4 +670,54 @@
     <string name="correlation_legend_bleeding">Menstruations</string>
     <string name="correlation_summary">Sur %1$d jours : %2$d prises, %3$d oublis/passés, humeur moyenne %4$s/10, %5$d changements de traitement.</string>
     <string name="correlation_disclaimer">Ces courbes sont descriptives : une coïncidence dans le temps n\'implique pas une cause.</string>
+
+    <!-- Today: résumé entry card -->
+    <string name="today_summary_title">Ton résumé</string>
+    <string name="today_summary_sub">Compare cette période à la précédente</string>
+
+    <!-- Auto-summary -->
+    <string name="summary_title">Ton résumé</string>
+    <string name="summary_period_week">Semaine</string>
+    <string name="summary_period_month">Mois</string>
+    <string name="summary_no_data">Pas encore assez de données pour comparer. Continue à noter tes ressentis et tes prises, ton résumé arrivera bientôt 💛</string>
+    <string name="summary_mood_title">Humeur moyenne</string>
+    <string name="summary_out_of_ten"> / 10</string>
+    <string name="summary_vs_prev_short_fmt">vs %1$s avant</string>
+    <string name="summary_vs_prev_fmt">%1$s (vs %2$s avant)</string>
+    <string name="summary_doses_title">Prises de traitement</string>
+    <string name="summary_doses_logged_fmt">%1$d prises notées sur %2$d prévues</string>
+    <string name="summary_missed_vs_fmt">%1$d oublis estimés (vs %2$d avant)</string>
+    <string name="summary_estimate_note">« Prévues » et « oublis » sont estimés à partir de tes rappels.</string>
+    <string name="summary_symptoms_title">Symptômes (curseurs perso)</string>
+    <string name="summary_journal_title">Notes du journal</string>
+    <string name="summary_journal_count_fmt">%1$d entrées (vs %2$d avant)</string>
+    <string name="summary_disclaimer">Comparé à la même durée juste avant. À titre indicatif, sans lien de cause à effet.</string>
+    <string name="summary_headline_mood_up">Belle énergie : ton humeur moyenne est en hausse ✨</string>
+    <string name="summary_headline_fewer_missed">Bravo — moins d\'oublis que la période précédente 💪</string>
+    <string name="summary_headline_kept_logging">Tu prends le temps de noter — continue, ça compte 💛</string>
+    <string name="summary_headline_steady">Tu gardes le cap. Prends soin de toi 💛</string>
+
+    <!-- Appointments / notes (RDV) -->
+    <string name="nav_appointments">RDV</string>
+    <string name="appointments_title">Rendez-vous</string>
+    <string name="appointments_hint">Note tes rendez-vous, les professionnel·les et ce qu\'il y a à faire.</string>
+    <string name="appointments_empty">Aucun rendez-vous pour l\'instant. Ajoute ton prochain RDV avec le bouton +.</string>
+    <string name="appointment_add_title">Nouveau rendez-vous</string>
+    <string name="appointment_edit_title">Modifier le rendez-vous</string>
+    <string name="appointment_field_datetime">Date et heure du RDV</string>
+    <string name="appointment_field_place">Lieu</string>
+    <string name="appointment_field_pro_name">Professionnel·le</string>
+    <string name="appointment_field_pro_role">Spécialité (ex : médecin généraliste)</string>
+    <string name="appointment_field_notes">Notes</string>
+    <string name="appointment_field_todo">À faire / fait</string>
+    <string name="appointment_field_todo_hint">Une tâche par ligne (ex : prise de sang, appeler Dr X).</string>
+    <string name="appointment_reminder_switch">Me rappeler</string>
+    <string name="appointment_reminder_hint">Une notification avant le rendez-vous.</string>
+    <string name="appointment_reminder_at">Date et heure du rappel</string>
+    <string name="appointment_save">Enregistrer</string>
+    <string name="appointment_error">Une erreur s\'est produite.</string>
+    <string name="appointment_reminder_title">Rappel de rendez-vous</string>
+    <string name="appointment_reminder_body">Tu as un rendez-vous à venir.</string>
+    <string name="feature_appointments_title">Rendez-vous / Notes</string>
+    <string name="feature_appointments_sub">Note tes RDV médicaux, les professionnel·les et les tâches à faire.</string>
 </resources>

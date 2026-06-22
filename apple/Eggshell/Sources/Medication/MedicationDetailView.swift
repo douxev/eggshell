@@ -73,6 +73,31 @@ final class MedicationDetailViewModel: ObservableObject {
             return false
         }
     }
+
+    func deleteDose(_ d: DoseEvent, session: VaultService) async {
+        do {
+            try await session.deleteDose(d.id)
+            await load(session)
+        } catch {
+            self.error = describe(error)
+        }
+    }
+
+    /// Hard-delete the medication: the core cascades its doses/schedules/changes,
+    /// then we rebuild the pending reminders from what's left (the deleted med's
+    /// schedules are gone, so its notifications drop out). Only returns true when
+    /// the delete actually succeeded, so the caller doesn't navigate away on a
+    /// half-done delete.
+    func deleteMedication(_ session: VaultService, app: AppState) async -> Bool {
+        do {
+            try await session.deleteMedication(medId)
+            await app.refreshNotifications()
+            return true
+        } catch {
+            self.error = describe(error)
+            return false
+        }
+    }
 }
 
 struct MedicationDetailView: View {
@@ -83,6 +108,8 @@ struct MedicationDetailView: View {
     @Environment(\.palette) private var palette
     @Environment(\.dismiss) private var dismiss
     @StateObject private var vm: MedicationDetailViewModel
+    @State private var confirmDelete = false
+    @State private var doseToDelete: DoseEvent?
 
     init(medId: Int64) {
         self.medId = medId
@@ -106,6 +133,26 @@ struct MedicationDetailView: View {
             .padding(Spacing.m)
         }
         .navigationTitle(vm.med?.name ?? "Traitement")
+        .alert("Supprimer ce traitement ?", isPresented: $confirmDelete) {
+            Button("Annuler", role: .cancel) {}
+            Button("Supprimer définitivement", role: .destructive) { deleteMedication() }
+        } message: {
+            Text("Le traitement, tout son historique de prises et ses rappels seront définitivement supprimés. Pour le masquer sans perdre l'historique, choisis plutôt « Archiver ».")
+        }
+        .alert("Supprimer cette prise ?", isPresented: Binding(
+            get: { doseToDelete != nil },
+            set: { if !$0 { doseToDelete = nil } }
+        )) {
+            Button("Annuler", role: .cancel) { doseToDelete = nil }
+            Button("Supprimer", role: .destructive) {
+                if let d = doseToDelete, let s = app.session {
+                    Task { await vm.deleteDose(d, session: s) }
+                }
+                doseToDelete = nil
+            }
+        } message: {
+            Text("Cette prise sera retirée de l'historique. Cette action est définitive.")
+        }
         .overlay(alignment: .bottomTrailing) {
             Button {
                 router.push(.logDose(medId: medId))
@@ -170,6 +217,13 @@ struct MedicationDetailView: View {
                 archive()
             } label: {
                 Label("Archiver", systemImage: "archivebox").frame(maxWidth: .infinity)
+            }
+            .glassButton().tint(palette.error)
+
+            Button(role: .destructive) {
+                confirmDelete = true
+            } label: {
+                Label("Supprimer définitivement", systemImage: "trash").frame(maxWidth: .infinity)
             }
             .glassButton().tint(palette.error)
         }
@@ -246,6 +300,14 @@ struct MedicationDetailView: View {
                 if let dose = d.dose {
                     Text(doseLabel(dose, d.doseUnit)).font(.eggCallout).foregroundStyle(palette.primary)
                 }
+                Button {
+                    doseToDelete = d
+                } label: {
+                    Image(systemName: "trash").font(.eggCaption)
+                }
+                .buttonStyle(.borderless)
+                .tint(palette.error)
+                .accessibilityLabel("Supprimer cette prise")
             }
             if let detail = doseDetail(d) {
                 Text(detail).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.7))
@@ -284,6 +346,13 @@ struct MedicationDetailView: View {
         guard let session = app.session else { return }
         Task {
             if await vm.archive(session, app: app) { dismiss() }
+        }
+    }
+
+    private func deleteMedication() {
+        guard let session = app.session else { return }
+        Task {
+            if await vm.deleteMedication(session, app: app) { dismiss() }
         }
     }
 

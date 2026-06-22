@@ -30,6 +30,9 @@ actor VaultService {
     func updateMedication(_ id: Int64, _ med: NewMedication) throws {
         try vault.updateMedication(id: id, med: med)
     }
+    /// Hard-delete a medication; the core cascades its doses, schedules and
+    /// treatment changes. Off-vault reminders are torn down by the caller first.
+    func deleteMedication(_ id: Int64) throws { try vault.deleteMedication(id: id) }
 
     // MARK: Treatment changes (dose/route edit audit, feeds the correlation view)
     @discardableResult
@@ -52,6 +55,8 @@ actor VaultService {
     func suggestNextInjectionSite(medicationId: Int64, historyDepth: Int64 = 8) throws -> String? {
         try vault.suggestNextInjectionSite(medicationId: medicationId, historyDepth: historyDepth)
     }
+    /// Remove a single recorded dose from the history.
+    func deleteDose(_ id: Int64) throws { try vault.deleteDose(id: id) }
 
     // MARK: Schedules
     func addSchedule(_ s: NewDoseSchedule, nowMs: Int64 = Time.nowMs()) throws -> DoseSchedule {
@@ -112,6 +117,19 @@ actor VaultService {
         try vault.updateBleedingEntry(id: id, entry: e)
     }
     func deleteBleedingEntry(_ id: Int64) throws { try vault.deleteBleedingEntry(id: id) }
+
+    // MARK: Appointments / notes ("RDV")
+    @discardableResult
+    func addAppointment(_ a: NewAppointment) throws -> Appointment { try vault.addAppointment(appt: a) }
+    func listAppointments(offset: Int64 = 0, limit: Int64 = 500) throws -> [Appointment] {
+        try vault.listAppointments(offset: offset, limit: limit)
+    }
+    func getAppointment(_ id: Int64) throws -> Appointment? { try vault.getAppointment(id: id) }
+    @discardableResult
+    func updateAppointment(_ id: Int64, _ a: NewAppointment) throws -> Appointment {
+        try vault.updateAppointment(id: id, appt: a)
+    }
+    func deleteAppointment(_ id: Int64) throws { try vault.deleteAppointment(id: id) }
 
     // MARK: Hormones
     func addHormoneMeasurement(_ m: NewHormoneMeasurement) throws -> HormoneMeasurement {

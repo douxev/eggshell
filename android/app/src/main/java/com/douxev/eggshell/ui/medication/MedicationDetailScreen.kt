@@ -11,7 +11,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -20,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -97,6 +104,37 @@ class MedicationDetailViewModel @Inject constructor(
             refresh()
         }
     }
+
+    /** Remove a single logged dose from the history. */
+    fun deleteDose(id: Long) {
+        viewModelScope.launch {
+            runCatching { repo.deleteDose(id) }
+            refresh()
+        }
+    }
+
+    /** Archive (hide, reversible) the medication, then leave the screen — only
+     *  on success, so a failed write doesn't navigate away as if it worked. */
+    fun archive(onArchived: () -> Unit) {
+        viewModelScope.launch {
+            val ok = runCatching { repo.setArchived(medicationId, true) }.isSuccess
+            if (ok) onArchived() else refresh()
+        }
+    }
+
+    /** Permanently delete the medication: tear down off-vault reminder state
+     *  first (it reads the schedule ids), then delete the row + cascade. Only
+     *  navigates away when the delete actually succeeds — otherwise a half-done
+     *  delete would silently look successful. */
+    fun deleteMedication(onDeleted: () -> Unit) {
+        viewModelScope.launch {
+            val ok = runCatching {
+                schedules.deleteMedicationCleanup(medicationId)
+                repo.delete(medicationId)
+            }.isSuccess
+            if (ok) onDeleted() else refresh()
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -113,6 +151,9 @@ fun MedicationDetailScreen(
     val schedules by vm.schedulesState.collectAsState()
     val alias by vm.alias.collectAsState()
     var editingAlias by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    var doseToDelete by remember { mutableStateOf<DoseEvent?>(null) }
 
     LaunchedEffect(Unit) { vm.refresh() }
 
@@ -130,6 +171,41 @@ fun MedicationDetailScreen(
                         Icon(
                             Icons.Filled.Edit,
                             contentDescription = stringResource(R.string.action_edit),
+                        )
+                    }
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = stringResource(R.string.action_more),
+                        )
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.med_archive)) },
+                            leadingIcon = { Icon(Icons.Filled.Archive, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                vm.archive(onArchived = onBack)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(R.string.med_delete),
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.DeleteOutline,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            onClick = {
+                                menuOpen = false
+                                confirmDelete = true
+                            },
                         )
                     }
                 },
@@ -172,7 +248,7 @@ fun MedicationDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     items(doses, key = { it.id }) { dose ->
-                        DoseRow(dose)
+                        DoseRow(dose, onDelete = { doseToDelete = dose })
                     }
                 }
             }
@@ -186,6 +262,54 @@ fun MedicationDetailScreen(
             onSave = {
                 vm.setAlias(it.ifBlank { null })
                 editingAlias = false
+            },
+        )
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.med_delete_title)) },
+            text = { Text(stringResource(R.string.med_delete_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    vm.deleteMedication(onDeleted = onBack)
+                }) {
+                    Text(
+                        stringResource(R.string.med_delete_confirm),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    doseToDelete?.let { dose ->
+        AlertDialog(
+            onDismissRequest = { doseToDelete = null },
+            title = { Text(stringResource(R.string.med_dose_delete_title)) },
+            text = { Text(stringResource(R.string.med_dose_delete_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteDose(dose.id)
+                    doseToDelete = null
+                }) {
+                    Text(
+                        stringResource(R.string.action_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { doseToDelete = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             },
         )
     }
@@ -324,22 +448,37 @@ private fun MedHeader(med: Medication) {
 }
 
 @Composable
-private fun DoseRow(dose: DoseEvent) {
+private fun DoseRow(dose: DoseEvent, onDelete: () -> Unit) {
     val dateFmt = remember(java.util.Locale.getDefault()) {
         DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
     }
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(dateFmt.format(Date(dose.takenAtMs)), style = MaterialTheme.typography.bodyMedium)
-        val parts = buildList {
-            dose.dose?.let { add("${formatDose(it)} ${dose.doseUnit.orEmpty()}".trim()) }
-            dose.route?.let { add(stringResource(MedicationCatalog.routeLabelRes(it))) }
-            dose.injectionSite?.let { add(stringResource(MedicationCatalog.injectionSiteLabelRes(it))) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(dateFmt.format(Date(dose.takenAtMs)), style = MaterialTheme.typography.bodyMedium)
+            val parts = buildList {
+                dose.dose?.let { add("${formatDose(it)} ${dose.doseUnit.orEmpty()}".trim()) }
+                dose.route?.let { add(stringResource(MedicationCatalog.routeLabelRes(it))) }
+                dose.injectionSite?.let { add(stringResource(MedicationCatalog.injectionSiteLabelRes(it))) }
+            }
+            if (parts.isNotEmpty()) {
+                Text(parts.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+            }
+            dose.notes?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall)
+            }
         }
-        if (parts.isNotEmpty()) {
-            Text(parts.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
-        }
-        dose.notes?.takeIf { it.isNotBlank() }?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall)
+        IconButton(onClick = onDelete) {
+            Icon(
+                Icons.Filled.DeleteOutline,
+                contentDescription = stringResource(R.string.med_dose_delete),
+                tint = MaterialTheme.colorScheme.error,
+            )
         }
     }
 }

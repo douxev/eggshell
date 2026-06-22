@@ -54,6 +54,11 @@ struct FeaturesView: View {
                         title: "Menstruations",
                         subtitle: "Suivi des règles et du spotting",
                         isOn: $features.bleeding)
+                    Divider().overlay(palette.outlineVariant)
+                    featureToggle(
+                        title: "Rendez-vous",
+                        subtitle: "RDV médicaux, professionnel·les et à-faire",
+                        isOn: $features.appointments)
                 }
             }
             .padding(Spacing.l)

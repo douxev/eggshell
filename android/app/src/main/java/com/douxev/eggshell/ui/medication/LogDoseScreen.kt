@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.MedicationRepository
+import com.douxev.eggshell.ui.common.DateTimePickerField
 import com.douxev.eggshell.ui.common.clickToDismissKeyboard
 import uniffi.transition.Medication
 import uniffi.transition.NewDoseEvent
@@ -125,6 +126,8 @@ fun LogDoseScreen(
     var unit by rememberSaveable { mutableStateOf("") }
     var site by rememberSaveable { mutableStateOf<String?>(null) }
     var notes by rememberSaveable { mutableStateOf("") }
+    // Defaults to now; the user can back-date a dose they forgot to log.
+    var takenAtMs by rememberSaveable { mutableStateOf(System.currentTimeMillis()) }
 
     // Pre-fill defaults from the medication once it loads.
     LaunchedEffect(med) {
@@ -156,6 +159,15 @@ fun LogDoseScreen(
             med?.let { m ->
                 Text(m.name, style = MaterialTheme.typography.titleLarge)
             }
+
+            DateTimePickerField(
+                label = stringResource(R.string.med_dose_datetime),
+                atMs = takenAtMs,
+                onChange = { takenAtMs = it },
+                modifier = Modifier.fillMaxWidth(),
+                // A dose can only have been taken in the past, never the future.
+                allowFuture = false,
+            )
 
             OutlinedTextField(
                 value = dose,
@@ -207,7 +219,7 @@ fun LogDoseScreen(
                 enabled = status != LogDoseViewModel.Status.Submitting,
                 onClick = {
                     vm.submit(
-                        takenAtMs = System.currentTimeMillis(),
+                        takenAtMs = takenAtMs,
                         dose = dose.replace(',', '.').toDoubleOrNull(),
                         doseUnit = unit.ifBlank { null },
                         route = med?.route,

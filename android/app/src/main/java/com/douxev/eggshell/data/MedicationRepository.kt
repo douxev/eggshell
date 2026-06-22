@@ -42,6 +42,16 @@ class MedicationRepository @Inject constructor(
     suspend fun listDoses(medicationId: Long, offset: Long = 0, limit: Long = 50): List<DoseEvent> =
         withContext(Dispatchers.IO) { vault.requireSession().listDoses(medicationId, offset, limit) }
 
+    /** Remove a single recorded dose from the history. */
+    suspend fun deleteDose(id: Long) =
+        withContext(Dispatchers.IO) { vault.requireSession().deleteDose(id) }
+
+    /** Hard-delete a medication and its cascaded history (doses, schedules,
+     *  treatment changes). Off-vault alarms/prefs are cleaned up by
+     *  [ScheduleRepository.deleteMedicationCleanup] — call that first. */
+    suspend fun delete(id: Long) =
+        withContext(Dispatchers.IO) { vault.requireSession().deleteMedication(id) }
+
     /** All dose events (taken / skipped / missed) across meds in a window. */
     suspend fun listDoseEventsBetween(fromMs: Long, toMs: Long): List<DoseEvent> =
         withContext(Dispatchers.IO) { vault.requireSession().listDoseEventsBetween(fromMs, toMs) }

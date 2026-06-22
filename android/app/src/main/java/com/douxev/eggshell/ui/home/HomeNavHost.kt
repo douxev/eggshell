@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bloodtype
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalPharmacy
@@ -19,6 +20,10 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
@@ -28,9 +33,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.launch
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -38,6 +45,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.douxev.eggshell.R
+import com.douxev.eggshell.ui.appointments.AddAppointmentScreen
+import com.douxev.eggshell.ui.appointments.AppointmentsScreen
 import com.douxev.eggshell.ui.bleeding.AddBleedingEntryScreen
 import com.douxev.eggshell.ui.bleeding.BleedingScreen
 import com.douxev.eggshell.ui.correlation.CorrelationScreen
@@ -76,14 +85,36 @@ fun HomeNavHost(
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     var showQuickLog by remember { mutableStateOf(false) }
+
+    // Snackbar host lives at the nav level (not inside an entry screen) so a
+    // confirmation survives the screen being popped after a save.
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val savedMsg = stringResource(R.string.journal_saved)
+    val viewJournalLabel = stringResource(R.string.journal_saved_view)
+    // Show a "saved!" confirmation; optionally offer a shortcut to the journal
+    // history. Resolved strings are captured so this plain fun stays non-@Composable.
+    fun confirmJournalSaved(offerViewJournal: Boolean) {
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = savedMsg,
+                actionLabel = if (offerViewJournal) viewJournalLabel else null,
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                nav.navigate(Routes.JOURNAL)
+            }
+        }
+    }
     val showMeds by prefsVm.showMeds.collectAsState()
     val showJournal by prefsVm.showJournal.collectAsState()
     val showHormones by prefsVm.showHormones.collectAsState()
     val showPhoto by prefsVm.showPhoto.collectAsState()
     val showVoice by prefsVm.showVoice.collectAsState()
     val showBleeding by prefsVm.showBleeding.collectAsState()
-    val tabs = remember(showMeds, showJournal, showHormones, showPhoto, showVoice, showBleeding) {
-        bottomTabs(showMeds, showJournal, showHormones, showPhoto, showVoice, showBleeding)
+    val showAppointments by prefsVm.showAppointments.collectAsState()
+    val tabs = remember(showMeds, showJournal, showHormones, showPhoto, showVoice, showBleeding, showAppointments) {
+        bottomTabs(showMeds, showJournal, showHormones, showPhoto, showVoice, showBleeding, showAppointments)
     }
 
     val pendingLink by (deepLinkProvider?.pendingDeepLink ?: kotlinx.coroutines.flow.MutableStateFlow(null)).collectAsState()
@@ -98,6 +129,7 @@ fun HomeNavHost(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             // The "Noter" quick-log FAB only makes sense on the home screen.
             // Each inner screen (Med list, Journal, Hormones…) has its own
@@ -150,6 +182,7 @@ fun HomeNavHost(
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                     onAddMedication = { nav.navigate(Routes.MED_ADD) },
                     onOpenMedList = { nav.navigate(Routes.MED_LIST) },
+                    onOpenSummary = { nav.navigate(Routes.SUMMARY) },
                 )
             }
             composable(Routes.MED_LIST) {
@@ -205,7 +238,10 @@ fun HomeNavHost(
             }
             composable(Routes.JOURNAL_ADD) {
                 AddJournalEntryScreen(
-                    onDone = { nav.popBackStack() },
+                    onDone = {
+                        nav.popBackStack()
+                        confirmJournalSaved(offerViewJournal = true)
+                    },
                     onCustomize = { nav.navigate(Routes.metricEditor("journal")) },
                 )
             }
@@ -214,7 +250,10 @@ fun HomeNavHost(
                 arguments = listOf(navArgument("id") { type = NavType.LongType }),
             ) {
                 AddJournalEntryScreen(
-                    onDone = { nav.popBackStack() },
+                    onDone = {
+                        nav.popBackStack()
+                        confirmJournalSaved(offerViewJournal = false)
+                    },
                     onCustomize = { nav.navigate(Routes.metricEditor("journal")) },
                 )
             }
@@ -243,6 +282,25 @@ fun HomeNavHost(
             }
             composable(Routes.CORRELATION) {
                 CorrelationScreen(onBack = { nav.popBackStack() })
+            }
+            composable(Routes.SUMMARY) {
+                com.douxev.eggshell.ui.summary.SummaryScreen(onBack = { nav.popBackStack() })
+            }
+
+            composable(Routes.APPOINTMENTS) {
+                AppointmentsScreen(
+                    onAdd = { nav.navigate(Routes.APPOINTMENTS_ADD) },
+                    onEdit = { id -> nav.navigate(Routes.appointmentEdit(id)) },
+                )
+            }
+            composable(Routes.APPOINTMENTS_ADD) {
+                AddAppointmentScreen(onDone = { nav.popBackStack() })
+            }
+            composable(
+                Routes.APPOINTMENTS_EDIT,
+                arguments = listOf(navArgument("id") { type = NavType.LongType }),
+            ) {
+                AddAppointmentScreen(onDone = { nav.popBackStack() })
             }
 
             composable(Routes.HORMONES) {
@@ -349,6 +407,10 @@ object Routes {
     const val BLEEDING_EDIT = "bleeding/edit/{id}"
     const val METRIC_EDITOR = "metrics/editor/{domain}"
     const val CORRELATION = "correlation"
+    const val SUMMARY = "summary"
+    const val APPOINTMENTS = "appointments"
+    const val APPOINTMENTS_ADD = "appointments/add"
+    const val APPOINTMENTS_EDIT = "appointments/edit/{id}"
     const val HORMONES = "hormones"
     const val HORMONES_ADD = "hormones/add"
     const val HORMONES_IMPORT = "hormones/import"
@@ -370,6 +432,7 @@ object Routes {
     fun journalEdit(id: Long) = "journal/edit/$id"
     fun bleedingEdit(id: Long) = "bleeding/edit/$id"
     fun metricEditor(domain: String) = "metrics/editor/$domain"
+    fun appointmentEdit(id: Long) = "appointments/edit/$id"
 }
 
 private data class BottomTab(
@@ -423,12 +486,14 @@ private fun bottomTabs(
     showPhoto: Boolean,
     showVoice: Boolean,
     showBleeding: Boolean,
+    showAppointments: Boolean,
 ): List<BottomTab> = buildList {
     add(BottomTab(Routes.TODAY, { Icons.Filled.Home }, R.string.nav_today))
     if (showMeds) add(BottomTab(Routes.MED_LIST, { Icons.Filled.LocalPharmacy }, R.string.nav_medications))
     if (showJournal) add(BottomTab(Routes.JOURNAL, { Icons.Filled.EditNote }, R.string.nav_journal))
     if (showBleeding) add(BottomTab(Routes.BLEEDING, { Icons.Filled.Bloodtype }, R.string.nav_bleeding))
     if (showHormones) add(BottomTab(Routes.HORMONES, { Icons.Filled.Timeline }, R.string.nav_hormones))
+    if (showAppointments) add(BottomTab(Routes.APPOINTMENTS, { Icons.Filled.Event }, R.string.nav_appointments))
     if (showPhoto) add(BottomTab(Routes.PHOTOS, { Icons.Filled.PhotoCamera }, R.string.nav_photos))
     if (showVoice) add(BottomTab(Routes.VOICE, { Icons.Filled.GraphicEq }, R.string.nav_voice))
 }
@@ -443,4 +508,5 @@ class HomeTabsViewModel @javax.inject.Inject constructor(
     val showPhoto: kotlinx.coroutines.flow.StateFlow<Boolean> = prefs.photoTab
     val showVoice: kotlinx.coroutines.flow.StateFlow<Boolean> = prefs.voiceTab
     val showBleeding: kotlinx.coroutines.flow.StateFlow<Boolean> = prefs.bleeding
+    val showAppointments: kotlinx.coroutines.flow.StateFlow<Boolean> = prefs.appointments
 }

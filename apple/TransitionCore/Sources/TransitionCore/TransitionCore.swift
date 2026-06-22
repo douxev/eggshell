@@ -8,5 +8,5 @@
 /// Version of the bindings contract this app was built against. Bump when the
 /// UDL surface changes in a way the Swift app must adapt to.
 public enum TransitionCoreInfo {
-    public static let bindingsContract = "0.0.6"
+    public static let bindingsContract = "0.0.7"
 }

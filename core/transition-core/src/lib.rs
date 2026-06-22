@@ -1,5 +1,6 @@
 //! transition-core — domain logic shared between Android and iOS.
 
+pub mod appointments;
 pub mod bleeding;
 pub mod crypto;
 pub mod db;

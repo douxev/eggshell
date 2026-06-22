@@ -41,6 +41,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -100,6 +101,10 @@ class PdfExportViewModel @Inject constructor(
         _state.value = _state.value.copy(generatedFile = null)
         return f
     }
+
+    fun onShareFailed(message: String?) {
+        _state.value = _state.value.copy(generatedFile = null, error = message)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -111,19 +116,26 @@ fun PdfExportScreen(
     val state by vm.state.collectAsState()
     val ctx = LocalContext.current
 
-    // Whenever a fresh PDF lands, hand it off to the system share sheet.
+    // Whenever a fresh PDF lands, hand it off to the system share sheet. This
+    // runs in a LaunchedEffect (not the composition body) so it fires once per
+    // generated file instead of on every recomposition, and any failure
+    // (misconfigured FileProvider path, no app to receive the share) surfaces
+    // as an inline error instead of crashing the screen.
     val pendingFile = state.generatedFile
-    if (pendingFile != null) {
-        val file = vm.consumeGeneratedFile() ?: pendingFile
-        val uri = FileProvider.getUriForFile(
-            ctx, "${ctx.packageName}.fileprovider", file,
-        )
-        val send = Intent(Intent.ACTION_SEND).apply {
-            type = "application/pdf"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        ctx.startActivity(Intent.createChooser(send, null))
+    LaunchedEffect(pendingFile) {
+        val file = pendingFile ?: return@LaunchedEffect
+        runCatching {
+            val uri = FileProvider.getUriForFile(
+                ctx, "${ctx.packageName}.fileprovider", file,
+            )
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            ctx.startActivity(Intent.createChooser(send, null))
+            vm.consumeGeneratedFile()
+        }.onFailure { vm.onShareFailed(it.message) }
     }
 
     Scaffold(

@@ -32,13 +32,13 @@ final class AppState: ObservableObject {
     func completeOnboarding(session: VaultService) {
         self.session = session
         route = .home
-        Task { await refreshNotifications(); await drainPendingDoses() }
+        Task { await refreshNotifications(); await refreshAppointmentReminders(); await drainPendingDoses() }
     }
 
     func unlocked(session: VaultService) {
         self.session = session
         route = .home
-        Task { await refreshNotifications(); await drainPendingDoses() }
+        Task { await refreshNotifications(); await refreshAppointmentReminders(); await drainPendingDoses() }
     }
 
     /// Commit reminder actions ("Pris"/"Passer") taken while the vault was
@@ -75,6 +75,16 @@ final class AppState: ObservableObject {
             await NotificationManager.reschedule(
                 schedules: schedules,
                 nameFor: { names[$0] ?? "Traitement" })
+        } catch { /* reminders are best-effort */ }
+    }
+
+    /// Re-arm appointment reminders from the vault. Local notifications are
+    /// pre-scheduled, so this rebuilds them on unlock (and after any change).
+    func refreshAppointmentReminders() async {
+        guard let session else { return }
+        do {
+            let appts = try await session.listAppointments(limit: 1000)
+            await NotificationManager.scheduleAppointmentReminders(appts)
         } catch { /* reminders are best-effort */ }
     }
 

@@ -4,7 +4,7 @@ import SwiftUI
 // tabs (which are tab roots, not pushable routes). Mirrors the Android quick-log
 // QuickAction.Photo→PHOTOS / Voice→VOICE behaviour.
 enum HomeTab: Hashable {
-    case today, medications, journal, hormones, bleeding, photos, voice
+    case today, medications, journal, hormones, bleeding, appointments, photos, voice
 }
 
 @MainActor

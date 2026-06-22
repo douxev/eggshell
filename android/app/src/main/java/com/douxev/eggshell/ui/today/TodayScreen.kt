@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.MoodBad
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -73,6 +74,7 @@ fun TodayScreen(
     onOpenSettings: () -> Unit = {},
     onAddMedication: () -> Unit = {},
     onOpenMedList: () -> Unit = {},
+    onOpenSummary: () -> Unit = {},
     vm: TodayViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
@@ -207,6 +209,52 @@ fun TodayScreen(
                 }
             }
         }
+        }
+
+        // Auto-summary entry — surfaces the week/month comparison the app
+        // computes from mood + adherence. Shown when there's a feature that
+        // feeds it (journal or medications).
+        if (state.gates.journal || state.gates.medications) {
+            item {
+                Card(
+                    onClick = onOpenSummary,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                stringResource(R.string.today_summary_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                stringResource(R.string.today_summary_sub),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(MaterialTheme.colorScheme.secondary, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Filled.Insights,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondary,
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         // Reminders.

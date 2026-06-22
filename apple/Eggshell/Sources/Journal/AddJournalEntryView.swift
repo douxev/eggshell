@@ -148,6 +148,7 @@ struct AddJournalEntryView: View {
     @Environment(\.palette) private var palette
     @Environment(\.dismiss) private var dismiss
     @StateObject private var vm = AddJournalEntryViewModel()
+    @State private var justSaved = false
 
     init(entryId: Int64?) {
         self.entryId = entryId
@@ -168,11 +169,32 @@ struct AddJournalEntryView: View {
         }
         .navigationTitle(entryId == nil ? "Nouvelle entrée" : "Modifier l'entrée")
         .navigationBarTitleDisplayMode(.inline)
+        // Brief confirmation that survives the screen being dismissed: show the
+        // toast + a success haptic, then pop back. Mirrors the Android snackbar.
+        .overlay(alignment: .bottom) {
+            if justSaved {
+                Text("Ressenti enregistré ✨")
+                    .font(.eggCaption)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, Spacing.m)
+                    .padding(.vertical, Spacing.s)
+                    .background(.black.opacity(0.6), in: Capsule())
+                    .padding(.bottom, Spacing.xl)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .sensoryFeedback(.success, trigger: justSaved)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Enregistrer") {
                     if let session = app.session {
-                        Task { if await vm.save(session, entryId: entryId) { dismiss() } }
+                        Task {
+                            if await vm.save(session, entryId: entryId) {
+                                withAnimation { justSaved = true }
+                                try? await Task.sleep(nanoseconds: 900_000_000)
+                                dismiss()
+                            }
+                        }
                     }
                 }
                 .disabled(vm.loading || vm.saving)
