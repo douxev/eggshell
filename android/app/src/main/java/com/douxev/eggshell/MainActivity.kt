@@ -167,6 +167,7 @@ fun AppRoot(rootVm: AppRootViewModel = hiltViewModel()) {
 class AppRootViewModel @Inject constructor(
     private val repo: VaultRepository,
     private val schedules: ScheduleRepository,
+    private val appointments: com.douxev.eggshell.data.AppointmentRepository,
     private val whatsNew: WhatsNewPrefs,
     private val photos: PhotosRepository,
     private val voice: VoiceRepository,
@@ -206,6 +207,9 @@ class AppRootViewModel @Inject constructor(
                 // are what syncFromDb sees.
                 runCatching { schedules.flushPendingDoses() }
                 runCatching { schedules.syncFromDb() }
+                // Re-arm appointment reminders dropped by a reboot (their fire
+                // time lives in the vault, which BootReceiver can't read).
+                runCatching { appointments.reschedulePending() }
                 // Move legacy voice-clip metadata from plain prefs into the
                 // encrypted vault on first unlock after upgrade. No-op if
                 // there's nothing to migrate.

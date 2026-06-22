@@ -25,6 +25,8 @@ final class ImportLabResultViewModel: ObservableObject {
     enum Phase: Equatable {
         case idle
         case processing
+        /// The picked PDF is encrypted; we need a password to continue.
+        case passwordRequired(wrongPassword: Bool)
         case preview
         case done(saved: Int)
         case error(String)
@@ -44,6 +46,10 @@ final class ImportLabResultViewModel: ObservableObject {
     @Published var date: Date = Date()
     @Published var dateAutoDetected = false
 
+    /// Bytes of an encrypted PDF held between the lock detection and the
+    /// password retry, so we don't re-touch the security-scoped URL.
+    private var pendingPDFData: Data?
+
     var selectedCount: Int { entries.filter { $0.selected }.count }
 
     /// OCR an image's raw bytes, parse, and move to the preview phase.
@@ -58,14 +64,37 @@ final class ImportLabResultViewModel: ObservableObject {
     }
 
     /// OCR a PDF (each page rasterised), parse, and move to the preview phase.
+    /// Reads the bytes once inside the security scope; if the PDF is encrypted we
+    /// stash them and prompt for a password instead of failing.
     func processPDF(at url: URL) async {
         phase = .processing
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-        guard let doc = PDFDocument(url: url) else {
+        guard let data = try? Data(contentsOf: url), let doc = PDFDocument(data: data) else {
             phase = .error("PDF illisible.")
             return
         }
+        if doc.isLocked {
+            pendingPDFData = data
+            phase = .passwordRequired(wrongPassword: false)
+            return
+        }
+        await rasterizeAndRecognize(doc)
+    }
+
+    /// Retry an encrypted PDF with the password the user just entered.
+    func submitPassword(_ password: String) async {
+        guard !password.isEmpty, let data = pendingPDFData, let doc = PDFDocument(data: data) else { return }
+        phase = .processing
+        if doc.unlock(withPassword: password) {
+            pendingPDFData = nil
+            await rasterizeAndRecognize(doc)
+        } else {
+            phase = .passwordRequired(wrongPassword: true)
+        }
+    }
+
+    private func rasterizeAndRecognize(_ doc: PDFDocument) async {
         var images: [CGImage] = []
         let pageCount = min(doc.pageCount, 50)
         for i in 0..<pageCount {
@@ -127,6 +156,7 @@ final class ImportLabResultViewModel: ObservableObject {
     func reset() {
         entries = []
         dateAutoDetected = false
+        pendingPDFData = nil
         phase = .idle
     }
 
@@ -195,16 +225,18 @@ struct ImportLabResultView: View {
 
     @State private var pickerItem: PhotosPickerItem?
     @State private var showPDFImporter = false
+    @State private var pdfPassword = ""
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 switch vm.phase {
-                case .idle:               idleStep
-                case .processing:         processingStep
-                case .preview:            previewStep
-                case .done(let saved):    doneStep(saved: saved)
-                case .error(let reason):  errorStep(reason)
+                case .idle:                    idleStep
+                case .processing:              processingStep
+                case .passwordRequired(let w): passwordStep(wrongPassword: w)
+                case .preview:                 previewStep
+                case .done(let saved):         doneStep(saved: saved)
+                case .error(let reason):       errorStep(reason)
                 }
             }
             .padding(Spacing.l)
@@ -226,6 +258,12 @@ struct ImportLabResultView: View {
             case .failure:
                 break
             }
+        }
+        // Clear the password field whenever we leave the password step, so a
+        // second encrypted PDF in the same session doesn't start pre-filled with
+        // the previous one's password.
+        .onChange(of: vm.phase) { _, newPhase in
+            if case .passwordRequired = newPhase {} else { pdfPassword = "" }
         }
     }
 
@@ -272,6 +310,37 @@ struct ImportLabResultView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.xxl)
+    }
+
+    // MARK: - Password (encrypted PDF)
+
+    private func passwordStep(wrongPassword: Bool) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.l) {
+            SectionCard {
+                Text("PDF protégé par mot de passe").font(.eggHeadline).foregroundStyle(palette.onSurface)
+                Text("Beaucoup de labos verrouillent leurs PDF. Saisis le mot de passe fourni par le laboratoire pour le déverrouiller. Il n'est jamais enregistré.")
+                    .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+                SecureField("Mot de passe du PDF", text: $pdfPassword)
+                    .textFieldStyle(.roundedBorder)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                if wrongPassword {
+                    Text("Mot de passe incorrect. Réessaie.")
+                        .font(.eggCaption).foregroundStyle(palette.error)
+                }
+            }
+            Button {
+                let pw = pdfPassword
+                Task { await vm.submitPassword(pw) }
+            } label: {
+                Label("Déverrouiller", systemImage: "lock.open").font(.eggHeadline).frame(maxWidth: .infinity)
+            }
+            .glassProminentButton().tint(palette.primary)
+            .disabled(pdfPassword.isEmpty)
+
+            Button("Annuler") { pdfPassword = ""; vm.reset() }
+                .glassButton().tint(palette.secondary)
+        }
     }
 
     // MARK: - Preview

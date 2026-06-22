@@ -13,6 +13,7 @@
     <string name="action_unlock">Unlock</string>
     <string name="action_save">Save</string>
     <string name="action_ok">OK</string>
+    <string name="datetime_pick_time">Time</string>
 
     <string name="onboarding_title">Initial setup</string>
     <string name="onboarding_welcome_title">Welcome</string>
@@ -136,7 +137,16 @@
     <string name="med_history">History</string>
     <string name="med_history_empty">No doses recorded for this medication.</string>
     <string name="med_default_dose_fmt">Usual dose: %1$s %2$s</string>
+    <string name="med_dose_delete">Delete this dose</string>
+    <string name="med_dose_delete_title">Delete this dose?</string>
+    <string name="med_dose_delete_message">This dose will be removed from the history. This can\'t be undone.</string>
+    <string name="med_archive">Archive medication</string>
+    <string name="med_delete">Delete medication</string>
+    <string name="med_delete_title">Delete this medication?</string>
+    <string name="med_delete_message">The medication, all its dose history and its reminders will be permanently deleted. To hide it without losing the history, choose “Archive” instead.</string>
+    <string name="med_delete_confirm">Delete permanently</string>
     <string name="med_log_dose_title">Log a dose</string>
+    <string name="med_dose_datetime">Date &amp; time taken</string>
     <string name="med_save_dose">Save</string>
     <string name="med_injection_site">Injection site</string>
     <string name="med_injection_suggested">Suggested: %1$s</string>
@@ -258,6 +268,8 @@
     <string name="journal_empty">No entry yet.</string>
     <string name="journal_add_title">How are you?</string>
     <string name="journal_save">Save</string>
+    <string name="journal_saved">Entry saved ✨</string>
+    <string name="journal_saved_view">View journal</string>
     <string name="journal_error">Something went wrong.</string>
     <string name="journal_field_text">Free note (optional)</string>
     <string name="journal_field_side_effects">Side effects</string>
@@ -291,7 +303,7 @@
     <string name="import_lab_entry">Import a PDF or photo</string>
     <string name="import_lab_title">Import a result</string>
     <string name="import_lab_intro_title">Import your lab report (PDF or photo)</string>
-    <string name="import_lab_intro_sub">Everything is analysed locally (on-device ML Kit). The file never leaves your phone.</string>
+    <string name="import_lab_intro_sub">Everything is analysed locally on your phone. The file never leaves it.</string>
     <string name="import_lab_supported_hint">Recognises: estradiol, testosterone, progesterone, LH, FSH, prolactin, SHBG.</string>
     <string name="import_lab_pick">Pick a file</string>
     <string name="import_lab_processing">Reading the document…</string>
@@ -308,6 +320,11 @@
     <string name="import_lab_done_fmt">%1$d value(s) added.</string>
     <string name="import_lab_close">Close</string>
     <string name="import_lab_error_title">Reading failed</string>
+    <string name="import_lab_password_title">Password-protected PDF</string>
+    <string name="import_lab_password_sub">Many labs lock their PDFs. Enter the password the lab gave you to unlock it. It is never saved.</string>
+    <string name="import_lab_password_label">PDF password</string>
+    <string name="import_lab_password_wrong">Wrong password. Try again.</string>
+    <string name="import_lab_unlock">Unlock</string>
     <string name="hormones_new">Add result</string>
     <string name="hormones_empty">Enter your lab results to see the trend.</string>
     <string name="hormones_add_title">New result</string>
@@ -602,6 +619,7 @@
     <string name="metric_editor_delete_title">Delete tracker?</string>
     <string name="metric_editor_delete_body">“%1$s” will be removed from new entries. Values already recorded are kept.</string>
     <string name="action_edit">Edit</string>
+    <string name="action_more">More options</string>
 
     <!-- Dose ↔ mood correlation (feature 6) -->
     <string name="reminder_action_skip">Skip</string>
@@ -620,4 +638,54 @@
     <string name="correlation_legend_bleeding">Menstruation</string>
     <string name="correlation_summary">Over %1$d days: %2$d taken, %3$d missed/skipped, average mood %4$s/10, %5$d treatment changes.</string>
     <string name="correlation_disclaimer">These charts are descriptive: a coincidence in time does not imply a cause.</string>
+
+    <!-- Today: summary entry card -->
+    <string name="today_summary_title">Your summary</string>
+    <string name="today_summary_sub">Compare this period with the last</string>
+
+    <!-- Auto-summary -->
+    <string name="summary_title">Your summary</string>
+    <string name="summary_period_week">Week</string>
+    <string name="summary_period_month">Month</string>
+    <string name="summary_no_data">Not enough data to compare yet. Keep logging your feelings and doses — your summary is coming soon 💛</string>
+    <string name="summary_mood_title">Average mood</string>
+    <string name="summary_out_of_ten"> / 10</string>
+    <string name="summary_vs_prev_short_fmt">vs %1$s before</string>
+    <string name="summary_vs_prev_fmt">%1$s (vs %2$s before)</string>
+    <string name="summary_doses_title">Medication doses</string>
+    <string name="summary_doses_logged_fmt">%1$d doses logged of %2$d planned</string>
+    <string name="summary_missed_vs_fmt">%1$d estimated missed (vs %2$d before)</string>
+    <string name="summary_estimate_note">“Planned” and “missed” are estimated from your reminders.</string>
+    <string name="summary_symptoms_title">Symptoms (custom sliders)</string>
+    <string name="summary_journal_title">Journal notes</string>
+    <string name="summary_journal_count_fmt">%1$d entries (vs %2$d before)</string>
+    <string name="summary_disclaimer">Compared with the same length of time just before. For information only, no cause and effect.</string>
+    <string name="summary_headline_mood_up">Lovely energy: your average mood is up ✨</string>
+    <string name="summary_headline_fewer_missed">Well done — fewer missed doses than the period before 💪</string>
+    <string name="summary_headline_kept_logging">You\'re taking the time to log — keep it up, it matters 💛</string>
+    <string name="summary_headline_steady">You\'re holding steady. Take care of yourself 💛</string>
+
+    <!-- Appointments / notes -->
+    <string name="nav_appointments">Visits</string>
+    <string name="appointments_title">Appointments</string>
+    <string name="appointments_hint">Note your appointments, the professionals, and what to do.</string>
+    <string name="appointments_empty">No appointments yet. Add your next one with the + button.</string>
+    <string name="appointment_add_title">New appointment</string>
+    <string name="appointment_edit_title">Edit appointment</string>
+    <string name="appointment_field_datetime">Appointment date &amp; time</string>
+    <string name="appointment_field_place">Place</string>
+    <string name="appointment_field_pro_name">Professional</string>
+    <string name="appointment_field_pro_role">Speciality (e.g. GP)</string>
+    <string name="appointment_field_notes">Notes</string>
+    <string name="appointment_field_todo">To do / done</string>
+    <string name="appointment_field_todo_hint">One task per line (e.g. blood test, call Dr X).</string>
+    <string name="appointment_reminder_switch">Remind me</string>
+    <string name="appointment_reminder_hint">A notification before the appointment.</string>
+    <string name="appointment_reminder_at">Reminder date &amp; time</string>
+    <string name="appointment_save">Save</string>
+    <string name="appointment_error">Something went wrong.</string>
+    <string name="appointment_reminder_title">Appointment reminder</string>
+    <string name="appointment_reminder_body">You have an upcoming appointment.</string>
+    <string name="feature_appointments_title">Appointments / Notes</string>
+    <string name="feature_appointments_sub">Note medical appointments, professionals and to-dos.</string>
 </resources>

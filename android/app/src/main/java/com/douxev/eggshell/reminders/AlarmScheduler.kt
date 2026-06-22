@@ -40,6 +40,20 @@ class AlarmScheduler @Inject constructor(
     }
 
     /**
+     * One-shot reminder for an appointment. Unlike med/lab alarms it never
+     * reschedules itself — an appointment happens once. Note: it does NOT
+     * survive a reboot, because the appointment details live in the encrypted
+     * vault (locked at boot) so [BootReceiver] can't re-arm it.
+     */
+    fun scheduleAppointment(appointmentId: Long, atMs: Long) {
+        setAlarm(appointmentPendingIntentFor(appointmentId), atMs, "appointment=$appointmentId")
+    }
+
+    fun cancelAppointment(appointmentId: Long) {
+        alarmManager.cancel(appointmentPendingIntentFor(appointmentId))
+    }
+
+    /**
      * One-shot "remind me later" alarm. Distinct from the recurring schedule
      * alarm (different action), so it never advances the schedule's cadence —
      * it just re-shows the same reminder at [atMs].
@@ -108,11 +122,26 @@ class AlarmScheduler @Inject constructor(
         )
     }
 
+    private fun appointmentPendingIntentFor(appointmentId: Long): PendingIntent {
+        val intent = Intent(context, ReminderReceiver::class.java).apply {
+            action = ACTION_APPOINTMENT_REMINDER
+            putExtra(EXTRA_APPOINTMENT_ID, appointmentId)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            appointmentId.toInt(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
     companion object {
         const val ACTION_REMINDER = "com.douxev.eggshell.REMINDER"
         const val EXTRA_SCHEDULE_ID = "schedule_id"
         const val ACTION_LAB_REMINDER = "com.douxev.eggshell.LAB_REMINDER"
         const val EXTRA_LAB_ID = "lab_id"
+        const val ACTION_APPOINTMENT_REMINDER = "com.douxev.eggshell.APPOINTMENT_REMINDER"
+        const val EXTRA_APPOINTMENT_ID = "appointment_id"
         /** Notification-action broadcast: the user tapped "Pris" on a med
          *  reminder (on phone or, via Wear bridging, on a paired watch). */
         const val ACTION_MARK_TAKEN = "com.douxev.eggshell.MARK_TAKEN"

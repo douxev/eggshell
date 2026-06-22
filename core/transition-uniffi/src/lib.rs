@@ -22,6 +22,7 @@ pub use transition_core::metrics::{
     MetricDefinition, MetricDefinitionUpdate, MetricValue, NewMetricDefinition,
 };
 pub use transition_core::bleeding::{BleedingEntry, NewBleedingEntry};
+pub use transition_core::appointments::{Appointment, NewAppointment};
 pub use transition_core::photos::{NewPhotoRecord, PhotoRecord};
 pub use transition_core::voice::{NewVoiceClip, VoiceClip};
 
@@ -207,6 +208,10 @@ impl Vault {
         self.inner.update_medication(id, med)
     }
 
+    pub fn delete_medication(&self, id: i64) -> Result<(), TransitionError> {
+        self.inner.delete_medication(id)
+    }
+
     pub fn log_treatment_change(
         &self,
         change: NewTreatmentChange,
@@ -241,6 +246,10 @@ impl Vault {
         to_ms: i64,
     ) -> Result<Vec<DoseEvent>, TransitionError> {
         self.inner.list_dose_events_between(from_ms, to_ms)
+    }
+
+    pub fn delete_dose(&self, id: i64) -> Result<(), TransitionError> {
+        self.inner.delete_dose(id)
     }
 
     pub fn suggest_next_injection_site(
@@ -443,6 +452,34 @@ impl Vault {
 
     pub fn delete_bleeding_entry(&self, id: i64) -> Result<(), TransitionError> {
         self.inner.delete_bleeding_entry(id)
+    }
+
+    pub fn add_appointment(&self, appt: NewAppointment) -> Result<Appointment, TransitionError> {
+        self.inner.add_appointment(appt)
+    }
+
+    pub fn list_appointments(
+        &self,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Appointment>, TransitionError> {
+        self.inner.list_appointments(offset, limit)
+    }
+
+    pub fn get_appointment(&self, id: i64) -> Result<Option<Appointment>, TransitionError> {
+        self.inner.get_appointment(id)
+    }
+
+    pub fn update_appointment(
+        &self,
+        id: i64,
+        appt: NewAppointment,
+    ) -> Result<Appointment, TransitionError> {
+        self.inner.update_appointment(id, appt)
+    }
+
+    pub fn delete_appointment(&self, id: i64) -> Result<(), TransitionError> {
+        self.inner.delete_appointment(id)
     }
 
     pub fn encrypt_blob(&self, plaintext: Vec<u8>) -> Result<Vec<u8>, TransitionError> {

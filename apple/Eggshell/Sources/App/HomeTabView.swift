@@ -33,6 +33,11 @@ struct HomeTabView: View {
                     TabStack { BleedingView() }
                 }
             }
+            if features.appointments {
+                Tab("RDV", systemImage: "calendar", value: HomeTab.appointments) {
+                    TabStack { AppointmentsView() }
+                }
+            }
             if features.photos {
                 Tab("Photos", systemImage: "photo.fill", value: HomeTab.photos) {
                     TabStack { PhotosView() }

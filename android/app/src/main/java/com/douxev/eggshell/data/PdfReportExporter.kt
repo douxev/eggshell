@@ -120,9 +120,19 @@ class PdfReportExporter @Inject constructor(
 
         ctx.drawFooter()
         ctx.finish()
-        val out = File(context.cacheDir, "transition-report-${System.currentTimeMillis()}.pdf")
+        // Write into the cache subdir that the FileProvider actually exposes
+        // (see res/xml/file_provider_paths.xml — only pdf_export/ is shared,
+        // not the cache root). Writing to the root made getUriForFile throw and
+        // crashed the share.
+        val dir = File(context.cacheDir, "pdf_export").apply { mkdirs() }
+        val out = File(dir, "transition-report-${System.currentTimeMillis()}.pdf")
         out.outputStream().use { doc.writeTo(it) }
         doc.close()
+        // Clean up older reports AFTER writing the fresh one, and never the file
+        // we just produced — so we don't yank a previously-shared PDF that an
+        // external app may still be reading, while still not leaving stale
+        // decrypted health data piling up in cache.
+        dir.listFiles()?.forEach { if (it != out) it.delete() }
         out
     }
 

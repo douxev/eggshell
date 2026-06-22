@@ -4,9 +4,11 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import com.googlecode.tesseract.android.TessBaseAPI
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -14,6 +16,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+/**
+ * Thrown when a lab PDF is encrypted and we either have no password yet
+ * ([wrongPassword] = false) or the supplied one was rejected
+ * ([wrongPassword] = true). The import flow catches this to prompt the user.
+ */
+class EncryptedPdfException(val wrongPassword: Boolean) : Exception()
 
 /**
  * Lab-result text extraction.
@@ -43,44 +52,58 @@ class LabResultOcrService @Inject constructor(
         PDFBoxResourceLoader.init(context.applicationContext)
     }
 
-    suspend fun recognize(uri: Uri): String = withContext(Dispatchers.IO) {
+    /**
+     * Extract text from a lab result. [password] unlocks an encrypted PDF;
+     * pass null on the first attempt. Throws [EncryptedPdfException] when the
+     * PDF is encrypted and the password is missing or wrong, so the caller can
+     * prompt for it and retry.
+     */
+    suspend fun recognize(uri: Uri, password: String? = null): String = withContext(Dispatchers.IO) {
         val mime = context.contentResolver.getType(uri)
         when {
-            mime == "application/pdf" -> recognizePdf(uri)
+            mime == "application/pdf" -> recognizePdf(uri, password)
             mime != null && mime.startsWith("image/") -> ocrImage(uri)
-            uri.path?.endsWith(".pdf", ignoreCase = true) == true -> recognizePdf(uri)
+            uri.path?.endsWith(".pdf", ignoreCase = true) == true -> recognizePdf(uri, password)
             else -> ocrImage(uri)
         }
     }
 
     // -- PDF path -----------------------------------------------------------
 
-    private suspend fun recognizePdf(uri: Uri): String {
-        // Stage 1: pull the embedded text layer if it exists.
-        val embedded = runCatching { extractEmbeddedText(uri) }.getOrNull()
-        if (!embedded.isNullOrBlank() && hasEnoughSignal(embedded)) {
-            return embedded
-        }
-        // Stage 2: scanned PDF (no text layer, or text layer too sparse).
-        // Render each page to a bitmap and OCR it with Tesseract.
-        return ocrPdfPages(uri)
-    }
+    private fun recognizePdf(uri: Uri, password: String?): String {
+        // Read the whole PDF once; we reuse the bytes for the encrypted-OCR
+        // fallback so we never open the (potentially encrypted) file twice.
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: throw IllegalStateException("Cannot open PDF at $uri")
 
-    /**
-     * Open the PDF with PDFBox-Android and extract the text layer if any.
-     * Returns null when the PDF has no embedded text (entirely scanned),
-     * empty string when extraction returned only whitespace.
-     */
-    private fun extractEmbeddedText(uri: Uri): String? {
-        return context.contentResolver.openInputStream(uri)?.use { input ->
-            PDDocument.load(input).use { doc ->
+        // PDDocument.load(bytes, password) throws InvalidPasswordException when
+        // the file is encrypted and the password is missing/wrong. An empty
+        // string is fine for non-encrypted PDFs (it's ignored).
+        val doc = try {
+            PDDocument.load(bytes, password ?: "")
+        } catch (e: InvalidPasswordException) {
+            throw EncryptedPdfException(wrongPassword = !password.isNullOrEmpty())
+        }
+        val wasEncrypted = doc.isEncrypted
+        try {
+            // Stage 1: pull the embedded text layer if it exists.
+            val embedded = runCatching {
                 val stripper = PDFTextStripper().apply {
                     // Sort by position so multi-column lab reports flow in
                     // visual order rather than PDF stream order.
                     sortByPosition = true
                 }
                 stripper.getText(doc)
+            }.getOrNull()
+            if (!embedded.isNullOrBlank() && hasEnoughSignal(embedded)) {
+                return embedded
             }
+            // Stage 2: scanned PDF (no/too-sparse text layer). Render each page
+            // to a bitmap and OCR it. The platform PdfRenderer cannot open
+            // encrypted PDFs, so for those we save a decrypted copy first.
+            return if (wasEncrypted) ocrPdfPagesDecrypted(doc) else ocrPdfPages(uri)
+        } finally {
+            runCatching { doc.close() }
         }
     }
 
@@ -103,6 +126,33 @@ class LabResultOcrService @Inject constructor(
     private fun ocrPdfPages(uri: Uri): String {
         val pfd = context.contentResolver.openFileDescriptor(uri, "r")
             ?: throw IllegalStateException("Cannot open PDF descriptor for $uri")
+        return renderPdfPagesAndOcr(pfd)
+    }
+
+    /**
+     * OCR an encrypted PDF: PdfRenderer can't open it directly, so strip the
+     * security and save a decrypted copy to cache, render that, then delete it.
+     * The temp file is the only point where decrypted lab data touches disk and
+     * is wiped in `finally`.
+     */
+    private fun ocrPdfPagesDecrypted(doc: PDDocument): String {
+        doc.isAllSecurityToBeRemoved = true
+        val dir = File(context.cacheDir, "lab_decrypt").apply { mkdirs() }
+        // Sweep any decrypted PDF a previous run left behind (e.g. the process
+        // was killed mid-OCR before the finally below could delete it) — we
+        // must not leave plaintext lab data lingering in cache.
+        dir.listFiles()?.forEach { it.delete() }
+        val tmp = File(dir, "decrypted-${System.currentTimeMillis()}.pdf")
+        return try {
+            doc.save(tmp)
+            val pfd = ParcelFileDescriptor.open(tmp, ParcelFileDescriptor.MODE_READ_ONLY)
+            renderPdfPagesAndOcr(pfd)
+        } finally {
+            runCatching { tmp.delete() }
+        }
+    }
+
+    private fun renderPdfPagesAndOcr(pfd: ParcelFileDescriptor): String {
         val transcript = StringBuilder()
         try {
             PdfRenderer(pfd).use { renderer ->

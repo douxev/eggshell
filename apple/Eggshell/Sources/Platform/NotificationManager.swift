@@ -36,7 +36,16 @@ enum NotificationManager {
         nameFor: (Int64) -> String
     ) async {
         guard await requestAuthorization() else { return }
-        center.removeAllPendingNotificationRequests()
+        // Remove ONLY our own medication ("sched-") requests, not every pending
+        // notification. A blanket removeAllPendingNotificationRequests() here
+        // would also wipe the appointment ("appt-") and lab ("lab-") reminders,
+        // which are owned by other schedulers and are NOT re-armed by this
+        // medication path — so a routine med action (mark-taken, add/edit) would
+        // silently destroy them. Mirror the targeted-removal the lab/appointment
+        // schedulers already use.
+        let existing = await center.pendingNotificationRequests()
+        let staleSched = existing.map(\.identifier).filter { $0.hasPrefix("sched-") }
+        if !staleSched.isEmpty { center.removePendingNotificationRequests(withIdentifiers: staleSched) }
 
         let mode = NotifPrefs.contentMode
         let highPriority = NotifPrefs.highPriority
@@ -96,6 +105,38 @@ enum NotificationManager {
                 [.year, .month, .day, .hour, .minute], from: fire)
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
             let req = UNNotificationRequest(identifier: "lab-\(r.id)", content: content, trigger: trigger)
+            try? await center.add(req)
+        }
+    }
+
+    /// One pending notification per appointment that has a future reminder.
+    /// Generic copy: the lock screen never shows which appointment / professional.
+    /// Replaces all `appt-` notifications on each call (idempotent reschedule);
+    /// call on unlock and after any appointment add/edit/delete.
+    static func scheduleAppointmentReminders(_ items: [Appointment]) async {
+        guard await requestAuthorization() else { return }
+        let pending = await center.pendingNotificationRequests()
+        let stale = pending.map(\.identifier).filter { $0.hasPrefix("appt-") }
+        if !stale.isEmpty { center.removePendingNotificationRequests(withIdentifiers: stale) }
+
+        let highPriority = NotifPrefs.highPriority
+        let now = Date()
+
+        for a in items {
+            guard let reminderMs = a.reminderAtMs else { continue }
+            let fire = Date(timeIntervalSince1970: Double(reminderMs) / 1000)
+            guard fire > now else { continue }
+
+            let content = UNMutableNotificationContent()
+            content.sound = .default
+            content.title = "Rappel de rendez-vous"
+            content.body = "Tu as un rendez-vous à venir."
+            content.interruptionLevel = highPriority ? .timeSensitive : .passive
+
+            let comps = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute], from: fire)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+            let req = UNNotificationRequest(identifier: "appt-\(a.id)", content: content, trigger: trigger)
             try? await center.add(req)
         }
     }

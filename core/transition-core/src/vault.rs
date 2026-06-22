@@ -236,6 +236,13 @@ impl Vault {
         crate::medication::set_archived(&*self.db()?, id, archived)
     }
 
+    /// Hard-delete a medication. Its dose history, schedules and treatment
+    /// changes cascade away (FKs are on). The native side must tear down any
+    /// off-vault alarms/prefs for the med's schedules *before* calling this.
+    pub fn delete_medication(&self, id: i64) -> Result<(), TransitionError> {
+        crate::medication::delete(&*self.db()?, id)
+    }
+
     /// Overwrite every editable field of a medication. The native side reads
     /// the current values, lets the user edit them, and passes the full new
     /// record back — so this is a full overwrite, not a partial patch.
@@ -295,6 +302,10 @@ impl Vault {
         to_ms: i64,
     ) -> Result<Vec<crate::medication::DoseEvent>, TransitionError> {
         crate::medication::list_dose_events_between(&*self.db()?, from_ms, to_ms)
+    }
+
+    pub fn delete_dose(&self, id: i64) -> Result<(), TransitionError> {
+        crate::medication::delete_dose(&*self.db()?, id)
     }
 
     pub fn suggest_next_injection_site(
@@ -537,6 +548,42 @@ impl Vault {
 
     pub fn delete_bleeding_entry(&self, id: i64) -> Result<(), TransitionError> {
         crate::bleeding::delete(&*self.db()?, id)
+    }
+
+    // -- Appointments / notes ("RDV") ----------------------------------------
+
+    pub fn add_appointment(
+        &self,
+        appt: crate::appointments::NewAppointment,
+    ) -> Result<crate::appointments::Appointment, TransitionError> {
+        crate::appointments::add(&*self.db()?, appt)
+    }
+
+    pub fn list_appointments(
+        &self,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<crate::appointments::Appointment>, TransitionError> {
+        crate::appointments::list(&*self.db()?, offset, limit)
+    }
+
+    pub fn get_appointment(
+        &self,
+        id: i64,
+    ) -> Result<Option<crate::appointments::Appointment>, TransitionError> {
+        crate::appointments::get(&*self.db()?, id)
+    }
+
+    pub fn update_appointment(
+        &self,
+        id: i64,
+        appt: crate::appointments::NewAppointment,
+    ) -> Result<crate::appointments::Appointment, TransitionError> {
+        crate::appointments::update(&*self.db()?, id, appt)
+    }
+
+    pub fn delete_appointment(&self, id: i64) -> Result<(), TransitionError> {
+        crate::appointments::delete(&*self.db()?, id)
     }
 
     // -- Generic blob encryption (for photos, voice clips, etc.) -------------

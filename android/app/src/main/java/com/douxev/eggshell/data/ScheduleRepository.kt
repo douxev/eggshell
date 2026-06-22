@@ -197,6 +197,31 @@ class ScheduleRepository @Inject constructor(
     }
 
     /**
+     * Tear down all OFF-vault state for a medication that's about to be
+     * hard-deleted: for each of its schedules, cancel the alarm + snooze and
+     * drop the sealed reminder mirror, priority flag, any posted notification
+     * and queued taps; then clear the medication alias.
+     *
+     * The in-vault rows (medication + cascaded doses/schedules/treatment
+     * changes) are removed separately via [MedicationRepository.delete]. Its
+     * cascade deletes the dose_schedules rows, so we MUST read the schedule ids
+     * here, BEFORE that call, or they'd be gone and the alarms orphaned.
+     */
+    suspend fun deleteMedicationCleanup(medicationId: Long) = withContext(Dispatchers.IO) {
+        val schedules = vault.requireSession().listSchedulesForMedication(medicationId, true)
+        schedules.forEach { s ->
+            alarmScheduler.cancel(s.id)
+            alarmScheduler.cancelSnooze(s.id)
+            prefs.remove(s.id)
+            priority.removeMed(s.id)
+            notifications.cancelMed(s.id)
+            pendingDoses.removeForSchedule(s.id)
+        }
+        medAlias.set(medicationId, null)
+        refreshWidget()
+    }
+
+    /**
      * Reconcile prefs + alarms from the DB. Called on vault unlock so an
      * AlarmManager wakeup that happened while we were sleeping still finds
      * consistent state.

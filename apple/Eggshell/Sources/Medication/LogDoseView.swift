@@ -175,7 +175,8 @@ struct LogDoseView: View {
     private var dateCard: some View {
         SectionCard {
             Text("Date et heure").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            DatePicker("Prise le", selection: $vm.takenAt, displayedComponents: [.date, .hourAndMinute])
+            // A dose can only have been taken in the past — cap the picker at now.
+            DatePicker("Prise le", selection: $vm.takenAt, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
                 .font(.eggBody)
                 .tint(palette.primary)
         }

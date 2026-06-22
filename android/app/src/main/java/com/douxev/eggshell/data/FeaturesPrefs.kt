@@ -58,6 +58,11 @@ class FeaturesPrefs @Inject constructor(
     private val _bleeding = MutableStateFlow(prefs.getBoolean(KEY_BLEEDING, false))
     val bleeding: StateFlow<Boolean> = _bleeding.asStateFlow()
 
+    /** Appointments / notes ("RDV"). Opt-in: appointment content (clinic,
+     *  professional) can be very identifying, so it stays hidden until enabled. */
+    private val _appointments = MutableStateFlow(prefs.getBoolean(KEY_APPOINTMENTS, false))
+    val appointments: StateFlow<Boolean> = _appointments.asStateFlow()
+
     fun setMedications(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_MEDS, enabled).apply()
         _medications.value = enabled
@@ -93,6 +98,11 @@ class FeaturesPrefs @Inject constructor(
         _bleeding.value = enabled
     }
 
+    fun setAppointments(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_APPOINTMENTS, enabled).apply()
+        _appointments.value = enabled
+    }
+
     companion object {
         // Pref-file name unchanged so existing installs keep their photo/voice
         // tab + weight-tracking choices across the rename.
@@ -104,5 +114,6 @@ class FeaturesPrefs @Inject constructor(
         private const val KEY_PHOTO = "show_photo"
         private const val KEY_VOICE = "show_voice"
         private const val KEY_BLEEDING = "feature_bleeding"
+        private const val KEY_APPOINTMENTS = "feature_appointments"
     }
 }

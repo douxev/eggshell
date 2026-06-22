@@ -78,6 +78,18 @@ class ReminderNotifications @Inject constructor(
         )
     }
 
+    /** Used by appointment alarms. Generic copy only — the professional name,
+     *  place and notes never leave the encrypted vault. */
+    fun showAppointment(appointmentId: Long) {
+        post(
+            notifId = APPOINTMENT_NOTIF_BASE + (appointmentId.toInt() and ID_MASK),
+            title = context.getString(R.string.appointment_reminder_title),
+            body = context.getString(R.string.appointment_reminder_body),
+            priority = true,
+            actions = emptyList(),
+        )
+    }
+
     private fun post(
         notifId: Int,
         title: String,
@@ -250,5 +262,6 @@ class ReminderNotifications @Inject constructor(
         private const val MARK_TAKEN_BASE = 0x0002_0000
         private const val MARK_SKIPPED_BASE = 0x0003_0000
         private const val MARK_SNOOZE_BASE = 0x0004_0000
+        private const val APPOINTMENT_NOTIF_BASE = 0x0005_0000
     }
 }

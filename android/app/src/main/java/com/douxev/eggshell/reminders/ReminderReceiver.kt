@@ -43,6 +43,7 @@ class ReminderReceiver : BroadcastReceiver() {
         when (intent.action) {
             AlarmScheduler.ACTION_REMINDER -> handleMed(context, intent)
             AlarmScheduler.ACTION_LAB_REMINDER -> handleLab(context, intent)
+            AlarmScheduler.ACTION_APPOINTMENT_REMINDER -> handleAppointment(intent)
             AlarmScheduler.ACTION_MARK_TAKEN -> handleMark(context, intent, status = "taken")
             AlarmScheduler.ACTION_MARK_SKIPPED -> handleMark(context, intent, status = "skipped")
             AlarmScheduler.ACTION_SNOOZE -> handleSnooze(context, intent)
@@ -232,5 +233,16 @@ class ReminderReceiver : BroadcastReceiver() {
         prefs.setNextDue(labId, nextDue)
         alarmScheduler.scheduleLab(labId, nextDue)
         com.douxev.eggshell.widget.EggshellWidgetProvider.broadcastRefresh(context)
+    }
+
+    /**
+     * One-shot appointment reminder. We only have the numeric id here (the
+     * appointment details live in the locked vault), so we post a generic
+     * notification and do NOT reschedule — an appointment happens once.
+     */
+    private fun handleAppointment(intent: Intent) {
+        val appointmentId = intent.getLongExtra(AlarmScheduler.EXTRA_APPOINTMENT_ID, -1L)
+        if (appointmentId < 0) return
+        notifier.showAppointment(appointmentId)
     }
 }

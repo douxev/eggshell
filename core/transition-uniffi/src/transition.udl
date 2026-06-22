@@ -166,6 +166,11 @@ interface Vault {
     [Throws=TransitionError]
     void update_medication(i64 id, NewMedication med);
 
+    // Hard-delete a medication; cascades its dose history, schedules and
+    // treatment changes. Off-vault alarms/prefs are the native side's job.
+    [Throws=TransitionError]
+    void delete_medication(i64 id);
+
     // Treatment-change audit (dose/route edits over time)
     [Throws=TransitionError]
     TreatmentChange log_treatment_change(NewTreatmentChange change);
@@ -183,6 +188,10 @@ interface Vault {
     // All dose events across meds in a time window (for the correlation view).
     [Throws=TransitionError]
     sequence<DoseEvent> list_dose_events_between(i64 from_ms, i64 to_ms);
+
+    // Delete a single recorded dose by id.
+    [Throws=TransitionError]
+    void delete_dose(i64 id);
 
     [Throws=TransitionError]
     string? suggest_next_injection_site(i64 medication_id, i64 history_depth);
@@ -289,6 +298,22 @@ interface Vault {
 
     [Throws=TransitionError]
     void delete_bleeding_entry(i64 id);
+
+    // Appointments / notes ("RDV")
+    [Throws=TransitionError]
+    Appointment add_appointment(NewAppointment appt);
+
+    [Throws=TransitionError]
+    sequence<Appointment> list_appointments(i64 offset, i64 limit);
+
+    [Throws=TransitionError]
+    Appointment? get_appointment(i64 id);
+
+    [Throws=TransitionError]
+    Appointment update_appointment(i64 id, NewAppointment appt);
+
+    [Throws=TransitionError]
+    void delete_appointment(i64 id);
 
     // Generic blob encryption (photos, future audio).
     [Throws=TransitionError]
@@ -455,4 +480,27 @@ dictionary NewBleedingEntry {
     i64 at_ms;
     boolean? is_spotting;
     string? free_text;
+};
+
+// -- Appointments / notes ("RDV") --------------------------------------------
+
+dictionary Appointment {
+    i64 id;
+    i64 at_ms;
+    string? place;
+    string? professional_name;
+    string? professional_role;
+    string? notes;
+    string? todo;
+    i64? reminder_at_ms;
+};
+
+dictionary NewAppointment {
+    i64 at_ms;
+    string? place;
+    string? professional_name;
+    string? professional_role;
+    string? notes;
+    string? todo;
+    i64? reminder_at_ms;
 };

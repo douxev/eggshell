@@ -26,6 +26,9 @@ enum Route: Hashable {
 
     case addBleeding(id: Int64?)
 
+    case addAppointment(id: Int64?)
+    case summary
+
     case addHormone
     case hormoneUnits
     case importLab
@@ -56,6 +59,9 @@ func routeDestination(_ route: Route) -> some View {
     case .metricEditor(let domain):  MetricEditorView(domain: domain)
 
     case .addBleeding(let id):       AddBleedingEntryView(entryId: id)
+
+    case .addAppointment(let id):    AddAppointmentView(entryId: id)
+    case .summary:                   SummaryView()
 
     case .addHormone:                AddHormoneMeasurementView()
     case .hormoneUnits:              HormoneUnitsView()

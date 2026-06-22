@@ -175,6 +175,21 @@ pub fn set_archived(db: &Database, id: i64, archived: bool) -> Result<(), Transi
     Ok(())
 }
 
+/// Hard-delete a medication and everything that references it.
+///
+/// Foreign keys are ON for every connection (see [`crate::db`]'s
+/// `enable_foreign_keys`), so `dose_events`, `dose_schedules` and
+/// `treatment_changes` rows cascade away automatically — no manual child
+/// deletes needed. Off-vault state (alarms, sealed reminder prefs) is the
+/// native side's responsibility to clean up before calling this. No-op if the
+/// row is already gone.
+pub fn delete(db: &Database, id: i64) -> Result<(), TransitionError> {
+    db.conn()
+        .execute("DELETE FROM medications WHERE id = ?1", [id])
+        .map_err(map_sql)?;
+    Ok(())
+}
+
 // -- DoseEvent log --------------------------------------------------------------
 
 pub fn log_dose(db: &Database, d: NewDoseEvent) -> Result<DoseEvent, TransitionError> {
@@ -257,6 +272,15 @@ pub fn list_dose_events_between(
         .collect::<Result<Vec<_>, _>>()
         .map_err(map_sql)?;
     Ok(rows)
+}
+
+/// Delete a single recorded dose by id. No-op if the row is already gone.
+/// Used by the dose-history "remove this intake" action.
+pub fn delete_dose(db: &Database, id: i64) -> Result<(), TransitionError> {
+    db.conn()
+        .execute("DELETE FROM dose_events WHERE id = ?1", [id])
+        .map_err(map_sql)?;
+    Ok(())
 }
 
 // -- Treatment-change audit -----------------------------------------------------
@@ -601,6 +625,76 @@ mod tests {
         // it via Connection but we double-check the cascade actually happens.
         db.conn().execute("DELETE FROM medications WHERE id = ?1", [m.id]).unwrap();
         assert!(list_doses(&db, m.id, 0, 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn delete_dose_removes_only_that_event() {
+        let (_k, db) = fresh_db();
+        let m = add(&db, sample_medication("Estradiol"), 1_000).unwrap();
+        let mut ids = Vec::new();
+        for i in 0..3 {
+            let ev = log_dose(
+                &db,
+                NewDoseEvent {
+                    medication_id: m.id,
+                    taken_at_ms: 10_000 + i * 1_000,
+                    dose: None,
+                    dose_unit: None,
+                    route: None,
+                    injection_site: None,
+                    notes: None,
+                    status: "taken".into(),
+                    scheduled_at_ms: None,
+                    schedule_id: None,
+                },
+            )
+            .unwrap();
+            ids.push(ev.id);
+        }
+        delete_dose(&db, ids[1]).unwrap();
+        let remaining = list_doses(&db, m.id, 0, 10).unwrap();
+        assert_eq!(remaining.len(), 2);
+        assert!(remaining.iter().all(|e| e.id != ids[1]));
+        // Deleting a non-existent id is a no-op, not an error.
+        delete_dose(&db, 999_999).unwrap();
+    }
+
+    #[test]
+    fn delete_medication_cascades_doses_and_schedules() {
+        let (_k, db) = fresh_db();
+        let m = add(&db, sample_medication("Estradiol"), 1_000).unwrap();
+        log_dose(
+            &db,
+            NewDoseEvent {
+                medication_id: m.id,
+                taken_at_ms: 10_000,
+                dose: None,
+                dose_unit: None,
+                route: None,
+                injection_site: None,
+                notes: None,
+                status: "taken".into(),
+                scheduled_at_ms: None,
+                schedule_id: None,
+            },
+        )
+        .unwrap();
+        log_treatment_change(
+            &db,
+            NewTreatmentChange {
+                medication_id: m.id,
+                at_ms: 11_000,
+                field: "dose".into(),
+                old_value: Some("2".into()),
+                new_value: Some("4".into()),
+                note: None,
+            },
+        )
+        .unwrap();
+        delete(&db, m.id).unwrap();
+        assert!(get(&db, m.id).unwrap().is_none());
+        assert!(list_doses(&db, m.id, 0, 10).unwrap().is_empty());
+        assert!(list_treatment_changes(&db, 0, i64::MAX).unwrap().is_empty());
     }
 
     #[test]

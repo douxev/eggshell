@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bloodtype
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.MonitorWeight
@@ -61,6 +62,7 @@ class FeaturesViewModel @Inject constructor(
     val photoTab: StateFlow<Boolean> = prefs.photoTab
     val voiceTab: StateFlow<Boolean> = prefs.voiceTab
     val bleeding: StateFlow<Boolean> = prefs.bleeding
+    val appointments: StateFlow<Boolean> = prefs.appointments
 
     fun setMedications(v: Boolean) = prefs.setMedications(v)
     fun setJournal(v: Boolean) = prefs.setJournal(v)
@@ -69,6 +71,7 @@ class FeaturesViewModel @Inject constructor(
     fun setPhotoTab(v: Boolean) = prefs.setPhotoTab(v)
     fun setVoiceTab(v: Boolean) = prefs.setVoiceTab(v)
     fun setBleeding(v: Boolean) = prefs.setBleeding(v)
+    fun setAppointments(v: Boolean) = prefs.setAppointments(v)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -84,6 +87,7 @@ fun FeaturesScreen(
     val photo by vm.photoTab.collectAsState()
     val voice by vm.voiceTab.collectAsState()
     val bleeding by vm.bleeding.collectAsState()
+    val appointments by vm.appointments.collectAsState()
 
     Scaffold(
         topBar = {
@@ -174,6 +178,14 @@ fun FeaturesScreen(
                             sub = stringResource(R.string.feature_bleeding_sub),
                             checked = bleeding,
                             onCheckedChange = vm::setBleeding,
+                            showDivider = true,
+                        )
+                        FeatureSwitchRow(
+                            icon = Icons.Filled.Event,
+                            title = stringResource(R.string.feature_appointments_title),
+                            sub = stringResource(R.string.feature_appointments_sub),
+                            checked = appointments,
+                            onCheckedChange = vm::setAppointments,
                             showDivider = false,
                         )
                     }
