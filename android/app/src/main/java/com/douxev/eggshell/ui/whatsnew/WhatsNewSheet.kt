@@ -60,7 +60,7 @@ data class WhatsNewRelease(
  */
 object WhatsNewCatalog {
     val LATEST: WhatsNewRelease = WhatsNewRelease(
-        versionCode = 10,
+        versionCode = 11,
         versionName = "0.1.0",
         title = "Quoi de neuf",
         highlights = listOf(
