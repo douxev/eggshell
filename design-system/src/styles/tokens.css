@@ -1,0 +1,239 @@
+/* ============================================================
+   Eggshell — Material 3 (expressive) design tokens
+   Lavender palette · light + dark. This is the base layer: every
+   entry in themes.css overrides a subset of these on top.
+
+   Ported 1:1 from the design bundle's m3.css, which is also the
+   source the Android app's Compose theme was ported from.
+   ============================================================ */
+
+/* ---- Self-hosted fonts (subset: latin + the app's icon set) ---- */
+@font-face {
+  font-family: 'Roboto Flex';
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url('./fonts/roboto-flex.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Material Symbols Rounded';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: url('./fonts/material-symbols-rounded.woff2') format('woff2');
+}
+
+/* ============================================================
+   Brand — sampled from the shipped launcher icon.
+   These are constants: no palette overrides them, so the mark
+   reads the same in Gruvbox as it does in Lavender.
+   ============================================================ */
+:root {
+  --brand-egg:            #F4AA7E;
+  --brand-egg-shade:      #F29266;
+  --brand-egg-highlight:  #F9CBAC;
+  --brand-shell:          #FCF6D0;
+  --brand-shell-bright:   #FCF7EE;
+  --brand-shell-dim:      #FCF6C8;
+}
+
+/* ---- LIGHT (default) ---- */
+:root {
+  --primary:                    #6A4FA3;
+  --on-primary:                 #FFFFFF;
+  --primary-container:          #EBDDFF;
+  --on-primary-container:       #250059;
+  --primary-fixed-dim:          #D4BBFF;
+  --inverse-primary:            #D4BBFF;
+
+  --secondary:                  #635B70;
+  --on-secondary:               #FFFFFF;
+  --secondary-container:        #E9DEF8;
+  --on-secondary-container:     #1F182B;
+
+  --tertiary:                   #98455F;
+  --on-tertiary:                #FFFFFF;
+  --tertiary-container:         #FFD9E2;
+  --on-tertiary-container:      #3E0721;
+
+  --error:                      #BA1A1A;
+  --on-error:                   #FFFFFF;
+  --error-container:            #FFDAD6;
+  --on-error-container:         #410002;
+
+  --success:                    #3F6A3F;
+  --success-container:          #C2F0BF;
+  --on-success-container:       #072100;
+
+  --background:                 #FDF7FF;
+  --on-background:              #1C1B1F;
+  --surface:                    #FDF7FF;
+  --surface-dim:                #DDD8E0;
+  --surface-bright:             #FDF7FF;
+  --surface-variant:            #E7E0EC;
+  --surface-container-lowest:   #FFFFFF;
+  --surface-container-low:      #F7F1FB;
+  --surface-container:          #F2EBF6;
+  --surface-container-high:     #ECE5F0;
+  --surface-container-highest:  #E6DFEA;
+
+  --on-surface:                 #1C1B1F;
+  --on-surface-variant:         #49454E;
+  --outline:                    #7A757F;
+  --outline-variant:            #CBC4CF;
+
+  --surface-tint:               #6A4FA3;
+  --inverse-surface:            #322F35;
+  --inverse-on-surface:         #F5EFF6;
+
+  --scrim:                      rgba(0,0,0,0.4);
+  --shadow:                     rgba(0,0,0,0.20);
+
+  --chart-grid:                 rgba(73,69,78,0.14);
+  --frame-bg:                   #FDF7FF;
+  --frame-border:               #C9C4CE;
+
+  /* tonal helpers for state layers */
+  --state-hover:                rgba(106,79,163,0.08);
+  --state-press:                rgba(106,79,163,0.12);
+}
+
+/* ---- DARK ---- */
+[data-theme="dark"] {
+  --primary:                    #D4BBFF;
+  --on-primary:                 #3B1C71;
+  --primary-container:          #523689;
+  --on-primary-container:       #EBDDFF;
+  --primary-fixed-dim:          #D4BBFF;
+  --inverse-primary:            #6A4FA3;
+
+  --secondary:                  #CDC2DB;
+  --on-secondary:               #342D41;
+  --secondary-container:        #4B4358;
+  --on-secondary-container:     #E9DEF8;
+
+  --tertiary:                   #FFB1C7;
+  --on-tertiary:                #5E1133;
+  --tertiary-container:         #7B2949;
+  --on-tertiary-container:      #FFD9E2;
+
+  --error:                      #FFB4AB;
+  --on-error:                   #690005;
+  --error-container:            #93000A;
+  --on-error-container:         #FFDAD6;
+
+  --success:                    #A6D3A0;
+  --success-container:          #265225;
+  --on-success-container:       #C2F0BF;
+
+  --background:                 #141218;
+  --on-background:              #E6E0E9;
+  --surface:                    #141218;
+  --surface-dim:                #141218;
+  --surface-bright:             #3B383E;
+  --surface-variant:            #49454E;
+  --surface-container-lowest:   #0E0D13;
+  --surface-container-low:      #1C1B20;
+  --surface-container:          #211F25;
+  --surface-container-high:     #2B292F;
+  --surface-container-highest:  #36343A;
+
+  --on-surface:                 #E6E0E9;
+  --on-surface-variant:         #CAC4CF;
+  --outline:                    #948F99;
+  --outline-variant:            #49454E;
+
+  --surface-tint:               #D4BBFF;
+  --inverse-surface:            #E6E0E9;
+  --inverse-on-surface:         #322F35;
+
+  --scrim:                      rgba(0,0,0,0.55);
+  --shadow:                     rgba(0,0,0,0.45);
+
+  --chart-grid:                 rgba(202,196,207,0.14);
+  --frame-bg:                   #141218;
+  --frame-border:               #2A282E;
+
+  --state-hover:                rgba(212,187,255,0.08);
+  --state-press:                rgba(212,187,255,0.14);
+}
+
+/* ============================================================
+   Root wrapper — surfaces the tokens onto real pixels.
+   Applied by <EggshellProvider>; also usable as a bare class.
+   ============================================================ */
+.eggshell {
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: 'Roboto Flex', 'Roboto', system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.eggshell *,
+.eggshell *::before,
+.eggshell *::after { box-sizing: border-box; }
+
+.eggshell button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  padding: 0;
+}
+
+/* ============================================================
+   Material Symbols Rounded
+   ============================================================ */
+.msr {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  user-select: none;
+}
+
+.msr.fill { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+
+/* ============================================================
+   Material 3 type scale
+   ============================================================ */
+.t-display-l  { font-size: 52px; line-height: 60px; font-weight: 400; letter-spacing: -.25px; }
+.t-display-s  { font-size: 34px; line-height: 42px; font-weight: 500; letter-spacing: 0; }
+.t-headline-l { font-size: 30px; line-height: 38px; font-weight: 400; }
+.t-headline   { font-size: 26px; line-height: 34px; font-weight: 500; letter-spacing: 0; }
+.t-headline-s { font-size: 22px; line-height: 28px; font-weight: 500; }
+.t-title-l    { font-size: 20px; line-height: 26px; font-weight: 500; letter-spacing: 0; }
+.t-title      { font-size: 17px; line-height: 24px; font-weight: 600; letter-spacing: .1px; }
+.t-title-s    { font-size: 15px; line-height: 20px; font-weight: 600; letter-spacing: .1px; }
+.t-body       { font-size: 15px; line-height: 22px; font-weight: 400; letter-spacing: .15px; }
+.t-body-s     { font-size: 13px; line-height: 18px; font-weight: 400; letter-spacing: .2px; }
+.t-label      { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: .1px; }
+.t-label-s    { font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: .5px; }
+
+/* ============================================================
+   Elevation
+   ============================================================ */
+.elev-0 { box-shadow: none; }
+.elev-1 { box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 1px 3px 1px rgba(0,0,0,.10); }
+.elev-2 { box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 2px 6px 2px rgba(0,0,0,.12); }
+.elev-3 { box-shadow: 0 4px 8px 3px rgba(0,0,0,.12), 0 1px 3px rgba(0,0,0,.20); }
+
+/* ============================================================
+   Scrollbar (subtle) + motion
+   ============================================================ */
+.scroll::-webkit-scrollbar { width: 0; height: 0; }
+.scroll { scrollbar-width: none; }
+
+@keyframes m3pop  { from { transform: scale(.96); } to { transform: scale(1); } }
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
