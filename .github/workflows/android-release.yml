@@ -71,9 +71,12 @@ jobs:
           EGGSHELL_KEYSTORE_PASSWORD: ${{ secrets.EGGSHELL_KEYSTORE_PASSWORD }}
           EGGSHELL_KEY_ALIAS: ${{ secrets.EGGSHELL_KEY_ALIAS }}
           EGGSHELL_KEY_PASSWORD: ${{ secrets.EGGSHELL_KEY_PASSWORD }}
+        # -Dorg.gradle.java.home overrides the machine-specific JDK pin in
+        # android/gradle.properties (a local path that doesn't exist on the
+        # runner); setup-java's JAVA_HOME is the right JDK here.
         run: |
           cd android
-          ./gradlew --no-daemon assembleRelease
+          ./gradlew --no-daemon -Dorg.gradle.java.home="$JAVA_HOME" assembleRelease
 
       - name: Version-stamp artifact
         id: meta
