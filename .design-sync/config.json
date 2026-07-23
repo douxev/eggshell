@@ -1,0 +1,23 @@
+{
+  "projectId": "2181ce99-6606-4569-a0ec-56ff9bc1371c",
+  "pkg": "@eggshell/design-system",
+  "globalName": "EggshellDS",
+  "shape": "package",
+  "buildCmd": "npm --prefix design-system run build",
+  "cssEntry": "dist/styles.css",
+  "docsDir": "docs",
+  "readmeHeader": ".design-sync/conventions.md",
+  "provider": {
+    "component": "EggshellProvider",
+    "props": { "fill": false }
+  },
+  "overrides": {
+    "PhoneFrame": { "cardMode": "single", "viewport": "460x920" },
+    "ProgressRing": { "cardMode": "column" },
+    "NavBar": { "cardMode": "column" },
+    "ScreenHeader": { "cardMode": "column" },
+    "StatusBar": { "cardMode": "column" },
+    "GestureNav": { "cardMode": "column" },
+    "EggshellProvider": { "cardMode": "column" }
+  }
+}
