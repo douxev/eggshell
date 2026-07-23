@@ -29,7 +29,10 @@ struct HormoneUnitsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, Spacing.xs)
 
-                ForEach(HormoneCatalog.kinds, id: \.self) { hormone in
+                // Vitals (BP pair, NFS) carry exactly one clinical unit — no
+                // display preference to offer, same as Android's screen
+                // skipping kinds without a unit-choice entry.
+                ForEach(HormoneCatalog.kinds.filter { !vitalsKinds.contains($0) }, id: \.self) { hormone in
                     hormoneCard(hormone)
                 }
             }
@@ -69,6 +72,10 @@ struct HormoneUnitsView: View {
         if let u = defaultUnit, !u.isEmpty { return "Par défaut · \(u)" }
         return "Par défaut"
     }
+
+    private let vitalsKinds: Set<String> = [
+        "bp_systolic", "bp_diastolic", "hemoglobin", "hematocrit",
+    ]
 
     // Clinically meaningful units per hormone, from the shared catalog. "other"
     // exposes the full HormoneCatalog.units list (sans the catch-all "other").

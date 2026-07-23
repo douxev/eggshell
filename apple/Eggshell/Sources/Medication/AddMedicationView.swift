@@ -280,8 +280,9 @@ struct AddMedicationView: View {
 
 // Medication accent color <-> stored Int. Stored as opaque ARGB (0xFFRRGGBB) so
 // Android's `Color(it.toInt())` (which reads ARGB) renders the same swatch from
-// the shared DB.
-private enum MedColor {
+// the shared DB. Internal (not private): the journal calendar and the hormones
+// chart reuse `color(fromArgb:)` to tint per-med dose markers.
+enum MedColor {
     static func argb(from color: Color) -> Int64 {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         UIColor(color).getRed(&r, green: &g, blue: &b, alpha: &a)

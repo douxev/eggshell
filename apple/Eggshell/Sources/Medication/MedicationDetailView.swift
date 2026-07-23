@@ -250,6 +250,9 @@ struct MedicationDetailView: View {
     private func scheduleRow(_ s: DoseSchedule) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(NextDueCalculator.describe(s)).font(.eggCallout).foregroundStyle(palette.onSurface)
+            if let label = s.label, !label.isEmpty {
+                Text("« \(label) »").font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.7))
+            }
             Text("Prochaine : \(formatDateTime(s.nextDueAtMs))")
                 .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
             if !s.active {
@@ -260,6 +263,11 @@ struct MedicationDetailView: View {
                     if let session = app.session {
                         Task { await vm.toggleActive(s, session: session, app: app) }
                     }
+                }
+                .glassButton().tint(palette.primary)
+
+                Button("Modifier") {
+                    router.push(.editSchedule(medId: medId, scheduleId: s.id))
                 }
                 .glassButton().tint(palette.primary)
 
@@ -300,6 +308,14 @@ struct MedicationDetailView: View {
                 if let dose = d.dose {
                     Text(doseLabel(dose, d.doseUnit)).font(.eggCallout).foregroundStyle(palette.primary)
                 }
+                Button {
+                    router.push(.editDose(medId: medId, doseId: d.id))
+                } label: {
+                    Image(systemName: "pencil").font(.eggCaption)
+                }
+                .buttonStyle(.borderless)
+                .tint(palette.primary)
+                .accessibilityLabel("Modifier cette prise")
                 Button {
                     doseToDelete = d
                 } label: {

@@ -78,9 +78,11 @@ enum NotificationManager {
         }
     }
 
-    /// One-shot lab/photo/voice reminders. One pending notification per enabled
-    /// reminder, at its next due date. Generic copy: the lock screen never shows
-    /// which bilan/photo/voix is due.
+    /// One-shot lab/photo/voice/journal reminders. One pending notification per
+    /// enabled reminder, at its next due date. The user's free-text label is
+    /// deliberately NOT included — the lock screen would otherwise show
+    /// "Estradiol", "T4 libre"… in the clear. Only the category picks a (still
+    /// innocuous) title; the body stays generic. Same stance as Android.
     static func scheduleLabReminders(_ items: [LabReminder]) async {
         guard await requestAuthorization() else { return }
         // Drop only the lab identifiers we own, leaving med reminders intact.
@@ -97,7 +99,7 @@ enum NotificationManager {
 
             let content = UNMutableNotificationContent()
             content.sound = .default
-            content.title = "Rappel"
+            content.title = labTitle(for: r.kind)
             content.body = "Un rappel est arrivé à échéance."
             content.interruptionLevel = highPriority ? .timeSensitive : .passive
 
@@ -106,6 +108,18 @@ enum NotificationManager {
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
             let req = UNNotificationRequest(identifier: "lab-\(r.id)", content: content, trigger: trigger)
             try? await center.add(req)
+        }
+    }
+
+    /// Per-category notification title, mirroring android ReminderNotifications
+    /// .showLab. Innocuous by design — never the user's own label.
+    private static func labTitle(for kind: String) -> String {
+        switch kind {
+        case LabReminderKind.photo:   return "Photo à prendre"
+        case LabReminderKind.voice:   return "Enregistrement à faire"
+        case LabReminderKind.journal: return "Moment journal"
+        case LabReminderKind.lab:     return "Analyse à prévoir"
+        default:                      return "Rappel"
         }
     }
 
@@ -162,17 +176,22 @@ enum NotificationManager {
         ]
         content.interruptionLevel = highPriority ? .timeSensitive : .passive
 
+        // The reminder's own free text ("Aller chercher le traitement") wins
+        // over the med name/alias when the mode allows showing anything at
+        // all — same resolution as Android's ScheduleRepository.
+        let customLabel = s.label?.isEmpty == false ? s.label : nil
         switch mode {
         case .generic:
+            // Privacy default: nothing identifying, not even the custom label.
             content.title = "Rappel"
             content.body = "C'est l'heure de votre prise."
         case .name:
-            content.title = nameFor(s.medicationId)
+            content.title = customLabel ?? nameFor(s.medicationId)
             content.body = "C'est l'heure de votre prise."
         case .alias:
             // Fall back to generic copy when no alias is set — never the real name.
-            if let alias = NotifPrefs.alias(for: s.medicationId) {
-                content.title = alias
+            if let label = customLabel ?? NotifPrefs.alias(for: s.medicationId) {
+                content.title = label
                 content.body = "C'est l'heure de votre prise."
             } else {
                 content.title = "Rappel"

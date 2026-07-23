@@ -65,12 +65,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
+import com.douxev.eggshell.data.BleedingRepository
 import com.douxev.eggshell.data.JournalRepository
+import com.douxev.eggshell.data.MedicationRepository
 import uniffi.transition.JournalEntry
 
 @HiltViewModel
 class JournalListViewModel @Inject constructor(
     private val repo: JournalRepository,
+    private val meds: MedicationRepository,
+    private val bleedingRepo: BleedingRepository,
 ) : ViewModel() {
     private val _items = MutableStateFlow<List<JournalEntry>>(emptyList())
     val items: StateFlow<List<JournalEntry>> = _items.asStateFlow()
@@ -78,12 +82,55 @@ class JournalListViewModel @Inject constructor(
     private val _selectedDate = MutableStateFlow<LocalDate?>(null)
     val selectedDate: StateFlow<LocalDate?> = _selectedDate.asStateFlow()
 
+    /** Calendar overlays: bleeding days (continuous band) + medication days
+     *  (per-med colored dots), so dose↔mood correlations show at a glance. */
+    data class Overlays(
+        val bleedingDays: Set<LocalDate> = emptySet(),
+        val medsByDay: Map<LocalDate, List<Long>> = emptyMap(),
+        val medColors: Map<Long, Long> = emptyMap(),
+        val medNames: Map<Long, String> = emptyMap(),
+    )
+
+    private val _overlays = MutableStateFlow(Overlays())
+    val overlays: StateFlow<Overlays> = _overlays.asStateFlow()
+
     init { refresh() }
 
     fun refresh() {
         viewModelScope.launch {
             _items.value = runCatching { repo.list(0, 200) }.getOrDefault(emptyList())
                 .sortedByDescending { it.atMs }
+        }
+    }
+
+    /** (Re)load the overlay data for the month the calendar is showing. */
+    fun loadOverlays(month: YearMonth) {
+        viewModelScope.launch {
+            val zone = ZoneId.systemDefault()
+            val from = month.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            val to = month.atEndOfMonth().plusDays(1).atStartOfDay(zone)
+                .toInstant().toEpochMilli() - 1
+            val doses = runCatching { meds.listDoseEventsBetween(from, to) }
+                .getOrDefault(emptyList())
+                .filter { it.status == "taken" }
+            val medList = runCatching { meds.list(includeArchived = true) }
+                .getOrDefault(emptyList())
+            // Bleeding entries are newest-first; one page comfortably covers
+            // years of cycle history.
+            val bleeding = runCatching { bleedingRepo.list(0, 1000) }.getOrDefault(emptyList())
+            _overlays.value = Overlays(
+                bleedingDays = bleeding
+                    .map { java.time.Instant.ofEpochMilli(it.atMs).atZone(zone).toLocalDate() }
+                    .toSet(),
+                medsByDay = doses
+                    .groupBy(
+                        { java.time.Instant.ofEpochMilli(it.takenAtMs).atZone(zone).toLocalDate() },
+                        { it.medicationId },
+                    )
+                    .mapValues { (_, ids) -> ids.distinct() },
+                medColors = medList.mapNotNull { m -> m.color?.let { m.id to it } }.toMap(),
+                medNames = medList.associate { it.id to it.name },
+            )
         }
     }
 
@@ -103,11 +150,13 @@ fun JournalListScreen(
 ) {
     val items by vm.items.collectAsState()
     val selectedDate by vm.selectedDate.collectAsState()
+    val overlays by vm.overlays.collectAsState()
     LaunchedEffect(Unit) { vm.refresh() }
 
     val zone = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zone) }
     var visibleMonth by remember { mutableStateOf(YearMonth.from(today)) }
+    LaunchedEffect(visibleMonth) { vm.loadOverlays(visibleMonth) }
     val byDate: Map<LocalDate, List<JournalEntry>> = remember(items) {
         items.groupBy {
             java.time.Instant.ofEpochMilli(it.atMs).atZone(zone).toLocalDate()
@@ -166,6 +215,7 @@ fun JournalListScreen(
                     today = today,
                     selected = selectedDate,
                     byDate = byDate,
+                    overlays = overlays,
                     onPrevMonth = { visibleMonth = visibleMonth.minusMonths(1) },
                     onNextMonth = { visibleMonth = visibleMonth.plusMonths(1) },
                     onSelect = { date -> vm.selectDate(if (date == selectedDate) null else date) },
@@ -217,14 +267,18 @@ fun JournalListScreen(
  * Compact monthly calendar grid: weekday header + 6×7 day cells. Tapping a
  * day selects it; tapping the same day again unselects. Prev/next arrows in
  * the title row let the user paginate through months. Days with entries
- * show a small mood-tinted dot below the number.
+ * show a small mood-tinted dot below the number; bleeding days carry a
+ * continuous band and treatment days per-med colored dots (see the legend
+ * under the grid).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MonthCalendar(
     yearMonth: YearMonth,
     today: LocalDate,
     selected: LocalDate?,
     byDate: Map<LocalDate, List<JournalEntry>>,
+    overlays: JournalListViewModel.Overlays,
     onPrevMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onSelect: (LocalDate) -> Unit,
@@ -303,6 +357,12 @@ private fun MonthCalendar(
             val totalCells = leadingBlanks + daysInMonth
             val rows = (totalCells + 6) / 7
 
+            val monthDays = (1..daysInMonth).map { yearMonth.atDay(it) }
+            val monthHasBleeding = monthDays.any { it in overlays.bleedingDays }
+            val monthMedIds = monthDays
+                .flatMap { overlays.medsByDay[it].orEmpty() }
+                .distinct()
+
             for (r in 0 until rows) {
                 Row(modifier = Modifier.fillMaxWidth()) {
                     for (c in 0..6) {
@@ -313,12 +373,21 @@ private fun MonthCalendar(
                             val entries = byDate[date].orEmpty()
                             val avgMood = entries.mapNotNull { it.mood?.toInt() }
                                 .takeIf { it.isNotEmpty() }?.average()
+                            val bleeding = date in overlays.bleedingDays
                             DayGridCell(
                                 date = date,
                                 isToday = date == today,
                                 isSelected = selected == date,
                                 hasEntries = entries.isNotEmpty(),
                                 avgMood = avgMood,
+                                bleeding = bleeding,
+                                bleedContinuesLeft = bleeding &&
+                                    date.minusDays(1) in overlays.bleedingDays,
+                                bleedContinuesRight = bleeding &&
+                                    date.plusDays(1) in overlays.bleedingDays,
+                                medDotColors = overlays.medsByDay[date].orEmpty().map { medId ->
+                                    overlays.medColors[medId]?.let { Color(it.toInt()) }
+                                },
                                 modifier = Modifier.weight(1f),
                                 onClick = { onSelect(date) },
                             )
@@ -328,7 +397,49 @@ private fun MonthCalendar(
                     }
                 }
             }
+
+            // Legend — only for what the visible month actually shows.
+            if (monthHasBleeding || monthMedIds.isNotEmpty()) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                ) {
+                    if (monthHasBleeding) {
+                        LegendItem(
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.35f),
+                            label = stringResource(R.string.journal_legend_bleeding),
+                            band = true,
+                        )
+                    }
+                    monthMedIds.forEach { medId ->
+                        LegendItem(
+                            color = overlays.medColors[medId]?.let { Color(it.toInt()) }
+                                ?: MaterialTheme.colorScheme.tertiary,
+                            label = overlays.medNames[medId] ?: "",
+                            band = false,
+                        )
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun LegendItem(color: Color, label: String, band: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(width = if (band) 14.dp else 6.dp, height = 6.dp)
+                .clip(RoundedCornerShape(50))
+                .background(color),
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp),
+        )
     }
 }
 
@@ -339,6 +450,11 @@ private fun DayGridCell(
     isSelected: Boolean,
     hasEntries: Boolean,
     avgMood: Double?,
+    bleeding: Boolean,
+    bleedContinuesLeft: Boolean,
+    bleedContinuesRight: Boolean,
+    /** One entry per medication taken that day; null = med without a color. */
+    medDotColors: List<Color?>,
     modifier: Modifier,
     onClick: () -> Unit,
 ) {
@@ -352,41 +468,87 @@ private fun DayGridCell(
         isToday -> MaterialTheme.colorScheme.onPrimaryContainer
         else -> MaterialTheme.colorScheme.onSurface
     }
-    Box(
-        modifier = modifier
-            .aspectRatio(1f)
-            .padding(2.dp)
-            .clip(RoundedCornerShape(50))
-            .background(container)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(1.dp),
-        ) {
-            Text(
-                date.dayOfMonth.toString(),
-                style = MaterialTheme.typography.bodyMedium,
-                color = onContainer,
-                fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
-            )
-            val dotColor = when {
-                !hasEntries -> Color.Transparent
-                avgMood == null -> if (isSelected) MaterialTheme.colorScheme.onPrimary
-                else MaterialTheme.colorScheme.primary
-                else -> {
-                    val intensity = (avgMood / 10.0).coerceIn(0.3, 1.0).toFloat()
-                    if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = intensity)
-                    else MaterialTheme.colorScheme.primary.copy(alpha = intensity)
-                }
-            }
+    // Outer box spans the full column width so the bleeding band can run
+    // edge-to-edge and read as one continuous line across adjacent days.
+    Box(modifier = modifier.aspectRatio(1f)) {
+        if (bleeding) {
             Box(
                 modifier = Modifier
-                    .size(5.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(dotColor),
+                    .align(Alignment.Center)
+                    .fillMaxWidth()
+                    .height(30.dp)
+                    .padding(
+                        start = if (bleedContinuesLeft) 0.dp else 4.dp,
+                        end = if (bleedContinuesRight) 0.dp else 4.dp,
+                    )
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = if (bleedContinuesLeft) 0.dp else 15.dp,
+                            bottomStart = if (bleedContinuesLeft) 0.dp else 15.dp,
+                            topEnd = if (bleedContinuesRight) 0.dp else 15.dp,
+                            bottomEnd = if (bleedContinuesRight) 0.dp else 15.dp,
+                        )
+                    )
+                    .background(MaterialTheme.colorScheme.error.copy(alpha = 0.18f)),
             )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(2.dp)
+                .clip(RoundedCornerShape(50))
+                .background(container)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                Text(
+                    date.dayOfMonth.toString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = onContainer,
+                    fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
+                )
+                val dotColor = when {
+                    !hasEntries -> Color.Transparent
+                    avgMood == null -> if (isSelected) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.primary
+                    else -> {
+                        val intensity = (avgMood / 10.0).coerceIn(0.3, 1.0).toFloat()
+                        if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = intensity)
+                        else MaterialTheme.colorScheme.primary.copy(alpha = intensity)
+                    }
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(dotColor),
+                    )
+                    // Up to three treatment dots keep the cell readable; a
+                    // fourth med collapses into the legend below the grid.
+                    medDotColors.take(3).forEach { medColor ->
+                        Box(
+                            modifier = Modifier
+                                .size(4.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(
+                                    medColor ?: if (isSelected) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.tertiary
+                                    }
+                                ),
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -43,13 +43,39 @@ object LabResultParser {
         ),
         "prolactin" to listOf("prolactine", "prolactin"),
         "shbg" to listOf("\\bSHBG\\b", "sex\\s*hormone\\s*binding\\s*globulin"),
+        // NFS values, tracked alongside hormone draws for HRT/testo follow-up.
+        // The negative lookaheads keep "Hémoglobine glyquée" (HbA1c) out —
+        // it's a different analyte, in %, that would otherwise shadow Hb.
+        "hemoglobin" to listOf(
+            "h[ée]moglobine(?!\\s*(?:glyqu|a1c))", "hemoglobin(?!\\s*a1c)", "\\bHGB\\b", "\\bHb\\b(?!\\s*A1c)",
+        ),
+        "hematocrit" to listOf("h[ée]matocrite", "hematocrit", "\\bHCT\\b", "\\bHte\\b"),
+        // Pseudo-kind: expanded into bp_systolic + bp_diastolic by parse().
+        // (?<!hyper) keeps "suivi pour hypertension artérielle" (a history
+        // note, no reading) from triggering the BP branch.
+        BP to listOf(
+            "(?<!hyper)tension\\s*art[ée]rielle", "pression\\s*art[ée]rielle", "blood\\s*pressure",
+        ),
     ).mapValues { (_, patterns) -> patterns.map { Regex(it, RegexOption.IGNORE_CASE) } }
+
+    /** Pseudo-kind for the paired blood-pressure reading. */
+    private const val BP = "bp"
 
     /** A number (decimal point or comma) followed by an allowed unit token. */
     private val VALUE_UNIT_REGEX = Regex(
         "(\\d{1,5}[.,]?\\d{0,3})\\s*" +
             "(pg/mL|pg/ml|pmol/L|pmol/l|ng/dL|ng/dl|nmol/L|nmol/l|ng/mL|ng/ml|" +
-            "mIU/mL|mIU/ml|miu/ml|µIU/mL|µIU/ml|uIU/mL|uIU/ml|UI/L|ui/l|IU/L|iu/l)",
+            "mIU/mL|mIU/ml|miu/ml|µIU/mL|µIU/ml|uIU/mL|uIU/ml|UI/L|ui/l|IU/L|iu/l|" +
+            "g/dL|g/dl|g/100\\s*mL|g/100\\s*ml|%)",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** "128 / 82", "12,8/8,2 cmHg" — the systolic/diastolic pair. The
+     *  lookarounds refuse a third "/NNNN" segment and a leading "NN/" so a
+     *  date (27/05/2026) can never be consumed as a reading; [matchBp] then
+     *  applies plausibility windows and unit preference on top. */
+    private val BP_PAIR_REGEX = Regex(
+        "(?<![\\d/.,])(\\d{1,3}(?:[.,]\\d)?)\\s*/\\s*(\\d{1,3}(?:[.,]\\d)?)(?!\\s*/\\s*\\d)\\s*(mm\\s*Hg|mmHg|cm\\s*Hg|cmHg)?",
         RegexOption.IGNORE_CASE,
     )
 
@@ -98,12 +124,27 @@ object LabResultParser {
         val results = LinkedHashMap<String, ParsedValue>() // dedup by hormone, preserve insertion order
         for ((i, line) in lines.withIndex()) {
             val hormone = matchHormone(line) ?: continue
+
+            if (hormone == BP) {
+                // Blood pressure is a paired reading — expand to two rows so
+                // each side charts independently.
+                if (results.containsKey("bp_systolic")) continue
+                val pair = matchBp(line)
+                    ?: (i + 1).takeIf { it < lines.size }?.let { matchBp(lines[it]) }
+                    ?: (i + 2).takeIf { it < lines.size }?.let { matchBp(lines[it]) }
+                if (pair != null) {
+                    results["bp_systolic"] = ParsedValue("bp_systolic", pair.first, "mmHg")
+                    results["bp_diastolic"] = ParsedValue("bp_diastolic", pair.second, "mmHg")
+                }
+                continue
+            }
+
             if (results.containsKey(hormone)) continue // already captured earlier in the doc
 
             // Try the same line first, then the next two lines for multi-line layouts.
-            val candidate = matchValue(line)
-                ?: (i + 1).takeIf { it < lines.size }?.let { matchValue(lines[it]) }
-                ?: (i + 2).takeIf { it < lines.size }?.let { matchValue(lines[it]) }
+            val candidate = matchValue(line, hormone)
+                ?: (i + 1).takeIf { it < lines.size }?.let { matchValue(lines[it], hormone) }
+                ?: (i + 2).takeIf { it < lines.size }?.let { matchValue(lines[it], hormone) }
             if (candidate != null) {
                 results[hormone] = ParsedValue(hormone, candidate.first, candidate.second)
             }
@@ -172,15 +213,48 @@ object LabResultParser {
         return null
     }
 
-    private fun matchValue(line: String): Pair<Double, String>? {
-        val m = VALUE_UNIT_REGEX.find(line) ?: return null
-        val raw = m.groupValues[1].replace(',', '.')
-        val value = raw.toDoubleOrNull() ?: return null
-        val unit = normalizeUnit(m.groupValues[2])
-        return value to unit
+    /** Units each analyte may legitimately carry. Without this, the 2-line
+     *  lookahead would happily hand "Hémoglobine" the "42,3 %" of the
+     *  Hématocrite line below it in column-split OCR layouts — % is the most
+     *  common unit-like token on a lab report. */
+    private val HORMONE_UNITS = setOf("pg/mL", "pmol/L", "ng/dL", "nmol/L", "ng/mL", "mIU/mL")
+    private val ALLOWED_UNITS: Map<String, Set<String>> = mapOf(
+        "hemoglobin" to setOf("g/dL"),
+        "hematocrit" to setOf("%"),
+    )
+
+    private fun matchValue(line: String, kind: String): Pair<Double, String>? {
+        val allowed = ALLOWED_UNITS[kind] ?: HORMONE_UNITS
+        for (m in VALUE_UNIT_REGEX.findAll(line)) {
+            val value = m.groupValues[1].replace(',', '.').toDoubleOrNull() ?: continue
+            val unit = normalizeUnit(m.groupValues[2])
+            if (unit in allowed) return value to unit
+        }
+        return null
     }
 
-    private fun normalizeUnit(raw: String): String = when (raw.lowercase()) {
+    /**
+     * Systolic/diastolic pair. A unit-bearing pair always wins over a bare
+     * one, and the ×10 "cmHg habit" rescale (12,8/8,2 → 128/82) only applies
+     * when the unit is explicit — otherwise any dd/mm date with a small day
+     * would rescale into a perfectly plausible fabricated reading.
+     */
+    private fun matchBp(line: String): Pair<Double, Double>? {
+        var bare: Pair<Double, Double>? = null
+        for (m in BP_PAIR_REGEX.findAll(line)) {
+            var sys = m.groupValues[1].replace(',', '.').toDoubleOrNull() ?: continue
+            var dia = m.groupValues[2].replace(',', '.').toDoubleOrNull() ?: continue
+            val hasUnit = m.groupValues[3].isNotEmpty()
+            if (hasUnit && sys < 30 && dia < 20) { sys *= 10; dia *= 10 }
+            val plausible = sys in 60.0..260.0 && dia in 30.0..160.0 && sys > dia
+            if (!plausible) continue
+            if (hasUnit) return sys to dia
+            if (bare == null) bare = sys to dia
+        }
+        return bare
+    }
+
+    private fun normalizeUnit(raw: String): String = when (raw.lowercase().replace(" ", "")) {
         "pg/ml" -> "pg/mL"
         "pmol/l" -> "pmol/L"
         "ng/dl" -> "ng/dL"
@@ -190,6 +264,8 @@ object LabResultParser {
         // µIU/mL and IU/L are equivalent to mIU/mL for LH/FSH/prolactin in
         // clinical practice — normalise so the catalog only has one bucket.
         "µiu/ml", "uiu/ml", "iu/l", "ui/l" -> "mIU/mL"
+        // NFS: g/100 mL is the older notation for g/dL — one bucket.
+        "g/dl", "g/100ml" -> "g/dL"
         else -> raw
     }
 }

@@ -220,7 +220,7 @@ class ReminderReceiver : BroadcastReceiver() {
         val prefs = LabReminderPrefs(context)
         val entry = prefs.get(labId) ?: return
 
-        notifier.showLab(labId, entry.label, priority.isLabPriority(labId))
+        notifier.showLab(labId, entry.category, priority.isLabPriority(labId))
 
         val now = System.currentTimeMillis()
         val nextDue = LabNextDueCalculator.nextDueAfter(

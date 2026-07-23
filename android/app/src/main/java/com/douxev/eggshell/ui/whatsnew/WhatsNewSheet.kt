@@ -11,13 +11,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Event
-import androidx.compose.material.icons.filled.Insights
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Mood
-import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -60,44 +59,39 @@ data class WhatsNewRelease(
  */
 object WhatsNewCatalog {
     val LATEST: WhatsNewRelease = WhatsNewRelease(
-        versionCode = 10,
-        versionName = "0.1.0",
+        versionCode = 12,
+        versionName = "1.0.0",
         title = "Quoi de neuf",
         highlights = listOf(
             WhatsNewHighlight(
                 icon = Icons.Filled.Event,
-                title = "Rendez-vous",
-                sub = "Nouvel onglet pour noter tes RDV, les professionnel·les et ce qu'il y a à faire.",
-            ),
-            WhatsNewHighlight(
-                icon = Icons.Filled.Insights,
-                title = "Résumé",
-                sub = "Compare ta semaine ou ton mois au précédent : humeur, prises notées vs prévues, symptômes.",
+                title = "Règles : n'importe quel jour, ou toute une période",
+                sub = "Note un jour passé, ou « cette semaine = règles » en une seule action.",
             ),
             WhatsNewHighlight(
                 icon = Icons.Filled.Schedule,
-                title = "Historique des prises",
-                sub = "Supprime une prise, et note l'heure exacte d'une prise oubliée (antidatage).",
+                title = "Prises par période et corrigibles",
+                sub = "Déclare une plage de prises (ex. gel quotidien sur des mois) et modifie une prise déjà notée — voie comprise.",
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.DeleteOutline,
-                title = "Supprimer un traitement",
-                sub = "Archive un traitement, ou supprime-le définitivement avec tout son historique.",
+                icon = Icons.Filled.NotificationsActive,
+                title = "Rappels sur mesure",
+                sub = "Modifie tes rappels, donne-leur ton propre texte, ajoute un rappel journal — tout est regroupé au même endroit.",
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Lock,
-                title = "Bilans labo protégés",
-                sub = "Importe tes résultats même quand le PDF du labo est verrouillé par un mot de passe.",
+                icon = Icons.Filled.CalendarMonth,
+                title = "Calendrier plus parlant",
+                sub = "Règles en ligne continue et points de traitement sur le calendrier du journal, avec légende.",
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.PictureAsPdf,
-                title = "Export PDF médecin",
-                sub = "Le récapitulatif PDF pour ton médecin ne plante plus et s'ouvre dans le partage.",
+                icon = Icons.Filled.ShowChart,
+                title = "Courbes datées",
+                sub = "Les courbes d'hormones affichent les dates et un rond à chaque jour de prise.",
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Mood,
-                title = "Humeur confirmée",
-                sub = "Un petit mot confirme l'enregistrement de ton ressenti, avec un accès au journal.",
+                icon = Icons.Filled.Science,
+                title = "Bilan sanguin enrichi",
+                sub = "L'import PDF reconnaît maintenant la tension artérielle, l'hémoglobine et l'hématocrite.",
             ),
         ),
     )

@@ -45,6 +45,17 @@ actor VaultService {
 
     // MARK: Doses
     func logDose(_ dose: NewDoseEvent) throws -> DoseEvent { try vault.logDose(dose: dose) }
+    /// Batch insert in one core transaction — the "log a date range" flow
+    /// (e.g. a daily topical declared for several months in one go).
+    @discardableResult
+    func logDoses(_ doses: [NewDoseEvent]) throws -> [DoseEvent] { try vault.logDoses(doses: doses) }
+    /// Overwrite a recorded dose in place (fix route/date/amount after the
+    /// fact). The id stays stable.
+    @discardableResult
+    func updateDose(_ id: Int64, _ dose: NewDoseEvent) throws -> DoseEvent {
+        try vault.updateDose(id: id, dose: dose)
+    }
+    func getDose(_ id: Int64) throws -> DoseEvent? { try vault.getDose(id: id) }
     func listDoses(medicationId: Int64, offset: Int64 = 0, limit: Int64 = 50) throws -> [DoseEvent] {
         try vault.listDoses(medicationId: medicationId, offset: offset, limit: limit)
     }
@@ -65,6 +76,12 @@ actor VaultService {
     func listActiveSchedules() throws -> [DoseSchedule] { try vault.listActiveSchedules() }
     func listSchedulesForMedication(_ medicationId: Int64, includeInactive: Bool) throws -> [DoseSchedule] {
         try vault.listSchedulesForMedication(medicationId: medicationId, includeInactive: includeInactive)
+    }
+    /// Edit a reminder in place — id stays stable so scheduled notifications
+    /// keep pointing at the same schedule; `active`/`createdAtMs` untouched.
+    @discardableResult
+    func updateSchedule(_ id: Int64, _ s: NewDoseSchedule) throws -> DoseSchedule {
+        try vault.updateSchedule(id: id, schedule: s)
     }
     func setScheduleActive(_ id: Int64, _ active: Bool) throws { try vault.setScheduleActive(id: id, active: active) }
     func setScheduleNextDue(_ id: Int64, _ nextDueAtMs: Int64) throws {
@@ -108,6 +125,12 @@ actor VaultService {
     // MARK: Bleeding / cycle tracking
     @discardableResult
     func addBleedingEntry(_ e: NewBleedingEntry) throws -> BleedingEntry { try vault.addBleedingEntry(entry: e) }
+    /// Batch insert in one core transaction — « cette semaine = règles »
+    /// logged in one action instead of one entry per day.
+    @discardableResult
+    func addBleedingEntries(_ entries: [NewBleedingEntry]) throws -> [BleedingEntry] {
+        try vault.addBleedingEntries(entries: entries)
+    }
     func listBleedingEntries(offset: Int64 = 0, limit: Int64 = 500) throws -> [BleedingEntry] {
         try vault.listBleedingEntries(offset: offset, limit: limit)
     }

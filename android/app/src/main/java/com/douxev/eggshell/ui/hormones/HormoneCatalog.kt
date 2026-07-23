@@ -5,11 +5,15 @@ import androidx.compose.ui.res.stringResource
 import com.douxev.eggshell.R
 
 object HormoneCatalog {
-    /** Hormones surfaced in the Hormones tab. Weight uses the same storage
-     *  backend but lives in its own UI tab, so it's not in this list. */
+    /** Analytes surfaced in the Hormones tab. Weight uses the same storage
+     *  backend but lives in its own UI tab, so it's not in this list. The
+     *  blood-pressure pair and the NFS values (Hb, Hte) share the thread —
+     *  HRT/testo follow-up tracks them at the same cadence as hormone draws. */
     val KINDS = listOf(
         "estradiol", "progesterone", "testosterone",
-        "lh", "fsh", "prolactin", "shbg", "other",
+        "lh", "fsh", "prolactin", "shbg",
+        "bp_systolic", "bp_diastolic", "hemoglobin", "hematocrit",
+        "other",
     )
 
     /** Stable identifier used in the hormone_measurements table to store
@@ -18,7 +22,8 @@ object HormoneCatalog {
     const val WEIGHT = "weight"
 
     val UNITS = listOf(
-        "pg/mL", "pmol/L", "ng/dL", "nmol/L", "ng/mL", "mIU/mL", "other",
+        "pg/mL", "pmol/L", "ng/dL", "nmol/L", "ng/mL", "mIU/mL",
+        "mmHg", "g/dL", "%", "other",
     )
 
     val WEIGHT_UNITS = listOf("kg", "lb")
@@ -33,6 +38,10 @@ object HormoneCatalog {
             "fsh" -> R.string.hormone_fsh
             "prolactin" -> R.string.hormone_prolactin
             "shbg" -> R.string.hormone_shbg
+            "bp_systolic" -> R.string.hormone_bp_systolic
+            "bp_diastolic" -> R.string.hormone_bp_diastolic
+            "hemoglobin" -> R.string.hormone_hemoglobin
+            "hematocrit" -> R.string.hormone_hematocrit
             WEIGHT -> R.string.weight_kind
             else -> R.string.hormone_other
         }

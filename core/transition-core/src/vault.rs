@@ -287,6 +287,28 @@ impl Vault {
         crate::medication::log_dose(&*self.db()?, dose)
     }
 
+    pub fn log_doses(
+        &self,
+        doses: Vec<crate::medication::NewDoseEvent>,
+    ) -> Result<Vec<crate::medication::DoseEvent>, TransitionError> {
+        crate::medication::log_doses(&*self.db()?, doses)
+    }
+
+    pub fn update_dose(
+        &self,
+        id: i64,
+        dose: crate::medication::NewDoseEvent,
+    ) -> Result<crate::medication::DoseEvent, TransitionError> {
+        crate::medication::update_dose(&*self.db()?, id, dose)
+    }
+
+    pub fn get_dose(
+        &self,
+        id: i64,
+    ) -> Result<Option<crate::medication::DoseEvent>, TransitionError> {
+        crate::medication::get_dose(&*self.db()?, id)
+    }
+
     pub fn list_doses(
         &self,
         medication_id: i64,
@@ -346,6 +368,14 @@ impl Vault {
             medication_id,
             include_inactive,
         )
+    }
+
+    pub fn update_schedule(
+        &self,
+        id: i64,
+        schedule: crate::dose_schedule::NewDoseSchedule,
+    ) -> Result<crate::dose_schedule::DoseSchedule, TransitionError> {
+        crate::dose_schedule::update(&*self.db()?, id, schedule)
     }
 
     pub fn set_schedule_active(&self, id: i64, active: bool) -> Result<(), TransitionError> {
@@ -521,6 +551,13 @@ impl Vault {
         entry: crate::bleeding::NewBleedingEntry,
     ) -> Result<crate::bleeding::BleedingEntry, TransitionError> {
         crate::bleeding::add(&*self.db()?, entry)
+    }
+
+    pub fn add_bleeding_entries(
+        &self,
+        entries: Vec<crate::bleeding::NewBleedingEntry>,
+    ) -> Result<Vec<crate::bleeding::BleedingEntry>, TransitionError> {
+        crate::bleeding::add_many(&*self.db()?, entries)
     }
 
     pub fn list_bleeding_entries(

@@ -53,3 +53,40 @@ modification du cœur Rust n'a été nécessaire (toute l'API uniffi existait d�
 4. **Paranoïaque + restauration/changement de mode** : volontairement refusé
    (`VaultError.paranoidRequiresRekey`) car cela demanderait un re-chiffrement complet
    de la base.
+
+## Lot 2026-07-23 — backlog P0–P2 + courbes datées (schéma 13 → 14)
+
+Parité refaite dans la foulée du lot Android (branche `feat/android-bugfixes-batch`).
+Contrat de bindings : `TransitionCoreInfo.bindingsContract` 0.0.7 → **0.0.8**
+(`dose_schedules.label`, `logDoses`, `updateDose`, `getDose`, `updateSchedule`,
+`addBleedingEntries` — voir CORE_API.md). Côté Swift :
+
+- **Règles** : date rétroactive éditable (création + édition) et mode
+  « Plusieurs jours » (une entrée par jour à 12 h locale, batch
+  `addBleedingEntries`, sliders appliqués à chaque entrée) — `AddBleedingEntryView`.
+- **Prises** : mode « Période » (une prise par jour à l'heure choisie, batch
+  `logDoses`) et mode édition (`LogDoseView(medId:editDoseId:)`, seed via
+  `getDose`, sauvegarde via `updateDose` en conservant status/scheduledAtMs/
+  scheduleId). Accès édition depuis l'historique (`MedicationDetailView`,
+  `Route.editDose`).
+- **Rappels** : champ « Texte du rappel » (60 car.) + mode édition
+  (`AddScheduleView(medId:/medicationId:editScheduleId:)`, `Route.editSchedule`,
+  recalcul du nextDue comme à la création) ; le label remplace nom/alias dans la
+  notification quand le mode ≠ générique (`NotificationManager.makeMedContent`),
+  jamais montré en générique — même résolution qu'Android.
+- **Hub rappels** : catégorie « Journal d'humeur » (LabReminderStore kind
+  `journal`, titre notif « Moment journal », titres par catégorie pour
+  photo/voix/labo), lignes med cliquables → édition en sheet, section
+  « Rendez-vous » en lecture seule (RemindersView).
+- **Calendrier Journal** : bande continue « Règles » (caps arrondis aux
+  extrémités de plage), points colorés par traitement (≤ 3) + légende du mois
+  (JournalView, réutilise `MedColor.color(fromArgb:)`).
+- **Courbes hormones** : interpolation `.linear`, axe X daté (première /
+  médiane / dernière mesure, « d MMM »), marqueurs de prises interpolés sur la
+  courbe, couleur du traitement (HormonesView).
+- **Parseur labo** : `bp_systolic`/`bp_diastolic` (paire, fenêtres de
+  plausibilité, habitude cmHg ×10), `hemoglobin` (gardes HbA1c/« Hémoglobine
+  A1c »), `hematocrit` ; unités `g/dL` (+ pli « g/100 mL »), `%`, `mmHg` ;
+  catalogue `Catalog.swift` aligné byte-for-byte sur Android.
+
+Toujours valable : validation finale = build CI macOS (aucun toolchain local).

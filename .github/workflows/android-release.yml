@@ -1,0 +1,102 @@
+name: Android release (APK)
+
+# Builds the signed universal APK (+ Play AAB) and attaches them to a GitHub
+# Release. Trigger by pushing a tag like `android-v1.0.0`, or manually
+# (manual runs upload workflow artifacts instead of creating a Release).
+#
+# Required secrets:
+#   ANDROID_KEYSTORE_B64         base64 of the upload keystore (.jks)
+#   EGGSHELL_KEYSTORE_PASSWORD   store password
+#   EGGSHELL_KEY_ALIAS           key alias
+#   EGGSHELL_KEY_PASSWORD        key password
+# The three EGGSHELL_* names are read directly by app/build.gradle.kts.
+
+on:
+  push:
+    tags: ["android-v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # create the GitHub Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install pinned Android NDK
+        # Must match ndkVersion in app/build.gradle.kts — AGP's strip tooling
+        # and cargo-ndk have to agree on the toolchain.
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.2.12479018"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Rust toolchain + Android targets
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Materialize signing keystore
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        # keystores/ is fully gitignored, so it does not exist in a fresh
+        # checkout — recreate it before decoding.
+        run: |
+          mkdir -p keystores
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > keystores/eggshell-upload.jks
+
+      - name: Build signed release APK + AAB
+        env:
+          EGGSHELL_KEYSTORE: keystores/eggshell-upload.jks
+          EGGSHELL_KEYSTORE_PASSWORD: ${{ secrets.EGGSHELL_KEYSTORE_PASSWORD }}
+          EGGSHELL_KEY_ALIAS: ${{ secrets.EGGSHELL_KEY_ALIAS }}
+          EGGSHELL_KEY_PASSWORD: ${{ secrets.EGGSHELL_KEY_PASSWORD }}
+        run: |
+          cd android
+          ./gradlew --no-daemon assembleRelease bundleRelease
+
+      - name: Version-stamp artifacts
+        id: meta
+        run: |
+          VN=$(grep -oP 'versionName = "\K[^"]+' android/app/build.gradle.kts)
+          VC=$(grep -oP 'versionCode = \K\d+' android/app/build.gradle.kts)
+          echo "version=$VN" >> "$GITHUB_OUTPUT"
+          cp android/app/build/outputs/apk/release/app-release.apk "eggshell-$VN-$VC.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab "eggshell-$VN-$VC.aab"
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Eggshell ${{ steps.meta.outputs.version }} (Android)
+          generate_release_notes: true
+          files: |
+            eggshell-*.apk
+            eggshell-*.aab
+
+      - name: Upload workflow artifacts (manual runs)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: eggshell-android
+          path: |
+            eggshell-*.apk
+            eggshell-*.aab
