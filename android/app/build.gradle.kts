@@ -36,8 +36,8 @@ android {
         // Reminder for the next release: Play enforces strictly monotonic
         // versionCode across all tracks. Bump versionCode every upload,
         // even for a same-day re-build, otherwise Play refuses the AAB.
-        versionCode = 11
-        versionName = "0.1.0"
+        versionCode = 12
+        versionName = "1.0.0"
 
         ndk {
             // Limit ABIs to common phone architectures; can extend to x86 for emulators.
