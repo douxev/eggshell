@@ -1025,6 +1025,173 @@ mod tests {
     }
 
     #[test]
+    fn backup_roundtrip_preserves_v14_batch_data() {
+        let path = fresh_db_path();
+        let key = VaultKey::random();
+        let day = 86_400_000i64;
+        let bundle = {
+            let vault = Vault::open(path.to_string_lossy().into_owned(), &key).unwrap();
+            let med = vault
+                .add_medication(
+                    crate::medication::NewMedication {
+                        name: "Estradiol gel".into(),
+                        kind: "estrogen".into(),
+                        route: "transdermal".into(),
+                        default_dose: Some(2.0),
+                        default_dose_unit: Some("mg".into()),
+                        color: None,
+                        notes: None,
+                    },
+                    1_700_000_000_000,
+                )
+                .unwrap();
+            let sched = vault
+                .add_schedule(
+                    crate::dose_schedule::NewDoseSchedule {
+                        medication_id: med.id,
+                        kind: "daily".into(),
+                        interval_minutes: None,
+                        daily_hour: Some(9),
+                        daily_minute: Some(0),
+                        interval_days: None,
+                        next_due_at_ms: 1_700_000_100_000,
+                        label: Some("Aller chercher le traitement".into()),
+                    },
+                    1_700_000_000_000,
+                )
+                .unwrap();
+            let doses = vault
+                .log_doses(
+                    (0..3)
+                        .map(|i| crate::medication::NewDoseEvent {
+                            medication_id: med.id,
+                            taken_at_ms: 1_700_000_000_000 + i * day,
+                            dose: Some(2.0),
+                            dose_unit: Some("mg".into()),
+                            route: Some("transdermal".into()),
+                            injection_site: None,
+                            notes: None,
+                            status: "taken".into(),
+                            scheduled_at_ms: None,
+                            schedule_id: Some(sched.id),
+                        })
+                        .collect(),
+                )
+                .unwrap();
+            vault
+                .update_dose(
+                    doses[0].id,
+                    crate::medication::NewDoseEvent {
+                        medication_id: med.id,
+                        taken_at_ms: doses[0].taken_at_ms,
+                        dose: Some(2.0),
+                        dose_unit: Some("mg".into()),
+                        route: Some("sublingual".into()),
+                        injection_site: None,
+                        notes: Some("corrigée".into()),
+                        status: "taken".into(),
+                        scheduled_at_ms: None,
+                        schedule_id: Some(sched.id),
+                    },
+                )
+                .unwrap();
+            vault
+                .add_bleeding_entries(
+                    (0..4)
+                        .map(|i| crate::bleeding::NewBleedingEntry {
+                            at_ms: 1_699_000_000_000 + i * day,
+                            is_spotting: Some(false),
+                            free_text: None,
+                        })
+                        .collect(),
+                )
+                .unwrap();
+            vault.export_encrypted("pp".into()).unwrap()
+        };
+
+        std::fs::remove_file(&path).unwrap();
+        let imported =
+            import_encrypted(bundle, "pp".into(), path.to_string_lossy().into_owned()).unwrap();
+        let restored_key = VaultKey::from_raw(imported.master_key).unwrap();
+        let restored = Vault::open(path.to_string_lossy().into_owned(), &restored_key).unwrap();
+
+        let med = restored.list_medications(false).unwrap().remove(0);
+        let scheds = restored.list_schedules_for_medication(med.id, true).unwrap();
+        assert_eq!(scheds.len(), 1);
+        assert_eq!(scheds[0].label.as_deref(), Some("Aller chercher le traitement"));
+        let doses = restored.list_doses(med.id, 0, 10).unwrap();
+        assert_eq!(doses.len(), 3);
+        assert!(doses.iter().any(|d| {
+            d.route.as_deref() == Some("sublingual") && d.notes.as_deref() == Some("corrigée")
+        }));
+        assert_eq!(restored.list_bleeding_entries(0, 10).unwrap().len(), 4);
+    }
+
+    #[test]
+    fn restore_of_pre_label_backup_migrates_to_current_schema() {
+        let path = fresh_db_path();
+        let key = VaultKey::random();
+        let bundle = {
+            let vault = Vault::open(path.to_string_lossy().into_owned(), &key).unwrap();
+            vault
+                .add_medication(
+                    crate::medication::NewMedication {
+                        name: "Estradiol".into(),
+                        kind: "estrogen".into(),
+                        route: "oral".into(),
+                        default_dose: None,
+                        default_dose_unit: None,
+                        color: None,
+                        notes: None,
+                    },
+                    1_700_000_000_000,
+                )
+                .unwrap();
+            // Rewind the fresh DB to the pre-label schema: drop the column
+            // added by migration 0014 and reset user_version — byte-for-byte
+            // what a backup exported by the previous release looks like.
+            {
+                let guard = vault.db().unwrap();
+                guard
+                    .conn()
+                    .execute("ALTER TABLE dose_schedules DROP COLUMN label", [])
+                    .unwrap();
+                guard.conn().pragma_update(None, "user_version", 13).unwrap();
+            }
+            vault.export_encrypted("pp".into()).unwrap()
+        };
+
+        std::fs::remove_file(&path).unwrap();
+        let imported =
+            import_encrypted(bundle, "pp".into(), path.to_string_lossy().into_owned()).unwrap();
+        let restored_key = VaultKey::from_raw(imported.master_key).unwrap();
+        // Opening the restored file must run migration 14 transparently…
+        let restored = Vault::open(path.to_string_lossy().into_owned(), &restored_key).unwrap();
+        assert_eq!(
+            restored.schema_version().unwrap(),
+            crate::db::CURRENT_SCHEMA_VERSION
+        );
+        // …so v14 features work on data restored from an old backup.
+        let med = restored.list_medications(false).unwrap().remove(0);
+        let s = restored
+            .add_schedule(
+                crate::dose_schedule::NewDoseSchedule {
+                    medication_id: med.id,
+                    kind: "daily".into(),
+                    interval_minutes: None,
+                    daily_hour: Some(8),
+                    daily_minute: Some(0),
+                    interval_days: None,
+                    next_due_at_ms: 1,
+                    label: Some("après restauration".into()),
+                },
+                1,
+            )
+            .unwrap();
+        assert_eq!(s.label.as_deref(), Some("après restauration"));
+    }
+
+    #[test]
     fn backup_v1_bundles_are_explicitly_refused() {
         // A v1-shaped header is enough to trigger the typed refusal — we
         // don't need a valid ciphertext.
