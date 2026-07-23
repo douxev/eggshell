@@ -182,6 +182,19 @@ interface Vault {
     [Throws=TransitionError]
     DoseEvent log_dose(NewDoseEvent dose);
 
+    // Batch insert in one transaction — "log a date range" (e.g. a daily
+    // topical declared for several months in one go).
+    [Throws=TransitionError]
+    sequence<DoseEvent> log_doses(sequence<NewDoseEvent> doses);
+
+    // Overwrite a recorded dose in place (fix route/date/amount after the
+    // fact). The id stays stable.
+    [Throws=TransitionError]
+    DoseEvent update_dose(i64 id, NewDoseEvent dose);
+
+    [Throws=TransitionError]
+    DoseEvent? get_dose(i64 id);
+
     [Throws=TransitionError]
     sequence<DoseEvent> list_doses(i64 medication_id, i64 offset, i64 limit);
 
@@ -205,6 +218,12 @@ interface Vault {
 
     [Throws=TransitionError]
     sequence<DoseSchedule> list_schedules_for_medication(i64 medication_id, boolean include_inactive);
+
+    // Edit a reminder in place — id stays stable so armed alarms and sealed
+    // prefs keep pointing at the same schedule. `active`/`created_at_ms`
+    // are untouched; medication_id cannot change.
+    [Throws=TransitionError]
+    DoseSchedule update_schedule(i64 id, NewDoseSchedule schedule);
 
     [Throws=TransitionError]
     void set_schedule_active(i64 id, boolean active);
@@ -286,6 +305,11 @@ interface Vault {
     // Bleeding / cycle tracking
     [Throws=TransitionError]
     BleedingEntry add_bleeding_entry(NewBleedingEntry entry);
+
+    // Batch insert in one transaction — "cette semaine = règles" logged in
+    // one action instead of one entry per day.
+    [Throws=TransitionError]
+    sequence<BleedingEntry> add_bleeding_entries(sequence<NewBleedingEntry> entries);
 
     [Throws=TransitionError]
     sequence<BleedingEntry> list_bleeding_entries(i64 offset, i64 limit);
@@ -411,6 +435,9 @@ dictionary DoseSchedule {
     i64 next_due_at_ms;
     boolean active;
     i64 created_at_ms;
+    // Custom reminder text ("Aller chercher le traitement"). Shown in
+    // notifications only when the content mode allows (never in GENERIC).
+    string? label;
 };
 
 dictionary NewDoseSchedule {
@@ -421,6 +448,8 @@ dictionary NewDoseSchedule {
     u32? daily_minute;
     u32? interval_days;
     i64 next_due_at_ms;
+    // Defaulted so existing call sites keep compiling unchanged.
+    string? label = null;
 };
 
 // -- Customizable metric sliders (shared by journal + bleeding) --------------

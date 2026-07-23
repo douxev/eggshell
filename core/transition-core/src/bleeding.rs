@@ -46,6 +46,36 @@ pub fn add(db: &Database, e: NewBleedingEntry) -> Result<BleedingEntry, Transiti
     })
 }
 
+/// Insert a batch of entries in one transaction. Powers the "log a whole
+/// span of days" flow (e.g. « cette semaine = règles ») without one fsync
+/// per day.
+pub fn add_many(
+    db: &Database,
+    entries: Vec<NewBleedingEntry>,
+) -> Result<Vec<BleedingEntry>, TransitionError> {
+    // `Vault` serializes DB access behind a Mutex, so an unchecked (borrowed)
+    // transaction cannot race another statement on this connection.
+    let tx = db.conn().unchecked_transaction().map_err(map_sql)?;
+    let mut out = Vec::with_capacity(entries.len());
+    {
+        let mut stmt = tx
+            .prepare("INSERT INTO bleeding_entries (at_ms, is_spotting, free_text) VALUES (?1, ?2, ?3)")
+            .map_err(map_sql)?;
+        for e in entries {
+            stmt.execute(params![e.at_ms, e.is_spotting.map(|b| b as i64), e.free_text])
+                .map_err(map_sql)?;
+            out.push(BleedingEntry {
+                id: tx.last_insert_rowid(),
+                at_ms: e.at_ms,
+                is_spotting: e.is_spotting,
+                free_text: e.free_text,
+            });
+        }
+    }
+    tx.commit().map_err(map_sql)?;
+    Ok(out)
+}
+
 pub fn list(db: &Database, offset: i64, limit: i64) -> Result<Vec<BleedingEntry>, TransitionError> {
     let conn = db.conn();
     let mut stmt = conn
@@ -160,5 +190,25 @@ mod tests {
         assert_eq!(get(&db, e.id).unwrap().unwrap().is_spotting, Some(false));
         delete(&db, e.id).unwrap();
         assert!(list(&db, 0, 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn add_many_inserts_all_in_order() {
+        let (_k, db) = fresh_db();
+        let day = 86_400_000i64;
+        let entries: Vec<NewBleedingEntry> = (0..5)
+            .map(|i| NewBleedingEntry {
+                at_ms: 1_000 + i * day,
+                is_spotting: Some(false),
+                free_text: None,
+            })
+            .collect();
+        let inserted = add_many(&db, entries).unwrap();
+        assert_eq!(inserted.len(), 5);
+        // Each row got its own id and round-trips through get().
+        for e in &inserted {
+            assert_eq!(get(&db, e.id).unwrap().unwrap().at_ms, e.at_ms);
+        }
+        assert_eq!(list(&db, 0, 10).unwrap().len(), 5);
     }
 }

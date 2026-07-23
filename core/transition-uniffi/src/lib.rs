@@ -231,6 +231,18 @@ impl Vault {
         self.inner.log_dose(dose)
     }
 
+    pub fn log_doses(&self, doses: Vec<NewDoseEvent>) -> Result<Vec<DoseEvent>, TransitionError> {
+        self.inner.log_doses(doses)
+    }
+
+    pub fn update_dose(&self, id: i64, dose: NewDoseEvent) -> Result<DoseEvent, TransitionError> {
+        self.inner.update_dose(id, dose)
+    }
+
+    pub fn get_dose(&self, id: i64) -> Result<Option<DoseEvent>, TransitionError> {
+        self.inner.get_dose(id)
+    }
+
     pub fn list_doses(
         &self,
         medication_id: i64,
@@ -278,6 +290,14 @@ impl Vault {
         include_inactive: bool,
     ) -> Result<Vec<DoseSchedule>, TransitionError> {
         self.inner.list_schedules_for_medication(medication_id, include_inactive)
+    }
+
+    pub fn update_schedule(
+        &self,
+        id: i64,
+        schedule: NewDoseSchedule,
+    ) -> Result<DoseSchedule, TransitionError> {
+        self.inner.update_schedule(id, schedule)
     }
 
     pub fn set_schedule_active(&self, id: i64, active: bool) -> Result<(), TransitionError> {
@@ -428,6 +448,13 @@ impl Vault {
         entry: NewBleedingEntry,
     ) -> Result<BleedingEntry, TransitionError> {
         self.inner.add_bleeding_entry(entry)
+    }
+
+    pub fn add_bleeding_entries(
+        &self,
+        entries: Vec<NewBleedingEntry>,
+    ) -> Result<Vec<BleedingEntry>, TransitionError> {
+        self.inner.add_bleeding_entries(entries)
     }
 
     pub fn list_bleeding_entries(
