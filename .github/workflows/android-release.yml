@@ -1,8 +1,10 @@
 name: Android release (APK)
 
-# Builds the signed universal APK (+ Play AAB) and attaches them to a GitHub
-# Release. Trigger by pushing a tag like `android-v1.0.0`, or manually
-# (manual runs upload workflow artifacts instead of creating a Release).
+# Builds the signed universal APK and attaches it to a GitHub Release.
+# Trigger by pushing a tag like `android-v1.0.0`, or manually (manual runs
+# upload a workflow artifact instead of creating a Release). The Play AAB
+# is deliberately NOT built or published here — it is produced locally and
+# only ever uploaded to the Play Console.
 #
 # Required secrets:
 #   ANDROID_KEYSTORE_B64         base64 of the upload keystore (.jks)
@@ -63,7 +65,7 @@ jobs:
           mkdir -p keystores
           printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > keystores/eggshell-upload.jks
 
-      - name: Build signed release APK + AAB
+      - name: Build signed release APK
         env:
           EGGSHELL_KEYSTORE: keystores/eggshell-upload.jks
           EGGSHELL_KEYSTORE_PASSWORD: ${{ secrets.EGGSHELL_KEYSTORE_PASSWORD }}
@@ -71,16 +73,15 @@ jobs:
           EGGSHELL_KEY_PASSWORD: ${{ secrets.EGGSHELL_KEY_PASSWORD }}
         run: |
           cd android
-          ./gradlew --no-daemon assembleRelease bundleRelease
+          ./gradlew --no-daemon assembleRelease
 
-      - name: Version-stamp artifacts
+      - name: Version-stamp artifact
         id: meta
         run: |
           VN=$(grep -oP 'versionName = "\K[^"]+' android/app/build.gradle.kts)
           VC=$(grep -oP 'versionCode = \K\d+' android/app/build.gradle.kts)
           echo "version=$VN" >> "$GITHUB_OUTPUT"
           cp android/app/build/outputs/apk/release/app-release.apk "eggshell-$VN-$VC.apk"
-          cp android/app/build/outputs/bundle/release/app-release.aab "eggshell-$VN-$VC.aab"
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -88,15 +89,11 @@ jobs:
         with:
           name: Eggshell ${{ steps.meta.outputs.version }} (Android)
           generate_release_notes: true
-          files: |
-            eggshell-*.apk
-            eggshell-*.aab
+          files: eggshell-*.apk
 
-      - name: Upload workflow artifacts (manual runs)
+      - name: Upload workflow artifact (manual runs)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
           name: eggshell-android
-          path: |
-            eggshell-*.apk
-            eggshell-*.aab
+          path: eggshell-*.apk
