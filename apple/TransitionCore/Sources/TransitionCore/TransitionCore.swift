@@ -7,6 +7,10 @@
 
 /// Version of the bindings contract this app was built against. Bump when the
 /// UDL surface changes in a way the Swift app must adapt to.
+///
+/// 0.0.8: schema v14 — `DoseSchedule`/`NewDoseSchedule` gain `label` (custom
+/// reminder text); new Vault methods `logDoses`, `updateDose`, `getDose`,
+/// `updateSchedule`, `addBleedingEntries`.
 public enum TransitionCoreInfo {
-    public static let bindingsContract = "0.0.7"
+    public static let bindingsContract = "0.0.8"
 }

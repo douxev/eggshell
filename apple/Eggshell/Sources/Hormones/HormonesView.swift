@@ -29,6 +29,14 @@ struct DisplayMeasurement: Identifiable {
     var id: Int64 { raw.id }
 }
 
+/// A dose taken inside the charted window — drawn as a dot on the interpolated
+/// curve so intakes and hormone levels correlate visually. Mirrors android
+/// HormonesViewModel.DoseMarker.
+struct DoseMarker {
+    let atMs: Int64
+    let colorArgb: Int64?
+}
+
 @MainActor
 final class HormonesViewModel: ObservableObject {
     @Published var loading = true
@@ -41,6 +49,11 @@ final class HormonesViewModel: ObservableObject {
 
     // Weight mode
     @Published var weightMeasurements: [DisplayMeasurement] = []  // ascending by atMs
+
+    /// Doses taken inside the charted window (selected hormone only), one
+    /// marker per med per day — daily treatments would otherwise stack dozens
+    /// of dots on one spot. Empty in weight mode.
+    @Published var doseMarkers: [DoseMarker] = []
 
     /// Unit-resolution closures supplied by the view (the store is @MainActor
     /// and lives in the environment). `effective` → effectiveUnit(for:).
@@ -66,6 +79,7 @@ final class HormonesViewModel: ObservableObject {
             }
             let rawWeight = try await session.listHormoneMeasurements(hormone: HormoneCatalog.weight)
             weightMeasurements = convert(rawWeight.sorted { $0.atMs < $1.atMs }, hormone: HormoneCatalog.weight)
+            await loadDoseMarkers(session)
         } catch {
             self.error = describe(error)
         }
@@ -77,8 +91,41 @@ final class HormonesViewModel: ObservableObject {
         do {
             let raw = try await session.listHormoneMeasurements(hormone: hormone)
             measurements = convert(raw.sorted { $0.atMs < $1.atMs }, hormone: hormone)
+            await loadDoseMarkers(session)
         } catch {
             self.error = describe(error)
+        }
+    }
+
+    /// (Re)load the dose markers for the currently charted hormone window.
+    /// Mirrors android HormonesViewModel.loadDoseMarkers: status "taken" only,
+    /// deduped per med per day, colored by the med's stored ARGB.
+    private func loadDoseMarkers(_ session: VaultService) async {
+        guard measurements.count >= 2,
+              let fromMs = measurements.map(\.raw.atMs).min(),
+              let toMs = measurements.map(\.raw.atMs).max() else {
+            doseMarkers = []
+            return
+        }
+        do {
+            let meds = try await session.listMedications(includeArchived: true)
+            let colorById: [Int64: Int64?] = Dictionary(uniqueKeysWithValues: meds.map { ($0.id, $0.color) })
+            // Bucket by *local* calendar day — UTC buckets would split a
+            // 23:00 + 01:30 same-night pair into two markers in UTC+2.
+            let cal = Calendar.current
+            var seen = Set<String>()
+            var markers: [DoseMarker] = []
+            let doses = try await session.listDoseEventsBetween(fromMs: fromMs, toMs: toMs)
+            for e in doses where e.status == "taken" {
+                let day = cal.startOfDay(for: Date(timeIntervalSince1970: Double(e.takenAtMs) / 1000))
+                let key = "\(e.medicationId)-\(day.timeIntervalSince1970)"
+                if seen.insert(key).inserted {
+                    markers.append(DoseMarker(atMs: e.takenAtMs, colorArgb: colorById[e.medicationId] ?? nil))
+                }
+            }
+            doseMarkers = markers
+        } catch {
+            doseMarkers = []
         }
     }
 
@@ -336,7 +383,11 @@ struct HormonesView: View {
     @ViewBuilder
     private var evolutionCard: some View {
         let items = active
-        if items.count >= 2 {
+        if items.count >= 2, let tMin = items.first?.raw.atMs, let tMax = items.last?.raw.atMs {
+            // Doses taken in the window, drawn ON the (linearly interpolated)
+            // curve — the visual link between intakes and hormone evolution.
+            let markers = (weightMode ? [] : vm.doseMarkers)
+                .filter { $0.atMs >= tMin && $0.atMs <= tMax }
             SectionCard {
                 Text("Évolution").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
                 Chart {
@@ -350,11 +401,64 @@ struct HormonesView: View {
                         .foregroundStyle(palette.primary.opacity(0.18))
                     }
                     .foregroundStyle(palette.primary)
-                    .interpolationMethod(.catmullRom)
+                    // Linear, like Android: X positions follow the actual draw
+                    // dates and the dose dots land exactly on the segments.
+                    .interpolationMethod(.linear)
+
+                    ForEach(Array(markers.enumerated()), id: \.offset) { _, marker in
+                        PointMark(
+                            x: .value("Date", Date(timeIntervalSince1970: Double(marker.atMs) / 1000.0)),
+                            y: .value("Valeur", interpolatedValue(items, atMs: marker.atMs)))
+                        .symbolSize(30)
+                        .foregroundStyle(
+                            (marker.colorArgb.map { MedColor.color(fromArgb: $0) } ?? palette.secondary)
+                                .opacity(0.9))
+                    }
+                }
+                // Date labels under the axis: first, middle (only when the
+                // window spans more than 2 days) and last measurement dates.
+                .chartXAxis {
+                    AxisMarks(values: xAxisLabelDates(tMin: tMin, tMax: tMax)) { value in
+                        AxisValueLabel {
+                            if let d = value.as(Date.self) {
+                                Text(shortDateLabel(d))
+                            }
+                        }
+                    }
                 }
                 .frame(height: 180)
             }
         }
+    }
+
+    /// First / middle / last dates of the charted window, « d MMM » labelled.
+    private func xAxisLabelDates(tMin: Int64, tMax: Int64) -> [Date] {
+        var ts: [Int64] = [tMin]
+        if tMax - tMin > 2 * 86_400_000 { ts.append(tMin + (tMax - tMin) / 2) }
+        if tMax != tMin { ts.append(tMax) }
+        return ts.map { Date(timeIntervalSince1970: Double($0) / 1000.0) }
+    }
+
+    private func shortDateLabel(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "fr")
+        f.dateFormat = "d MMM"
+        return f.string(from: date)
+    }
+
+    /// Linear interpolation of the curve's display value at time t. Mirrors
+    /// android AreaChart.curveValueAt.
+    private func interpolatedValue(_ items: [DisplayMeasurement], atMs t: Int64) -> Double {
+        guard let last = items.last else { return 0 }
+        let i = items.lastIndex(where: { $0.raw.atMs <= t }) ?? 0
+        if i >= items.count - 1 { return last.displayValue }
+        let t0 = items[i].raw.atMs
+        let v0 = items[i].displayValue
+        let t1 = items[i + 1].raw.atMs
+        let v1 = items[i + 1].displayValue
+        if t1 == t0 { return v0 }
+        let f = Double(t - t0) / Double(t1 - t0)
+        return v0 + (v1 - v0) * f
     }
 
     private var historyCard: some View {

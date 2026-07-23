@@ -18,7 +18,9 @@ enum Route: Hashable {
     case editMedication(id: Int64)
     case medicationDetail(id: Int64)
     case addSchedule(medId: Int64)
+    case editSchedule(medId: Int64, scheduleId: Int64)
     case logDose(medId: Int64)
+    case editDose(medId: Int64, doseId: Int64)
 
     case addJournal(id: Int64?)
     case correlation
@@ -52,7 +54,11 @@ func routeDestination(_ route: Route) -> some View {
     case .editMedication(let id):    AddMedicationView(editId: id)
     case .medicationDetail(let id):  MedicationDetailView(medId: id)
     case .addSchedule(let medId):    AddScheduleView(medId: medId)
+    case .editSchedule(let medId, let scheduleId):
+                                     AddScheduleView(medId: medId, editScheduleId: scheduleId)
     case .logDose(let medId):        LogDoseView(medId: medId)
+    case .editDose(let medId, let doseId):
+                                     LogDoseView(medId: medId, editDoseId: doseId)
 
     case .addJournal(let id):        AddJournalEntryView(entryId: id)
     case .correlation:               CorrelationView()

@@ -2,10 +2,12 @@ import SwiftUI
 import TransitionCore
 
 // Pushed settings screen (Route.reminders). Mirrors android RemindersScreen:
-//   1. active medication schedules — pause/resume,
-//   2. lab / photo / voice reminders (LabReminderStore) — add / edit / delete,
+//   1. active medication schedules — pause/resume, tap-to-edit,
+//   2. lab / photo / voice / journal reminders (LabReminderStore) — add /
+//      edit / delete,
 //   3. notification content mode (générique / nom / alias) + per-med alias,
-//   4. priority (heads-up) toggle.
+//   4. priority (heads-up) toggle,
+//   5. read-only recap of upcoming appointment reminders (managed in RDV tab).
 // After any content change we ask AppState to re-schedule med notifications;
 // after any lab change we re-schedule lab notifications.
 
@@ -14,6 +16,10 @@ final class RemindersViewModel: ObservableObject {
     @Published var loading = true
     @Published var schedules: [DoseSchedule] = []
     @Published var medsById: [Int64: Medication] = [:]
+    /// Upcoming one-shot appointment reminders — read-only here, managed from
+    /// the RDV tab. Listed so this screen shows every notification the app
+    /// may fire.
+    @Published var appointmentReminders: [Appointment] = []
     @Published var error: String?
 
     func load(_ session: VaultService) async {
@@ -22,6 +28,10 @@ final class RemindersViewModel: ObservableObject {
             let meds = try await session.listMedications(includeArchived: true)
             medsById = Dictionary(uniqueKeysWithValues: meds.map { ($0.id, $0) })
             schedules = try await session.listActiveSchedules().sorted { $0.nextDueAtMs < $1.nextDueAtMs }
+            let now = Time.nowMs()
+            appointmentReminders = try await session.listAppointments()
+                .filter { ($0.reminderAtMs ?? 0) > now }
+                .sorted { ($0.reminderAtMs ?? 0) < ($1.reminderAtMs ?? 0) }
         } catch {
             self.error = describe(error)
         }
@@ -60,11 +70,16 @@ struct RemindersView: View {
     @State private var labEditor: LabEditorTarget?
     // Med schedule pending delete confirmation.
     @State private var confirmPause: DoseSchedule?
+    // Med schedule being edited (sheet with the full schedule form).
+    @State private var editingSchedule: ScheduleEditTarget?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.l) {
-                if vm.loading {
+                // Spinner only on first load — reloads (e.g. after the edit
+                // sheet closes) keep the sections on screen instead of
+                // flashing the whole page blank.
+                if vm.loading && vm.schedules.isEmpty {
                     ProgressView().tint(palette.primary).frame(maxWidth: .infinity).padding()
                 } else {
                     medicationsSection
@@ -80,8 +95,13 @@ struct RemindersView: View {
                                title: "Suivi de la voix",
                                hint: "Un rappel pour enregistrer un clip vocal.",
                                addLabel: "Ajouter un rappel voix")
+                    labSection(kind: LabReminderKind.journal,
+                               title: "Journal d'humeur",
+                               hint: "Un rappel pour noter ton humeur du jour.",
+                               addLabel: "Ajouter un rappel journal")
                     contentModeSection
                     prioritySection
+                    appointmentsSection
                 }
                 if let e = vm.error { ErrorBanner(message: e) }
             }
@@ -96,6 +116,16 @@ struct RemindersView: View {
                 Task { await NotificationManager.scheduleLabReminders(labReminders.items) }
             } onCancel: {
                 labEditor = nil
+            }
+        }
+        .sheet(item: $editingSchedule, onDismiss: {
+            // The edit form saves through its own path; reload so the list
+            // (cadence, label) reflects any change.
+            if let s = app.session { Task { await vm.load(s) } }
+        }) { target in
+            NavigationStack {
+                AddScheduleView(medicationId: target.schedule.medicationId,
+                                editScheduleId: target.schedule.id)
             }
         }
         .alert("Suspendre ce planning ?", isPresented: confirmPauseBinding, presenting: confirmPause) { s in
@@ -125,12 +155,21 @@ struct RemindersView: View {
             } else {
                 ForEach(vm.schedules, id: \.id) { s in
                     HStack(spacing: Spacing.m) {
-                        Image(systemName: medIcon(s)).font(.title3).foregroundStyle(palette.primary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(vm.medName(s.medicationId)).font(.eggCallout).foregroundStyle(palette.onSurface)
-                            Text(NextDueCalculator.describe(s)).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+                        // Tap the row to edit the schedule in place; the pause
+                        // button stays its own tap target.
+                        Button {
+                            editingSchedule = ScheduleEditTarget(schedule: s)
+                        } label: {
+                            HStack(spacing: Spacing.m) {
+                                Image(systemName: medIcon(s)).font(.title3).foregroundStyle(palette.primary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(vm.medName(s.medicationId)).font(.eggCallout).foregroundStyle(palette.onSurface)
+                                    Text(scheduleSubtitle(s)).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+                                }
+                                Spacer()
+                            }
                         }
-                        Spacer()
+                        .buttonStyle(.plain)
                         Button("Suspendre") { confirmPause = s }
                             .glassButton().tint(palette.primary)
                     }
@@ -144,6 +183,16 @@ struct RemindersView: View {
         if MedCatalog.isInjection(route) { return "syringe" }
         if route == "transdermal" || route == "topical" { return "bandage" }
         return "pills"
+    }
+
+    /// Cadence plus the schedule's optional custom label, mirroring android:
+    /// «Tous les jours à 8:00 · « Aller chercher le traitement »».
+    private func scheduleSubtitle(_ s: DoseSchedule) -> String {
+        let cadence = NextDueCalculator.describe(s)
+        if let label = s.label?.trimmingCharacters(in: .whitespaces), !label.isEmpty {
+            return "\(cadence) · « \(label) »"
+        }
+        return cadence
     }
 
     // MARK: - Lab / photo / voice
@@ -270,6 +319,58 @@ struct RemindersView: View {
                 }
             })
     }
+
+    // MARK: - Appointments (read-only recap)
+
+    // Upcoming appointment reminders — read-only so this screen really lists
+    // everything the app may fire; editing stays in the RDV tab where the
+    // full appointment form lives.
+    private var appointmentsSection: some View {
+        SectionCard {
+            Text("Rendez-vous").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
+            Text("Rappels ponctuels de tes prochains RDV. Ils se gèrent depuis l'onglet RDV.")
+                .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+            if vm.appointmentReminders.isEmpty {
+                Text("Aucun rappel de rendez-vous à venir.")
+                    .font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.6))
+            } else {
+                ForEach(vm.appointmentReminders, id: \.id) { appt in
+                    HStack(spacing: Spacing.m) {
+                        Image(systemName: "calendar").font(.title3).foregroundStyle(palette.primary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(appointmentTitle(appt)).font(.eggCallout).foregroundStyle(palette.onSurface)
+                            if let ms = appt.reminderAtMs {
+                                Text(reminderDateLabel(ms))
+                                    .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+                            }
+                        }
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+
+    private func appointmentTitle(_ appt: Appointment) -> String {
+        if let place = appt.place, !place.isEmpty { return place }
+        if let name = appt.professionalName, !name.isEmpty { return name }
+        return "Rendez-vous"
+    }
+
+    private func reminderDateLabel(_ ms: Int64) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "fr_FR")
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f.string(from: Date(timeIntervalSince1970: Double(ms) / 1000))
+    }
+}
+
+// Sheet target wrapping the schedule to edit (DoseSchedule itself is not
+// Identifiable, which .sheet(item:) requires).
+private struct ScheduleEditTarget: Identifiable {
+    let schedule: DoseSchedule
+    var id: Int64 { schedule.id }
 }
 
 // MARK: - Alias field

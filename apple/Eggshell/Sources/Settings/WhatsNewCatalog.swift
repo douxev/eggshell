@@ -9,7 +9,7 @@ import SwiftUI
 
 enum WhatsNewCatalog {
     /// Highest version code. Compared against WhatsNewStore.lastSeen.
-    static let latestVersion: Int = 10
+    static let latestVersion: Int = 12
 
     struct Release: Identifiable {
         var id: Int { version }
@@ -20,6 +20,18 @@ enum WhatsNewCatalog {
 
     /// Releases, newest first.
     static let releases: [Release] = [
+        Release(
+            version: 12,
+            title: "Quoi de neuf",
+            highlights: [
+                "Règles — note un jour passé, ou « cette semaine = règles » en une seule action.",
+                "Prises par période — déclare une plage de prises (ex. gel quotidien sur des mois) et modifie une prise déjà notée, voie comprise.",
+                "Rappels sur mesure — modifie tes rappels, donne-leur ton propre texte, ajoute un rappel journal ; tout est regroupé au même endroit.",
+                "Calendrier plus parlant — règles en ligne continue et points de traitement sur le calendrier du journal, avec légende.",
+                "Courbes datées — les courbes d'hormones affichent les dates et un rond à chaque jour de prise.",
+                "Bilan sanguin enrichi — l'import PDF reconnaît la tension artérielle, l'hémoglobine et l'hématocrite.",
+            ]
+        ),
         Release(
             version: 10,
             title: "Quoi de neuf",

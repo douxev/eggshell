@@ -1,14 +1,14 @@
 import Foundation
 
-// Lab / photo / voice reminders, mirroring android LabReminderManager +
-// LabReminderPrefs. These are recurring "every N days" reminders that are NOT
+// Lab / photo / voice / journal reminders, mirroring android LabReminderManager
+// + LabReminderPrefs. These are recurring "every N days" reminders that are NOT
 // tied to a medication schedule. Stored as JSON in UserDefaults (UI preference
 // + due dates, not medical content). Shared by RemindersView (CRUD + scheduling)
 // and TodayView (upcoming aggregation), so it lives in the foundation.
 
 struct LabReminder: Codable, Identifiable, Hashable {
     var id: String
-    var kind: String          // "lab" | "photo" | "voice"
+    var kind: String          // "lab" | "photo" | "voice" | "journal"
     var label: String
     var intervalDays: Int
     var nextDueMs: Int64
@@ -19,21 +19,24 @@ enum LabReminderKind {
     static let lab = "lab"
     static let photo = "photo"
     static let voice = "voice"
+    static let journal = "journal"
 
     static func label(_ kind: String) -> String {
         switch kind {
-        case lab:   return "Bilan sanguin"
-        case photo: return "Photo de suivi"
-        case voice: return "Clip vocal"
-        default:    return "Rappel"
+        case lab:     return "Bilan sanguin"
+        case photo:   return "Photo de suivi"
+        case voice:   return "Clip vocal"
+        case journal: return "Journal du jour"
+        default:      return "Rappel"
         }
     }
     static func systemImage(_ kind: String) -> String {
         switch kind {
-        case lab:   return "drop.triangle"
-        case photo: return "camera"
-        case voice: return "waveform"
-        default:    return "bell"
+        case lab:     return "drop.triangle"
+        case photo:   return "camera"
+        case voice:   return "waveform"
+        case journal: return "square.and.pencil"
+        default:      return "bell"
         }
     }
 }
