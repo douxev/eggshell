@@ -141,7 +141,9 @@ class MedicationDetailViewModel @Inject constructor(
 @Composable
 fun MedicationDetailScreen(
     onLogDose: () -> Unit,
+    onEditDose: (Long) -> Unit,
     onAddSchedule: () -> Unit,
+    onEditSchedule: (Long) -> Unit,
     onEditMedication: () -> Unit,
     onBack: () -> Unit,
     vm: MedicationDetailViewModel = hiltViewModel(),
@@ -233,6 +235,7 @@ fun MedicationDetailScreen(
             SchedulesSection(
                 schedules = schedules,
                 onAdd = onAddSchedule,
+                onEdit = onEditSchedule,
                 onToggle = vm::toggleSchedule,
             )
 
@@ -248,7 +251,11 @@ fun MedicationDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     items(doses, key = { it.id }) { dose ->
-                        DoseRow(dose, onDelete = { doseToDelete = dose })
+                        DoseRow(
+                            dose,
+                            onEdit = { onEditDose(dose.id) },
+                            onDelete = { doseToDelete = dose },
+                        )
                     }
                 }
             }
@@ -373,6 +380,7 @@ private fun AliasDialog(
 private fun SchedulesSection(
     schedules: List<DoseSchedule>,
     onAdd: () -> Unit,
+    onEdit: (Long) -> Unit,
     onToggle: (Long, Boolean) -> Unit,
 ) {
     val dateFmt = remember(java.util.Locale.getDefault()) {
@@ -407,14 +415,22 @@ private fun SchedulesSection(
                         else -> s.kind
                     }
                     Text(descriptor, style = MaterialTheme.typography.bodyMedium)
+                    s.label?.takeIf { it.isNotBlank() }?.let {
+                        Text("« $it »", style = MaterialTheme.typography.bodySmall)
+                    }
                     Text(
                         stringResource(R.string.schedule_next_due_fmt, dateFmt.format(Date(s.nextDueAtMs))),
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    androidx.compose.material3.TextButton(
-                        onClick = { onToggle(s.id, !s.active) },
-                    ) {
-                        Text(stringResource(if (s.active) R.string.schedule_pause else R.string.schedule_resume))
+                    Row {
+                        androidx.compose.material3.TextButton(
+                            onClick = { onToggle(s.id, !s.active) },
+                        ) {
+                            Text(stringResource(if (s.active) R.string.schedule_pause else R.string.schedule_resume))
+                        }
+                        androidx.compose.material3.TextButton(onClick = { onEdit(s.id) }) {
+                            Text(stringResource(R.string.action_edit))
+                        }
                     }
                 }
             }
@@ -448,7 +464,7 @@ private fun MedHeader(med: Medication) {
 }
 
 @Composable
-private fun DoseRow(dose: DoseEvent, onDelete: () -> Unit) {
+private fun DoseRow(dose: DoseEvent, onEdit: () -> Unit, onDelete: () -> Unit) {
     val dateFmt = remember(java.util.Locale.getDefault()) {
         DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
     }
@@ -472,6 +488,12 @@ private fun DoseRow(dose: DoseEvent, onDelete: () -> Unit) {
             dose.notes?.takeIf { it.isNotBlank() }?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall)
             }
+        }
+        IconButton(onClick = onEdit) {
+            Icon(
+                Icons.Filled.Edit,
+                contentDescription = stringResource(R.string.med_dose_edit_title),
+            )
         }
         IconButton(onClick = onDelete) {
             Icon(

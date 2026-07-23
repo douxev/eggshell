@@ -39,6 +39,17 @@ class MedicationRepository @Inject constructor(
     suspend fun logDose(dose: NewDoseEvent): DoseEvent =
         withContext(Dispatchers.IO) { vault.requireSession().logDose(dose) }
 
+    /** Batch insert (one core transaction) — the "log a date range" flow. */
+    suspend fun logDoses(doses: List<NewDoseEvent>): List<DoseEvent> =
+        withContext(Dispatchers.IO) { vault.requireSession().logDoses(doses) }
+
+    /** Overwrite a recorded dose in place (fix route/date/amount after the fact). */
+    suspend fun updateDose(id: Long, dose: NewDoseEvent): DoseEvent =
+        withContext(Dispatchers.IO) { vault.requireSession().updateDose(id, dose) }
+
+    suspend fun getDose(id: Long): DoseEvent? =
+        withContext(Dispatchers.IO) { vault.requireSession().getDose(id) }
+
     suspend fun listDoses(medicationId: Long, offset: Long = 0, limit: Long = 50): List<DoseEvent> =
         withContext(Dispatchers.IO) { vault.requireSession().listDoses(medicationId, offset, limit) }
 

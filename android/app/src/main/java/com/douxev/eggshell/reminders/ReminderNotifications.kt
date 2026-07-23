@@ -62,13 +62,19 @@ class ReminderNotifications @Inject constructor(
         )
     }
 
-    /** Used by lab-reminder alarms. */
-    fun showLab(labId: Long, label: String, priority: Boolean) {
-        // We deliberately do NOT include `label` in the body — the lockscreen
-        // would otherwise show "Estradiol", "T4 libre"… in the clear, which
-        // defeats the privacy intent. Use the generic title; the user opens
-        // the app to see which lab is due.
-        val title = context.getString(R.string.lab_reminder_title)
+    /** Used by lab/photo/voice/journal reminder alarms. The user's free-text
+     *  label is deliberately NOT included — the lockscreen would otherwise show
+     *  "Estradiol", "T4 libre"… in the clear, which defeats the privacy
+     *  intent. Only the category picks a (still innocuous) title. */
+    fun showLab(labId: Long, category: String, priority: Boolean) {
+        val title = context.getString(
+            when (category) {
+                LabReminderPrefs.CATEGORY_PHOTO -> R.string.photo_reminder_title
+                LabReminderPrefs.CATEGORY_VOICE -> R.string.voice_reminder_title
+                LabReminderPrefs.CATEGORY_JOURNAL -> R.string.journal_reminder_title
+                else -> R.string.lab_reminder_title
+            }
+        )
         post(
             notifId = LAB_NOTIF_BASE + (labId.toInt() and ID_MASK),
             title = title,

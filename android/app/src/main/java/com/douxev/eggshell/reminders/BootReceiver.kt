@@ -23,29 +23,39 @@ class BootReceiver : BroadcastReceiver() {
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
                 val now = System.currentTimeMillis()
 
-                // Medication schedules.
+                // Medication schedules. Each entry is fenced on its own — one
+                // corrupt row (unknown kind after a downgrade, null interval)
+                // must not kill the loop and leave every other reminder dead.
                 val medPrefs = ReminderPrefs(context)
                 medPrefs.all().forEach { entry ->
+                    runCatching {
                     val due = if (entry.nextDueAtMs > now) entry.nextDueAtMs else {
                         // The reboot took longer than the next due — slide
                         // forward to the next occurrence so we don't fire
                         // immediately for something the user might have done.
+                        // intervalDays + currentDueMs are required for
+                        // days_interval (phase-preserving step); without them
+                        // the calculator throws and the whole re-arm loop dies.
                         val next = NextDueCalculator.nextDueAfter(
                             kind = entry.kind,
                             intervalMinutes = entry.intervalMinutes,
                             dailyHour = entry.dailyHour,
                             dailyMinute = entry.dailyMinute,
                             afterMs = now,
+                            intervalDays = entry.intervalDays,
+                            currentDueMs = entry.nextDueAtMs,
                         )
                         medPrefs.setNextDue(entry.scheduleId, next)
                         next
                     }
                     alarmScheduler.schedule(entry.scheduleId, due)
+                    }
                 }
 
-                // Lab reminders — same slide-forward rule.
+                // Lab reminders — same slide-forward rule, same per-entry fence.
                 val labPrefs = LabReminderPrefs(context)
                 labPrefs.all().forEach { entry ->
+                    runCatching {
                     val due = if (entry.nextDueAtMs > now) entry.nextDueAtMs else {
                         val next = LabNextDueCalculator.nextDueAfter(
                             kind = entry.kind,
@@ -58,6 +68,7 @@ class BootReceiver : BroadcastReceiver() {
                         next
                     }
                     alarmScheduler.scheduleLab(entry.id, due)
+                    }
                 }
             }
         }

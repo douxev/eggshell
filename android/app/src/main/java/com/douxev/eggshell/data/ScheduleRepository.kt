@@ -56,7 +56,11 @@ class ScheduleRepository @Inject constructor(
     /**
      * Create a new interval schedule. The first due time is set to `now + interval`.
      */
-    suspend fun createInterval(medicationId: Long, intervalMinutes: Int) = withContext(Dispatchers.IO) {
+    suspend fun createInterval(
+        medicationId: Long,
+        intervalMinutes: Int,
+        label: String? = null,
+    ) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val nextDue = NextDueCalculator.nextDueAfter("interval", intervalMinutes, null, null, now)
         val schedule = vault.requireSession().addSchedule(
@@ -68,6 +72,7 @@ class ScheduleRepository @Inject constructor(
                 dailyMinute = null,
                 intervalDays = null,
                 nextDueAtMs = nextDue,
+                label = label,
             ),
             now,
         )
@@ -77,7 +82,12 @@ class ScheduleRepository @Inject constructor(
     /**
      * Create a new daily schedule at HH:MM local time.
      */
-    suspend fun createDaily(medicationId: Long, hour: Int, minute: Int) = withContext(Dispatchers.IO) {
+    suspend fun createDaily(
+        medicationId: Long,
+        hour: Int,
+        minute: Int,
+        label: String? = null,
+    ) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val nextDue = NextDueCalculator.nextDueAfter("daily", null, hour, minute, now)
         val schedule = vault.requireSession().addSchedule(
@@ -89,6 +99,7 @@ class ScheduleRepository @Inject constructor(
                 dailyMinute = minute.toUInt(),
                 intervalDays = null,
                 nextDueAtMs = nextDue,
+                label = label,
             ),
             now,
         )
@@ -108,23 +119,10 @@ class ScheduleRepository @Inject constructor(
         hour: Int,
         minute: Int,
         startDateMs: Long,
+        label: String? = null,
     ) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        // Anchor = chosen start day at HH:MM. nextDueAfter steps the phase from
-        // this anchor until strictly after `now`.
-        val zone = java.time.ZoneId.systemDefault()
-        val anchor = java.time.Instant.ofEpochMilli(startDateMs).atZone(zone)
-            .withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-            .toInstant().toEpochMilli()
-        val nextDue = NextDueCalculator.nextDueAfter(
-            kind = "days_interval",
-            intervalMinutes = null,
-            dailyHour = hour,
-            dailyMinute = minute,
-            afterMs = now - 1,
-            intervalDays = intervalDays,
-            currentDueMs = anchor,
-        )
+        val nextDue = daysIntervalNextDue(intervalDays, hour, minute, startDateMs, now)
         val schedule = vault.requireSession().addSchedule(
             NewDoseSchedule(
                 medicationId = medicationId,
@@ -134,10 +132,98 @@ class ScheduleRepository @Inject constructor(
                 dailyMinute = minute.toUInt(),
                 intervalDays = intervalDays.toUInt(),
                 nextDueAtMs = nextDue,
+                label = label,
             ),
             now,
         )
         installAlarm(schedule)
+    }
+
+    /**
+     * Edit a reminder in place — cadence, time and custom label. The id stays
+     * stable so the sealed mirror, armed alarm and any queued snooze keep
+     * pointing at the same reminder; the next occurrence is recomputed from
+     * the new spec. A paused reminder stays paused (its alarm stays cancelled
+     * until resume re-installs everything from the fresh row).
+     */
+    suspend fun updateSchedule(
+        scheduleId: Long,
+        medicationId: Long,
+        kind: String,
+        intervalMinutes: Int?,
+        hour: Int?,
+        minute: Int?,
+        intervalDays: Int?,
+        startDateMs: Long?,
+        label: String?,
+    ) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val existing = vault.requireSession()
+            .listSchedulesForMedication(medicationId, true)
+            .firstOrNull { it.id == scheduleId }
+        val nextDue = when (kind) {
+            // Keep the running countdown when the cadence didn't change — a
+            // label-only edit must not push an "every 12 h" reminder back by
+            // however far into the cycle the user happened to be.
+            "interval" -> {
+                val cadenceUnchanged = existing?.kind == "interval" &&
+                    existing.intervalMinutes?.toInt() == intervalMinutes
+                if (cadenceUnchanged && existing != null && existing.nextDueAtMs > now) {
+                    existing.nextDueAtMs
+                } else {
+                    NextDueCalculator.nextDueAfter("interval", intervalMinutes, null, null, now)
+                }
+            }
+            "daily" -> NextDueCalculator.nextDueAfter("daily", null, hour, minute, now)
+            // The screen seeds startDateMs from the schedule's current next-due
+            // day, so the N-day phase carries over unless the user picks a new
+            // start date on purpose.
+            else -> daysIntervalNextDue(
+                intervalDays ?: 1, hour ?: 0, minute ?: 0, startDateMs ?: now, now,
+            )
+        }
+        val updated = vault.requireSession().updateSchedule(
+            scheduleId,
+            NewDoseSchedule(
+                medicationId = medicationId,
+                kind = kind,
+                intervalMinutes = intervalMinutes?.toUInt(),
+                dailyHour = hour?.toUInt(),
+                dailyMinute = minute?.toUInt(),
+                intervalDays = intervalDays?.toUInt(),
+                nextDueAtMs = nextDue,
+                label = label,
+            ),
+        )
+        if (updated.active) {
+            installAlarm(updated)
+        } else {
+            alarmScheduler.cancel(scheduleId)
+        }
+        refreshWidget()
+    }
+
+    /** Anchor = chosen start day at HH:MM; step the N-day phase until after now. */
+    private fun daysIntervalNextDue(
+        intervalDays: Int,
+        hour: Int,
+        minute: Int,
+        startDateMs: Long,
+        nowMs: Long,
+    ): Long {
+        val zone = java.time.ZoneId.systemDefault()
+        val anchor = java.time.Instant.ofEpochMilli(startDateMs).atZone(zone)
+            .withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+            .toInstant().toEpochMilli()
+        return NextDueCalculator.nextDueAfter(
+            kind = "days_interval",
+            intervalMinutes = null,
+            dailyHour = hour,
+            dailyMinute = minute,
+            afterMs = nowMs - 1,
+            intervalDays = intervalDays,
+            currentDueMs = anchor,
+        )
     }
 
     /**
@@ -248,7 +334,7 @@ class ScheduleRepository @Inject constructor(
                 dailyHour = s.dailyHour?.toInt(),
                 dailyMinute = s.dailyMinute?.toInt(),
                 nextDueAtMs = s.nextDueAtMs,
-                displayLabel = resolveDisplayLabel(s.medicationId),
+                displayLabel = resolveDisplayLabel(s.medicationId, s.label),
                 intervalDays = s.intervalDays?.toInt(),
             )
         )
@@ -256,17 +342,19 @@ class ScheduleRepository @Inject constructor(
     }
 
     /**
-     * The text a reminder is allowed to show for this medication, per the
-     * global [NotifContentPrefs] mode. GENERIC → null (nothing identifying in
-     * clear); NAME → the real name; ALIAS → the user's per-medication alias,
-     * or null (generic) when none is set — never the real name as a fallback.
+     * The text a reminder is allowed to show, per the global
+     * [NotifContentPrefs] mode. GENERIC → null (nothing identifying in clear,
+     * including any custom label); NAME → the reminder's own label when set,
+     * else the real name; ALIAS → the reminder's label, else the
+     * per-medication alias, or null (generic) — never the real name as a
+     * fallback.
      */
-    private fun resolveDisplayLabel(medicationId: Long): String? =
+    private fun resolveDisplayLabel(medicationId: Long, scheduleLabel: String?): String? =
         when (notifContent.current) {
             NotifContentPrefs.Mode.GENERIC -> null
-            NotifContentPrefs.Mode.NAME ->
-                runCatching { vault.requireSession().getMedication(medicationId)?.name }.getOrNull()
-            NotifContentPrefs.Mode.ALIAS -> medAlias.get(medicationId)
+            NotifContentPrefs.Mode.NAME -> scheduleLabel
+                ?: runCatching { vault.requireSession().getMedication(medicationId)?.name }.getOrNull()
+            NotifContentPrefs.Mode.ALIAS -> scheduleLabel ?: medAlias.get(medicationId)
         }
 
     /**

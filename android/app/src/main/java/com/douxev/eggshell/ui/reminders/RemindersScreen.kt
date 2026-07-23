@@ -20,6 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.Medication
@@ -43,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,12 +68,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
+import com.douxev.eggshell.data.AppointmentRepository
 import com.douxev.eggshell.data.MedicationRepository
 import com.douxev.eggshell.data.ScheduleRepository
 import com.douxev.eggshell.reminders.LabReminderManager
 import com.douxev.eggshell.reminders.LabReminderPrefs
 import com.douxev.eggshell.reminders.NotifContentPrefs
 import com.douxev.eggshell.ui.medication.MedicationCatalog
+import uniffi.transition.Appointment
 import uniffi.transition.DoseSchedule
 import uniffi.transition.Medication
 
@@ -79,6 +84,7 @@ class RemindersViewModel @Inject constructor(
     private val scheduleRepo: ScheduleRepository,
     private val medsRepo: MedicationRepository,
     private val labs: LabReminderManager,
+    private val appointments: AppointmentRepository,
     private val notifContent: NotifContentPrefs,
 ) : ViewModel() {
 
@@ -101,6 +107,10 @@ class RemindersViewModel @Inject constructor(
         val medReminders: List<MedReminder> = emptyList(),
         val labReminders: List<LabReminderPrefs.Entry> = emptyList(),
         val labPriorities: Map<Long, Boolean> = emptyMap(),
+        /** Upcoming one-shot appointment reminders — read-only here, managed
+         *  from the RDV tab. Listed so this screen shows every notification
+         *  the app may fire. */
+        val appointmentReminders: List<Appointment> = emptyList(),
     )
 
     private val _state = MutableStateFlow(State())
@@ -124,10 +134,16 @@ class RemindersViewModel @Inject constructor(
             }
             val labList = labs.list()
             val labPriority = labList.associate { it.id to labs.isPriority(it.id) }
+            val now = System.currentTimeMillis()
+            val upcomingAppointments = runCatching { appointments.list() }
+                .getOrDefault(emptyList())
+                .filter { (it.reminderAtMs ?: 0L) > now }
+                .sortedBy { it.reminderAtMs }
             _state.value = State(
                 medReminders = medItems,
                 labReminders = labList,
                 labPriorities = labPriority,
+                appointmentReminders = upcomingAppointments,
             )
         }
     }
@@ -179,10 +195,14 @@ class RemindersViewModel @Inject constructor(
 @Composable
 fun RemindersScreen(
     onBack: () -> Unit,
+    onEditMedSchedule: (medicationId: Long, scheduleId: Long) -> Unit = { _, _ -> },
     vm: RemindersViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
     val notifMode by vm.notifMode.collectAsState()
+    // Re-read on every return to this screen — a med reminder edited via the
+    // row tap lands back here and must show its new cadence/label.
+    LaunchedEffect(Unit) { vm.refresh() }
     // Null = no dialog open. Set to a LabDialogTarget to open the lab-reminder
     // dialog in either "create new" or "edit existing" mode.
     var dialogTarget by remember { mutableStateOf<LabDialogTarget?>(null) }
@@ -239,6 +259,7 @@ fun RemindersScreen(
                 state.medReminders.forEach { item ->
                     MedReminderCard(
                         item = item,
+                        onClick = { onEditMedSchedule(item.medication.id, item.schedule.id) },
                         onTogglePriority = { vm.setMedPriority(item.schedule.id, it) },
                         onDelete = { confirmDelete = item },
                     )
@@ -292,6 +313,40 @@ fun RemindersScreen(
                 onDelete = vm::deleteLab,
             )
 
+            // Mood journal check-in
+            CategorySection(
+                title = stringResource(R.string.reminders_section_journal),
+                hint = stringResource(R.string.reminders_section_journal_hint),
+                addLabel = stringResource(R.string.reminders_add_journal),
+                emptyLabel = stringResource(R.string.reminders_no_journal),
+                items = state.labReminders.filter { it.category == LabReminderPrefs.CATEGORY_JOURNAL },
+                priorities = state.labPriorities,
+                iconForCategory = LabIconFor(LabReminderPrefs.CATEGORY_JOURNAL),
+                onAdd = { dialogTarget = LabDialogTarget.New(LabReminderPrefs.CATEGORY_JOURNAL) },
+                onEdit = { entry -> dialogTarget = LabDialogTarget.Edit(entry) },
+                onTogglePriority = vm::setLabPriority,
+                onDelete = vm::deleteLab,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Upcoming appointment reminders — read-only recap so this screen
+            // really lists everything the app may fire; editing stays in the
+            // RDV tab where the full appointment form lives.
+            SectionHeader(stringResource(R.string.reminders_section_appointments))
+            Text(
+                stringResource(R.string.reminders_section_appointments_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (state.appointmentReminders.isEmpty()) {
+                EmptyHint(stringResource(R.string.reminders_no_appointments))
+            } else {
+                state.appointmentReminders.forEach { appt ->
+                    AppointmentReminderRow(appt)
+                }
+            }
+
             Box(modifier = Modifier.height(80.dp))
         }
     }
@@ -305,11 +360,13 @@ fun RemindersScreen(
             is LabDialogTarget.Edit -> when (category) {
                 LabReminderPrefs.CATEGORY_PHOTO -> R.string.reminders_photo_edit_dialog_title
                 LabReminderPrefs.CATEGORY_VOICE -> R.string.reminders_voice_edit_dialog_title
+                LabReminderPrefs.CATEGORY_JOURNAL -> R.string.reminders_journal_edit_dialog_title
                 else -> R.string.reminders_lab_edit_dialog_title
             }
             is LabDialogTarget.New -> when (category) {
                 LabReminderPrefs.CATEGORY_PHOTO -> R.string.reminders_photo_dialog_title
                 LabReminderPrefs.CATEGORY_VOICE -> R.string.reminders_voice_dialog_title
+                LabReminderPrefs.CATEGORY_JOURNAL -> R.string.reminders_journal_dialog_title
                 else -> R.string.reminders_lab_dialog_title
             }
         }
@@ -319,6 +376,7 @@ fun RemindersScreen(
                 when (category) {
                     LabReminderPrefs.CATEGORY_PHOTO -> R.string.reminders_photo_default_label
                     LabReminderPrefs.CATEGORY_VOICE -> R.string.reminders_voice_default_label
+                    LabReminderPrefs.CATEGORY_JOURNAL -> R.string.reminders_journal_default_label
                     else -> R.string.reminders_lab_default_label
                 }
             )
@@ -424,7 +482,52 @@ private fun CategorySection(
 private fun LabIconFor(category: String): ImageVector = when (category) {
     LabReminderPrefs.CATEGORY_PHOTO -> Icons.Filled.PhotoCamera
     LabReminderPrefs.CATEGORY_VOICE -> Icons.Filled.GraphicEq
+    LabReminderPrefs.CATEGORY_JOURNAL -> Icons.Filled.EditNote
     else -> Icons.Filled.Science
+}
+
+@Composable
+private fun AppointmentReminderRow(appt: Appointment) {
+    val dateFmt = remember(java.util.Locale.getDefault()) {
+        java.text.DateFormat.getDateTimeInstance(
+            java.text.DateFormat.MEDIUM,
+            java.text.DateFormat.SHORT,
+        )
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = RoundedCornerShape(20.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(16.dp),
+        ) {
+            Icon(
+                Icons.Filled.Event,
+                contentDescription = null,
+                modifier = Modifier.size(28.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Column(modifier = Modifier
+                .padding(start = 12.dp)
+                .weight(1f)) {
+                Text(
+                    appt.place?.takeIf { it.isNotBlank() }
+                        ?: appt.professionalName?.takeIf { it.isNotBlank() }
+                        ?: stringResource(R.string.reminders_appointment_generic),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                appt.reminderAtMs?.let {
+                    Text(
+                        dateFmt.format(java.util.Date(it)),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -504,6 +607,7 @@ private fun EmptyHint(text: String) {
 @Composable
 private fun MedReminderCard(
     item: RemindersViewModel.MedReminder,
+    onClick: () -> Unit,
     onTogglePriority: (Boolean) -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -531,11 +635,13 @@ private fun MedReminderCard(
         )
         else -> ""
     }
+    val label = item.schedule.label?.takeIf { it.isNotBlank() }
     ReminderCard(
         leadingIcon = routeIcon,
         title = item.medication.name,
-        subtitle = scheduleText,
+        subtitle = if (label != null) "$scheduleText · « $label »" else scheduleText,
         priority = item.priority,
+        onClick = onClick,
         onTogglePriority = onTogglePriority,
         onDelete = onDelete,
     )
