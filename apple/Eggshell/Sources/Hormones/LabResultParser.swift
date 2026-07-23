@@ -57,17 +57,42 @@ enum LabResultParser {
             ]),
             ("prolactin", ["prolactine", "prolactin"]),
             ("shbg", ["\\bSHBG\\b", "sex\\s*hormone\\s*binding\\s*globulin"]),
+            // NFS values, tracked alongside hormone draws for HRT/testo follow-up.
+            // The negative lookaheads keep "Hémoglobine glyquée" (HbA1c) out —
+            // it's a different analyte, in %, that would otherwise shadow Hb.
+            ("hemoglobin", [
+                "h[ée]moglobine(?!\\s*(?:glyqu|a1c))", "hemoglobin(?!\\s*a1c)", "\\bHGB\\b", "\\bHb\\b(?!\\s*A1c)",
+            ]),
+            ("hematocrit", ["h[ée]matocrite", "hematocrit", "\\bHCT\\b", "\\bHte\\b"]),
+            // Pseudo-kind: expanded into bp_systolic + bp_diastolic by parse().
+            // (?<!hyper) keeps "suivi pour hypertension artérielle" (a history
+            // note, no reading) from triggering the BP branch.
+            (bpKind, [
+                "(?<!hyper)tension\\s*art[ée]rielle", "pression\\s*art[ée]rielle", "blood\\s*pressure",
+            ]),
         ]
         return raw.map { kind, pats in
             (kind, pats.compactMap { compile($0) })
         }
     }()
 
+    /// Pseudo-kind for the paired blood-pressure reading.
+    private static let bpKind = "bp"
+
     /// A number (decimal point or comma) followed by an allowed unit token.
     private static let valueUnitRegex: NSRegularExpression? = compile(
         "(\\d{1,5}[.,]?\\d{0,3})\\s*" +
         "(pg/mL|pg/ml|pmol/L|pmol/l|ng/dL|ng/dl|nmol/L|nmol/l|ng/mL|ng/ml|" +
-        "mIU/mL|mIU/ml|miu/ml|µIU/mL|µIU/ml|uIU/mL|uIU/ml|UI/L|ui/l|IU/L|iu/l)"
+        "mIU/mL|mIU/ml|miu/ml|µIU/mL|µIU/ml|uIU/mL|uIU/ml|UI/L|ui/l|IU/L|iu/l|" +
+        "g/dL|g/dl|g/100\\s*mL|g/100\\s*ml|%)"
+    )
+
+    /// "128 / 82", "12,8/8,2 cmHg" — the systolic/diastolic pair. The
+    /// lookarounds refuse a third "/NNNN" segment and a leading "NN/" so a
+    /// date (27/05/2026) can never be consumed as a reading; `matchBp` then
+    /// applies plausibility windows and unit preference on top.
+    private static let bpPairRegex: NSRegularExpression? = compile(
+        "(?<![\\d/.,])(\\d{1,3}(?:[.,]\\d)?)\\s*/\\s*(\\d{1,3}(?:[.,]\\d)?)(?!\\s*/\\s*\\d)\\s*(mm\\s*Hg|mmHg|cm\\s*Hg|cmHg)?"
     )
 
     /// Numeric dates: 27/05/2026, 27-05-2026, 27.05.2026, 2026-05-27, etc.
@@ -111,12 +136,29 @@ enum LabResultParser {
 
         for (i, line) in lines.enumerated() {
             guard let hormone = matchHormone(line) else { continue }
+
+            if hormone == bpKind {
+                // Blood pressure is a paired reading — expand to two rows so
+                // each side charts independently.
+                if byHormone["bp_systolic"] != nil { continue }
+                var pair = matchBp(line)
+                if pair == nil, i + 1 < lines.count { pair = matchBp(lines[i + 1]) }
+                if pair == nil, i + 2 < lines.count { pair = matchBp(lines[i + 2]) }
+                if let (sys, dia) = pair {
+                    order.append("bp_systolic")
+                    byHormone["bp_systolic"] = ParsedMeasurement(hormone: "bp_systolic", value: sys, unit: "mmHg", atMs: date)
+                    order.append("bp_diastolic")
+                    byHormone["bp_diastolic"] = ParsedMeasurement(hormone: "bp_diastolic", value: dia, unit: "mmHg", atMs: date)
+                }
+                continue
+            }
+
             if byHormone[hormone] != nil { continue } // already captured earlier
 
             // Try same line first, then the next two lines for multi-line layouts.
-            var candidate = matchValue(line)
-            if candidate == nil, i + 1 < lines.count { candidate = matchValue(lines[i + 1]) }
-            if candidate == nil, i + 2 < lines.count { candidate = matchValue(lines[i + 2]) }
+            var candidate = matchValue(line, kind: hormone)
+            if candidate == nil, i + 1 < lines.count { candidate = matchValue(lines[i + 1], kind: hormone) }
+            if candidate == nil, i + 2 < lines.count { candidate = matchValue(lines[i + 2], kind: hormone) }
             if let (value, unit) = candidate {
                 order.append(hormone)
                 byHormone[hormone] = ParsedMeasurement(hormone: hormone, value: value, unit: unit, atMs: date)
@@ -205,19 +247,56 @@ enum LabResultParser {
         return nil
     }
 
-    private static func matchValue(_ line: String) -> (Double, String)? {
+    /// Units each analyte may legitimately carry. Without this, the 2-line
+    /// lookahead would happily hand "Hémoglobine" the "42,3 %" of the
+    /// Hématocrite line below it in column-split OCR layouts — % is the most
+    /// common unit-like token on a lab report.
+    private static let hormoneUnits: Set<String> = ["pg/mL", "pmol/L", "ng/dL", "nmol/L", "ng/mL", "mIU/mL"]
+    private static let allowedUnits: [String: Set<String>] = [
+        "hemoglobin": ["g/dL"],
+        "hematocrit": ["%"],
+    ]
+
+    private static func matchValue(_ line: String, kind: String) -> (Double, String)? {
         guard let rx = valueUnitRegex else { return nil }
+        let allowed = allowedUnits[kind] ?? hormoneUnits
         let ns = line as NSString
         let range = NSRange(location: 0, length: ns.length)
-        guard let m = rx.firstMatch(in: line, options: [], range: range) else { return nil }
-        let rawNum = ns.substring(with: m.range(at: 1)).replacingOccurrences(of: ",", with: ".")
-        guard let value = Double(rawNum) else { return nil }
-        let unit = normalizeUnit(ns.substring(with: m.range(at: 2)))
-        return (value, unit)
+        for m in rx.matches(in: line, options: [], range: range) {
+            let rawNum = ns.substring(with: m.range(at: 1)).replacingOccurrences(of: ",", with: ".")
+            guard let value = Double(rawNum) else { continue }
+            let unit = normalizeUnit(ns.substring(with: m.range(at: 2)))
+            if allowed.contains(unit) { return (value, unit) }
+        }
+        return nil
+    }
+
+    /// Systolic/diastolic pair. A unit-bearing pair always wins over a bare
+    /// one, and the ×10 "cmHg habit" rescale (12,8/8,2 → 128/82) only applies
+    /// when the unit is explicit — otherwise any dd/mm date with a small day
+    /// would rescale into a perfectly plausible fabricated reading.
+    private static func matchBp(_ line: String) -> (Double, Double)? {
+        guard let rx = bpPairRegex else { return nil }
+        let ns = line as NSString
+        let range = NSRange(location: 0, length: ns.length)
+        var bare: (Double, Double)?
+        for m in rx.matches(in: line, options: [], range: range) {
+            let rawSys = ns.substring(with: m.range(at: 1)).replacingOccurrences(of: ",", with: ".")
+            let rawDia = ns.substring(with: m.range(at: 2)).replacingOccurrences(of: ",", with: ".")
+            guard var sys = Double(rawSys), var dia = Double(rawDia) else { continue }
+            let unitRange = m.range(at: 3)
+            let hasUnit = unitRange.location != NSNotFound && unitRange.length > 0
+            if hasUnit && sys < 30 && dia < 20 { sys *= 10; dia *= 10 }
+            let plausible = sys >= 60 && sys <= 260 && dia >= 30 && dia <= 160 && sys > dia
+            if !plausible { continue }
+            if hasUnit { return (sys, dia) }
+            if bare == nil { bare = (sys, dia) }
+        }
+        return bare
     }
 
     private static func normalizeUnit(_ raw: String) -> String {
-        switch raw.lowercased() {
+        switch raw.lowercased().replacingOccurrences(of: " ", with: "") {
         case "pg/ml":  return "pg/mL"
         case "pmol/l": return "pmol/L"
         case "ng/dl":  return "ng/dL"
@@ -227,6 +306,8 @@ enum LabResultParser {
         // µIU/mL and IU/L are equivalent to mIU/mL for LH/FSH/prolactin in
         // clinical practice — normalise so the catalog only has one bucket.
         case "µiu/ml", "uiu/ml", "iu/l", "ui/l": return "mIU/mL"
+        // NFS: g/100 mL is the older notation for g/dL — one bucket.
+        case "g/dl", "g/100ml": return "g/dL"
         default: return raw
         }
     }

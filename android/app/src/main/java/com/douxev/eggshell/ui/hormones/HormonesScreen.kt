@@ -47,6 +47,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -77,10 +80,15 @@ data class DisplayMeasurement(
 
 enum class HormonesTab { Hormones, Weight }
 
+/** A dose taken inside the charted window — drawn as a dot on the curve so
+ *  intakes and hormone levels correlate visually. */
+data class DoseMarker(val atMs: Long, val colorArgb: Long?)
+
 @HiltViewModel
 class HormonesViewModel @Inject constructor(
     private val repo: HormonesRepository,
     private val units: HormoneUnitPrefs,
+    private val meds: com.douxev.eggshell.data.MedicationRepository,
     navTabsPrefs: com.douxev.eggshell.data.FeaturesPrefs,
 ) : ViewModel() {
     val weightTrackingEnabled: StateFlow<Boolean> = navTabsPrefs.weightTracking
@@ -92,6 +100,8 @@ class HormonesViewModel @Inject constructor(
     val measurements: StateFlow<List<DisplayMeasurement>> = _measurements.asStateFlow()
     private val _preferredUnit = MutableStateFlow<String?>(null)
     val preferredUnit: StateFlow<String?> = _preferredUnit.asStateFlow()
+    private val _doseMarkers = MutableStateFlow<List<DoseMarker>>(emptyList())
+    val doseMarkers: StateFlow<List<DoseMarker>> = _doseMarkers.asStateFlow()
 
     private val _tab = MutableStateFlow(HormonesTab.Hormones)
     val tab: StateFlow<HormonesTab> = _tab.asStateFlow()
@@ -205,6 +215,32 @@ class HormonesViewModel @Inject constructor(
                 displayUnit = if (converted != null) target!! else m.unit,
             )
         }
+        loadDoseMarkers(h, raw)
+    }
+
+    /** Doses taken inside the charted window, one marker per med per day —
+     *  daily treatments would otherwise stack dozens of dots on one spot. */
+    private suspend fun loadDoseMarkers(hormone: String, raw: List<HormoneMeasurement>) {
+        if (hormone == HormoneCatalog.WEIGHT || raw.size < 2) {
+            _doseMarkers.value = emptyList()
+            return
+        }
+        val from = raw.minOf { it.atMs }
+        val to = raw.maxOf { it.atMs }
+        val medColors = runCatching { meds.list(includeArchived = true) }
+            .getOrDefault(emptyList())
+            .associate { it.id to it.color }
+        // Bucket by *local* calendar day — UTC buckets would split a 23:00 +
+        // 01:30 same-night pair into two markers in UTC+2.
+        val zone = java.time.ZoneId.systemDefault()
+        _doseMarkers.value = runCatching { meds.listDoseEventsBetween(from, to) }
+            .getOrDefault(emptyList())
+            .filter { it.status == "taken" }
+            .distinctBy {
+                it.medicationId to
+                    java.time.Instant.ofEpochMilli(it.takenAtMs).atZone(zone).toLocalDate()
+            }
+            .map { DoseMarker(it.takenAtMs, medColors[it.medicationId]) }
     }
 }
 
@@ -342,7 +378,14 @@ fun HormonesScreen(
                 val sorted = remember(measurements) { measurements.sortedBy { it.raw.atMs } }
                 val latest = sorted.last()
                 val prev = sorted.dropLast(1).lastOrNull()
-                LatestCard(latest = latest, prev = prev, sortedAsc = sorted, weight = tab == HormonesTab.Weight)
+                val doseMarkers by vm.doseMarkers.collectAsState()
+                LatestCard(
+                    latest = latest,
+                    prev = prev,
+                    sortedAsc = sorted,
+                    doseMarkers = if (tab == HormonesTab.Weight) emptyList() else doseMarkers,
+                    weight = tab == HormonesTab.Weight,
+                )
                 Text(
                     stringResource(R.string.hormones_history),
                     style = MaterialTheme.typography.titleSmall,
@@ -636,6 +679,7 @@ private fun LatestCard(
     latest: DisplayMeasurement,
     prev: DisplayMeasurement?,
     sortedAsc: List<DisplayMeasurement>,
+    doseMarkers: List<DoseMarker> = emptyList(),
     weight: Boolean = false,
 ) {
     val color = MaterialTheme.colorScheme.primary
@@ -681,11 +725,14 @@ private fun LatestCard(
             }
             if (sortedAsc.size >= 2) {
                 AreaChart(
-                    values = sortedAsc.map { it.displayValue },
+                    points = sortedAsc.map { it.raw.atMs to it.displayValue },
+                    doseMarkers = doseMarkers,
                     color = color,
+                    fallbackMarkerColor = MaterialTheme.colorScheme.secondary,
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp)
+                        .height(172.dp)
                         .padding(top = 6.dp),
                 )
             }
@@ -760,21 +807,44 @@ private fun HistoryCard(
     }
 }
 
+/**
+ * Time-proportional area chart. X positions follow the actual draw dates (so
+ * a 6-month gap looks like one), date labels sit under the axis, and each
+ * dose taken in the window shows as a small dot on the interpolated curve —
+ * the visual link between intakes and hormone evolution.
+ */
 @Composable
-private fun AreaChart(values: List<Double>, color: Color, modifier: Modifier) {
+private fun AreaChart(
+    points: List<Pair<Long, Double>>,
+    doseMarkers: List<DoseMarker>,
+    color: Color,
+    fallbackMarkerColor: Color,
+    labelColor: Color,
+    modifier: Modifier,
+) {
+    val values = points.map { it.second }
     val min = values.min()
     val max = values.max()
     val range = (max - min).takeIf { it > 0.0 } ?: 1.0
+    val tMin = points.first().first
+    val tMax = points.last().first
+    val tRange = (tMax - tMin).takeIf { it > 0L } ?: 1L
+    val dateFmt = remember { SimpleDateFormat("d MMM", Locale.getDefault()) }
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
         val pad = 14f
-        val padBottom = 18f
+        val padBottom = 34f
+        fun xFor(t: Long): Float =
+            pad + (w - 2 * pad) * ((t - tMin).toFloat() / tRange.toFloat())
+        fun yFor(v: Double): Float =
+            pad + (h - pad - padBottom) * (1f - ((v - min) / range).toFloat())
+
         val linePath = Path()
         val areaPath = Path()
-        values.forEachIndexed { i, v ->
-            val x = pad + (w - 2 * pad) * (i.toFloat() / (values.size - 1).toFloat())
-            val y = pad + (h - pad - padBottom) * (1f - ((v - min) / range).toFloat())
+        points.forEachIndexed { i, (t, v) ->
+            val x = xFor(t)
+            val y = yFor(v)
             if (i == 0) {
                 linePath.moveTo(x, y)
                 areaPath.moveTo(x, h - padBottom)
@@ -784,8 +854,7 @@ private fun AreaChart(values: List<Double>, color: Color, modifier: Modifier) {
                 areaPath.lineTo(x, y)
             }
         }
-        val lastX = pad + (w - 2 * pad)
-        areaPath.lineTo(lastX, h - padBottom)
+        areaPath.lineTo(xFor(tMax), h - padBottom)
         areaPath.close()
 
         drawPath(
@@ -797,10 +866,52 @@ private fun AreaChart(values: List<Double>, color: Color, modifier: Modifier) {
             ),
         )
         drawPath(linePath, color, style = Stroke(width = 5f, cap = StrokeCap.Round))
-        val v = values.last()
-        val x = pad + (w - 2 * pad)
-        val y = pad + (h - pad - padBottom) * (1f - ((v - min) / range).toFloat())
-        drawCircle(color, radius = 8f, center = Offset(x, y))
+        drawCircle(color, radius = 8f, center = Offset(xFor(tMax), yFor(values.last())))
+
+        // Linear interpolation of the curve's value at time t.
+        fun curveValueAt(t: Long): Double {
+            var i = points.indexOfLast { it.first <= t }
+            if (i < 0) i = 0
+            if (i >= points.lastIndex) return points.last().second
+            val (t0, v0) = points[i]
+            val (t1, v1) = points[i + 1]
+            if (t1 == t0) return v0
+            val f = (t - t0).toDouble() / (t1 - t0).toDouble()
+            return v0 + (v1 - v0) * f
+        }
+        doseMarkers.filter { it.atMs in tMin..tMax }.forEach { m ->
+            val markerColor = m.colorArgb?.let { Color(it.toInt()) } ?: fallbackMarkerColor
+            drawCircle(
+                color = markerColor.copy(alpha = 0.9f),
+                radius = 5f,
+                center = Offset(xFor(m.atMs), yFor(curveValueAt(m.atMs))),
+            )
+        }
+
+        // Date labels: first, middle and last draw dates along the X axis.
+        val paint = android.graphics.Paint().apply {
+            textSize = 10.sp.toPx()
+            isAntiAlias = true
+            this.color = labelColor.toArgb()
+        }
+        val labelTs = buildList {
+            add(tMin)
+            if (tRange > 2 * 86_400_000L) add(tMin + tRange / 2)
+            add(tMax)
+        }.distinct()
+        val textY = h - 6f
+        drawIntoCanvas { canvas ->
+            labelTs.forEachIndexed { i, t ->
+                val label = dateFmt.format(Date(t))
+                val textW = paint.measureText(label)
+                val x = when (i) {
+                    0 -> pad
+                    labelTs.lastIndex -> xFor(t) - textW
+                    else -> xFor(t) - textW / 2
+                }
+                canvas.nativeCanvas.drawText(label, x, textY, paint)
+            }
+        }
     }
 }
 

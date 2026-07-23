@@ -18,6 +18,9 @@ pub struct DoseSchedule {
     pub next_due_at_ms: i64,
     pub active: bool,
     pub created_at_ms: i64,
+    /// Optional custom reminder text (e.g. "Aller chercher le traitement").
+    /// Whether it may appear in a notification is the native side's call.
+    pub label: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -29,6 +32,7 @@ pub struct NewDoseSchedule {
     pub daily_minute: Option<u32>,
     pub interval_days: Option<u32>,
     pub next_due_at_ms: i64,
+    pub label: Option<String>,
 }
 
 pub fn add(
@@ -41,11 +45,12 @@ pub fn add(
         .execute(
             "INSERT INTO dose_schedules
                 (medication_id, kind, interval_minutes, daily_hour, daily_minute,
-                 interval_days, next_due_at_ms, active, created_at_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8)",
+                 interval_days, next_due_at_ms, active, created_at_ms, label)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?9)",
             params![
                 s.medication_id, s.kind, s.interval_minutes,
                 s.daily_hour, s.daily_minute, s.interval_days, s.next_due_at_ms, now_ms,
+                s.label,
             ],
         )
         .map_err(map_sql)?;
@@ -61,7 +66,33 @@ pub fn add(
         next_due_at_ms: s.next_due_at_ms,
         active: true,
         created_at_ms: now_ms,
+        label: s.label,
     })
+}
+
+/// Overwrite the editable fields of a schedule in place — the id stays stable
+/// so the native side's armed alarm and sealed prefs keep pointing at the same
+/// reminder. `active` and `created_at_ms` are untouched; `medication_id` from
+/// `s` is ignored (a reminder never moves to another medication).
+pub fn update(db: &Database, id: i64, s: NewDoseSchedule) -> Result<DoseSchedule, TransitionError> {
+    validate(&s)?;
+    let n = db
+        .conn()
+        .execute(
+            "UPDATE dose_schedules
+             SET kind = ?1, interval_minutes = ?2, daily_hour = ?3, daily_minute = ?4,
+                 interval_days = ?5, next_due_at_ms = ?6, label = ?7
+             WHERE id = ?8",
+            params![
+                s.kind, s.interval_minutes, s.daily_hour, s.daily_minute,
+                s.interval_days, s.next_due_at_ms, s.label, id,
+            ],
+        )
+        .map_err(map_sql)?;
+    if n == 0 {
+        return Err(TransitionError::Database(format!("no schedule with id {id}")));
+    }
+    get(db, id)?.ok_or_else(|| TransitionError::Database(format!("no schedule with id {id}")))
 }
 
 pub fn list_active(db: &Database) -> Result<Vec<DoseSchedule>, TransitionError> {
@@ -69,7 +100,7 @@ pub fn list_active(db: &Database) -> Result<Vec<DoseSchedule>, TransitionError> 
     let mut stmt = conn
         .prepare(
             "SELECT id, medication_id, kind, interval_minutes, daily_hour, daily_minute,
-                    next_due_at_ms, active, created_at_ms, interval_days
+                    next_due_at_ms, active, created_at_ms, interval_days, label
              FROM dose_schedules
              WHERE active = 1
              ORDER BY next_due_at_ms ASC",
@@ -90,13 +121,13 @@ pub fn list_for_medication(
 ) -> Result<Vec<DoseSchedule>, TransitionError> {
     let sql = if include_inactive {
         "SELECT id, medication_id, kind, interval_minutes, daily_hour, daily_minute,
-                next_due_at_ms, active, created_at_ms, interval_days
+                next_due_at_ms, active, created_at_ms, interval_days, label
          FROM dose_schedules
          WHERE medication_id = ?1
          ORDER BY active DESC, next_due_at_ms ASC"
     } else {
         "SELECT id, medication_id, kind, interval_minutes, daily_hour, daily_minute,
-                next_due_at_ms, active, created_at_ms, interval_days
+                next_due_at_ms, active, created_at_ms, interval_days, label
          FROM dose_schedules
          WHERE medication_id = ?1 AND active = 1
          ORDER BY next_due_at_ms ASC"
@@ -115,7 +146,7 @@ pub fn get(db: &Database, id: i64) -> Result<Option<DoseSchedule>, TransitionErr
     db.conn()
         .query_row(
             "SELECT id, medication_id, kind, interval_minutes, daily_hour, daily_minute,
-                    next_due_at_ms, active, created_at_ms, interval_days
+                    next_due_at_ms, active, created_at_ms, interval_days, label
              FROM dose_schedules WHERE id = ?1",
             [id],
             parse,
@@ -219,6 +250,7 @@ fn parse(row: &Row) -> rusqlite::Result<DoseSchedule> {
         active: row.get::<_, i64>(7)? != 0,
         created_at_ms: row.get(8)?,
         interval_days: row.get::<_, Option<u32>>(9)?,
+        label: row.get(10)?,
     })
 }
 
@@ -275,6 +307,7 @@ mod tests {
                 daily_minute: None,
                 interval_days: None,
                 next_due_at_ms: 1_000_000,
+                label: None,
             },
             500,
         )
@@ -300,6 +333,7 @@ mod tests {
                 daily_minute: Some(0),
                 interval_days: None,
                 next_due_at_ms: 1_500_000,
+                label: None,
             },
             500,
         )
@@ -324,6 +358,7 @@ mod tests {
                 daily_minute: Some(30),
                 interval_days: Some(3),
                 next_due_at_ms: 2_000_000,
+                label: None,
             },
             500,
         )
@@ -349,6 +384,7 @@ mod tests {
                 daily_minute: Some(0),
                 interval_days: None,
                 next_due_at_ms: 2_000_000,
+                label: None,
             },
             500,
         );
@@ -369,6 +405,7 @@ mod tests {
                 daily_minute: None,
                 interval_days: None,
                 next_due_at_ms: 1_000_000,
+                label: None,
             },
             500,
         );
@@ -389,6 +426,7 @@ mod tests {
                 daily_minute: Some(0),
                 interval_days: None,
                 next_due_at_ms: 1_500_000,
+                label: None,
             },
             500,
         );
@@ -409,6 +447,7 @@ mod tests {
                 daily_minute: None,
                 interval_days: None,
                 next_due_at_ms: 10_000,
+                label: None,
             },
             500,
         )
@@ -436,6 +475,7 @@ mod tests {
                 daily_minute: None,
                 interval_days: None,
                 next_due_at_ms: 10_000,
+                label: None,
             },
             500,
         )
@@ -478,6 +518,7 @@ mod tests {
                 daily_minute: None,
                 interval_days: None,
                 next_due_at_ms: 10_000,
+                label: None,
             },
             500,
         )
@@ -503,6 +544,7 @@ mod tests {
                     daily_minute: None,
                     interval_days: None,
                     next_due_at_ms: ms,
+                    label: None,
                 },
                 500,
             )
@@ -511,5 +553,88 @@ mod tests {
         let xs = list_active(&db).unwrap();
         let due: Vec<_> = xs.iter().map(|s| s.next_due_at_ms).collect();
         assert_eq!(due, vec![10_000, 20_000, 30_000]);
+    }
+
+    #[test]
+    fn update_edits_in_place_and_keeps_id() {
+        let (_k, db) = fresh_db();
+        let med_id = sample_med(&db);
+        let s = add(
+            &db,
+            NewDoseSchedule {
+                medication_id: med_id,
+                kind: "interval".into(),
+                interval_minutes: Some(720),
+                daily_hour: None,
+                daily_minute: None,
+                interval_days: None,
+                next_due_at_ms: 1_000_000,
+                label: None,
+            },
+            500,
+        )
+        .unwrap();
+        set_active(&db, s.id, false).unwrap();
+
+        let updated = update(
+            &db,
+            s.id,
+            NewDoseSchedule {
+                medication_id: med_id,
+                kind: "daily".into(),
+                interval_minutes: None,
+                daily_hour: Some(9),
+                daily_minute: Some(15),
+                interval_days: None,
+                next_due_at_ms: 2_000_000,
+                label: Some("Aller chercher le traitement".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.id, s.id);
+        assert_eq!(updated.kind, "daily");
+        assert_eq!(updated.daily_hour, Some(9));
+        assert_eq!(updated.label.as_deref(), Some("Aller chercher le traitement"));
+        // active + created_at_ms survive the edit untouched.
+        assert!(!updated.active);
+        assert_eq!(updated.created_at_ms, 500);
+    }
+
+    #[test]
+    fn update_validates_and_rejects_unknown_id() {
+        let (_k, db) = fresh_db();
+        let med_id = sample_med(&db);
+        // Invalid spec is rejected before touching the row.
+        assert!(update(
+            &db,
+            999,
+            NewDoseSchedule {
+                medication_id: med_id,
+                kind: "daily".into(),
+                interval_minutes: None,
+                daily_hour: None,
+                daily_minute: None,
+                interval_days: None,
+                next_due_at_ms: 1,
+                label: None,
+            },
+        )
+        .is_err());
+        // Valid spec but missing row → typed error.
+        assert!(update(
+            &db,
+            999,
+            NewDoseSchedule {
+                medication_id: med_id,
+                kind: "daily".into(),
+                interval_minutes: None,
+                daily_hour: Some(8),
+                daily_minute: Some(0),
+                interval_days: None,
+                next_due_at_ms: 1,
+                label: None,
+            },
+        )
+        .is_err());
     }
 }

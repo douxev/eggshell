@@ -146,7 +146,14 @@
     <string name="med_delete_message">The medication, all its dose history and its reminders will be permanently deleted. To hide it without losing the history, choose “Archive” instead.</string>
     <string name="med_delete_confirm">Delete permanently</string>
     <string name="med_log_dose_title">Log a dose</string>
+    <string name="med_dose_edit_title">Edit intake</string>
+    <string name="med_dose_load_error">Could not load the intake.</string>
     <string name="med_dose_datetime">Date &amp; time taken</string>
+    <string name="med_dose_mode_single">Single intake</string>
+    <string name="med_dose_mode_range">Date range</string>
+    <string name="med_dose_range_label">Date range</string>
+    <string name="med_dose_time_label">Time of each intake</string>
+    <string name="med_dose_range_count_fmt">%1$d intakes will be logged.</string>
     <string name="med_save_dose">Save</string>
     <string name="med_injection_site">Injection site</string>
     <string name="med_injection_suggested">Suggested: %1$s</string>
@@ -199,6 +206,9 @@
     <string name="reminder_channel_priority_description">Heads-up banner, vibration, sound.</string>
     <string name="reminder_action_mark_taken">Taken</string>
     <string name="lab_reminder_title">Lab follow-up due</string>
+    <string name="photo_reminder_title">Photo check-in</string>
+    <string name="voice_reminder_title">Voice check-in</string>
+    <string name="journal_reminder_title">Journal time</string>
     <string name="reminder_public_title">eggshell</string>
     <string name="reminder_public_body">Reminder — unlock to see details.</string>
     <string name="reminder_locked_toast">Unlock the app to log this dose.</string>
@@ -210,6 +220,10 @@
     <string name="schedule_list_title">Reminders</string>
     <string name="schedule_add">Add reminder</string>
     <string name="schedule_add_title">New reminder</string>
+    <string name="schedule_edit_title">Edit reminder</string>
+    <string name="schedule_field_label">Reminder text (optional)</string>
+    <string name="schedule_field_label_hint">Shown instead of the medication name. Never shown in generic mode.</string>
+    <string name="schedule_field_label_generic_warn">Generic mode is on: this text will not appear in any notification (change it in Reminders).</string>
     <string name="schedule_none">No reminders set for this medication.</string>
     <string name="schedule_kind_interval">Every N hours</string>
     <string name="schedule_kind_daily">Daily at HH:MM</string>
@@ -355,6 +369,10 @@
     <string name="hormone_fsh">FSH</string>
     <string name="hormone_prolactin">Prolactin</string>
     <string name="hormone_shbg">SHBG</string>
+    <string name="hormone_bp_systolic">Systolic BP</string>
+    <string name="hormone_bp_diastolic">Diastolic BP</string>
+    <string name="hormone_hemoglobin">Hemoglobin</string>
+    <string name="hormone_hematocrit">Hematocrit</string>
     <string name="hormone_other">Other</string>
 
     <string name="photos_title">Progress photos</string>
@@ -440,11 +458,22 @@
     <string name="reminders_add_voice">Add voice reminder</string>
     <string name="reminders_voice_dialog_title">New voice reminder</string>
     <string name="reminders_voice_default_label">Voice clip</string>
+    <string name="reminders_section_journal">Mood journal</string>
+    <string name="reminders_section_journal_hint">A nudge to log how today felt. Optional, like everything.</string>
+    <string name="reminders_no_journal">No journal reminder.</string>
+    <string name="reminders_add_journal">Add journal reminder</string>
+    <string name="reminders_journal_dialog_title">New journal reminder</string>
+    <string name="reminders_journal_edit_dialog_title">Edit journal reminder</string>
+    <string name="reminders_journal_default_label">Daily journal</string>
+    <string name="reminders_section_appointments">Appointments</string>
+    <string name="reminders_section_appointments_hint">One-shot reminders for your upcoming appointments. Managed from the RDV tab.</string>
+    <string name="reminders_no_appointments">No upcoming appointment reminder.</string>
+    <string name="reminders_appointment_generic">Appointment</string>
 
     <!-- ===== Settings hub ===== -->
     <string name="more_title">Settings</string>
     <string name="more_row_reminders">Reminders &amp; notifications</string>
-    <string name="more_row_reminders_sub">Meds, labs, photo, voice</string>
+    <string name="more_row_reminders_sub">Meds, labs, photo, voice, journal, appointments</string>
     <string name="more_row_advanced">Advanced settings</string>
     <string name="more_row_advanced_sub">Security, masking, backup, language</string>
     <string name="more_row_pdf">PDF export</string>
@@ -595,6 +624,7 @@
     <string name="bleeding_edit_title">Edit entry</string>
     <string name="bleeding_save">Save</string>
     <string name="bleeding_error">Could not save.</string>
+    <string name="bleeding_load_error">Could not load the entry.</string>
     <string name="bleeding_kind_label">Type</string>
     <string name="bleeding_kind_bleed">Period</string>
     <string name="bleeding_kind_spotting">Spotting</string>
@@ -603,6 +633,13 @@
     <string name="bleeding_gauge_flow">Flow</string>
     <string name="bleeding_gauge_pain">Pain</string>
     <string name="bleeding_gauge_cramps">Cramps</string>
+    <string name="bleeding_date_label">Date</string>
+    <string name="bleeding_mode_single">Single day</string>
+    <string name="bleeding_mode_range">Several days</string>
+    <string name="bleeding_range_label">Date range</string>
+    <string name="bleeding_range_count_fmt">%1$d days will be logged.</string>
+    <string name="daterange_pick">Pick a date range</string>
+    <string name="journal_legend_bleeding">Period</string>
 
     <!-- Customizable metric sliders (features 4 &amp; 5) -->
     <string name="metric_editor_open">Customize trackers</string>

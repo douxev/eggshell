@@ -5,7 +5,9 @@ ksp = "2.1.0-1.0.29"
 hilt = "2.56"
 hiltNavigationCompose = "1.2.0"
 composeBom = "2024.12.01"
-activityCompose = "1.9.3"
+# 1.10.x drops the pre-35 setStatusBarColor/setNavigationBarColor code paths
+# Play flags as deprecated (our code itself only calls enableEdgeToEdge()).
+activityCompose = "1.10.1"
 coreKtx = "1.15.0"
 lifecycleKtx = "2.8.7"
 navigationCompose = "2.8.5"
@@ -14,11 +16,13 @@ biometric = "1.2.0-alpha05"
 datastore = "1.1.1"
 cameraX = "1.4.1"
 vico = "2.0.0-beta.3"
-jna = "5.15.0"
+# 5.17.0+ ships 16 KB page-aligned libjnidispatch.so (Android 15 requirement)
+jna = "5.17.0"
 reorderable = "2.4.3"
 appcompat = "1.7.0"
 pdfboxAndroid = "2.0.27.0"
-tesseract4android = "4.7.0"
+# 4.8.0+ ships 16 KB page-aligned native libs (libtesseract, libleptonica, …)
+tesseract4android = "4.9.0"
 exifinterface = "1.3.7"
 
 [libraries]

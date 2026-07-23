@@ -83,18 +83,24 @@ enum MedCatalog {
 }
 
 enum HormoneCatalog {
-    /// Hormones surfaced in the Hormones tab. Weight uses the same storage
-    /// backend but lives in its own UI, so it is not in this list.
+    /// Analytes surfaced in the Hormones tab. Weight uses the same storage
+    /// backend but lives in its own UI, so it is not in this list. The
+    /// blood-pressure pair and the NFS values (Hb, Hte) share the thread —
+    /// HRT/testo follow-up tracks them at the same cadence as hormone draws.
+    /// Matches android HormoneCatalog.KINDS exactly.
     static let kinds = [
         "estradiol", "progesterone", "testosterone",
-        "lh", "fsh", "prolactin", "shbg", "other",
+        "lh", "fsh", "prolactin", "shbg",
+        "bp_systolic", "bp_diastolic", "hemoglobin", "hematocrit",
+        "other",
     ]
 
     /// Stable identifier used in `hormone_measurements` to store weight entries.
     static let weight = "weight"
 
     static let units = [
-        "pg/mL", "pmol/L", "ng/dL", "nmol/L", "ng/mL", "mIU/mL", "other",
+        "pg/mL", "pmol/L", "ng/dL", "nmol/L", "ng/mL", "mIU/mL",
+        "mmHg", "g/dL", "%", "other",
     ]
 
     static let weightUnits = ["kg", "lb"]
@@ -108,6 +114,10 @@ enum HormoneCatalog {
         case "fsh":          return "FSH"
         case "prolactin":    return "Prolactine"
         case "shbg":         return "SHBG"
+        case "bp_systolic":  return "Tension systolique"
+        case "bp_diastolic": return "Tension diastolique"
+        case "hemoglobin":   return "Hémoglobine"
+        case "hematocrit":   return "Hématocrite"
         case weight:         return "Poids"
         default:             return "Autre"
         }

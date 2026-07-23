@@ -15,7 +15,7 @@ use crate::TransitionError;
 use crate::crypto::MasterKey;
 
 /// Latest schema version this build of `transition-core` understands.
-pub const CURRENT_SCHEMA_VERSION: u32 = 13;
+pub const CURRENT_SCHEMA_VERSION: u32 = 14;
 
 pub struct Database {
     conn: Connection,
@@ -160,6 +160,10 @@ fn apply_migration(tx: &rusqlite::Transaction, version: u32) -> Result<(), Trans
         }
         13 => {
             tx.execute_batch(include_str!("migrations/0013_appointments.sql"))
+                .map_err(map_sql)?;
+        }
+        14 => {
+            tx.execute_batch(include_str!("migrations/0014_schedule_label.sql"))
                 .map_err(map_sql)?;
         }
         v => {

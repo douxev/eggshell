@@ -26,6 +26,10 @@ class BleedingRepository @Inject constructor(
     suspend fun add(entry: NewBleedingEntry): BleedingEntry =
         withContext(Dispatchers.IO) { vault.requireSession().addBleedingEntry(entry) }
 
+    /** Batch insert (one core transaction) — the "log a span of days" flow. */
+    suspend fun addMany(entries: List<NewBleedingEntry>): List<BleedingEntry> =
+        withContext(Dispatchers.IO) { vault.requireSession().addBleedingEntries(entries) }
+
     suspend fun update(id: Long, entry: NewBleedingEntry): BleedingEntry =
         withContext(Dispatchers.IO) { vault.requireSession().updateBleedingEntry(id, entry) }
 

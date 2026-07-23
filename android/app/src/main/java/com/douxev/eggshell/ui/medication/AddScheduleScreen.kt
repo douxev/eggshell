@@ -58,19 +58,61 @@ import com.douxev.eggshell.ui.common.clickToDismissKeyboard
 class AddScheduleViewModel @Inject constructor(
     state: SavedStateHandle,
     private val repo: ScheduleRepository,
+    notifContent: com.douxev.eggshell.reminders.NotifContentPrefs,
 ) : ViewModel() {
     private val medicationId: Long = state.get<Long>("id") ?: error("missing medication id")
+
+    /** Exposed so the label field can warn that GENERIC mode hides its text. */
+    val notifMode: StateFlow<com.douxev.eggshell.reminders.NotifContentPrefs.Mode> = notifContent.mode
+
+    /** When > 0, the screen edits this reminder instead of creating one. */
+    val editingScheduleId: Long = state.get<Long>("scheduleId") ?: -1L
+    val isEditing: Boolean get() = editingScheduleId > 0L
 
     enum class Status { Idle, Submitting, Done, Error }
     private val _status = MutableStateFlow(Status.Idle)
     val status: StateFlow<Status> = _status.asStateFlow()
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+    private val _loaded = MutableStateFlow<uniffi.transition.DoseSchedule?>(null)
+    val loaded: StateFlow<uniffi.transition.DoseSchedule?> = _loaded.asStateFlow()
 
-    fun submitInterval(hours: Int) {
+    init {
+        if (editingScheduleId > 0L) {
+            viewModelScope.launch {
+                val schedule = runCatching {
+                    repo.listForMedication(medicationId, includeInactive = true)
+                        .firstOrNull { it.id == editingScheduleId }
+                }.getOrNull()
+                _loaded.value = schedule
+                // A failed load must not leave a default-valued form with a
+                // live Save button — saving it would silently rewrite the
+                // real reminder (e.g. a 14-day cycle becoming "every 12 h").
+                if (schedule == null) _status.value = Status.Error
+            }
+        }
+    }
+
+    fun submitInterval(hours: Int, label: String?) {
         _status.value = Status.Submitting
         viewModelScope.launch {
-            runCatching { repo.createInterval(medicationId, hours * 60) }
+            runCatching {
+                if (isEditing) {
+                    repo.updateSchedule(
+                        scheduleId = editingScheduleId,
+                        medicationId = medicationId,
+                        kind = "interval",
+                        intervalMinutes = hours * 60,
+                        hour = null,
+                        minute = null,
+                        intervalDays = null,
+                        startDateMs = null,
+                        label = label,
+                    )
+                } else {
+                    repo.createInterval(medicationId, hours * 60, label)
+                }
+            }
                 .onSuccess { _status.value = Status.Done }
                 .onFailure {
                     _error.value = it.message; _status.value = Status.Error
@@ -78,10 +120,26 @@ class AddScheduleViewModel @Inject constructor(
         }
     }
 
-    fun submitDaily(hour: Int, minute: Int) {
+    fun submitDaily(hour: Int, minute: Int, label: String?) {
         _status.value = Status.Submitting
         viewModelScope.launch {
-            runCatching { repo.createDaily(medicationId, hour, minute) }
+            runCatching {
+                if (isEditing) {
+                    repo.updateSchedule(
+                        scheduleId = editingScheduleId,
+                        medicationId = medicationId,
+                        kind = "daily",
+                        intervalMinutes = null,
+                        hour = hour,
+                        minute = minute,
+                        intervalDays = null,
+                        startDateMs = null,
+                        label = label,
+                    )
+                } else {
+                    repo.createDaily(medicationId, hour, minute, label)
+                }
+            }
                 .onSuccess { _status.value = Status.Done }
                 .onFailure {
                     _error.value = it.message; _status.value = Status.Error
@@ -89,10 +147,26 @@ class AddScheduleViewModel @Inject constructor(
         }
     }
 
-    fun submitDaysInterval(intervalDays: Int, hour: Int, minute: Int, startDateMs: Long) {
+    fun submitDaysInterval(intervalDays: Int, hour: Int, minute: Int, startDateMs: Long, label: String?) {
         _status.value = Status.Submitting
         viewModelScope.launch {
-            runCatching { repo.createDaysInterval(medicationId, intervalDays, hour, minute, startDateMs) }
+            runCatching {
+                if (isEditing) {
+                    repo.updateSchedule(
+                        scheduleId = editingScheduleId,
+                        medicationId = medicationId,
+                        kind = "days_interval",
+                        intervalMinutes = null,
+                        hour = hour,
+                        minute = minute,
+                        intervalDays = intervalDays,
+                        startDateMs = startDateMs,
+                        label = label,
+                    )
+                } else {
+                    repo.createDaysInterval(medicationId, intervalDays, hour, minute, startDateMs, label)
+                }
+            }
                 .onSuccess { _status.value = Status.Done }
                 .onFailure {
                     _error.value = it.message; _status.value = Status.Error
@@ -110,6 +184,8 @@ fun AddScheduleScreen(
 ) {
     val status by vm.status.collectAsState()
     val error by vm.error.collectAsState()
+    val loaded by vm.loaded.collectAsState()
+    val isEditing = vm.isEditing
     val context = LocalContext.current
 
     if (status == AddScheduleViewModel.Status.Done) {
@@ -122,8 +198,28 @@ fun AddScheduleScreen(
     var hourStr by rememberSaveable { mutableStateOf("8") }
     var minuteStr by rememberSaveable { mutableStateOf("0") }
     var daysStr by rememberSaveable { mutableStateOf("3") }
+    var label by rememberSaveable { mutableStateOf("") }
     var startDateMs by rememberSaveable { mutableStateOf(todayStartMs()) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    var seededFromSchedule by rememberSaveable { mutableStateOf(false) }
+
+    // Editing: seed the form from the existing reminder, once.
+    LaunchedEffect(loaded) {
+        val s = loaded ?: return@LaunchedEffect
+        if (seededFromSchedule) return@LaunchedEffect
+        kind = s.kind
+        s.intervalMinutes?.toInt()?.let { hoursStr = (it / 60).toString() }
+        s.dailyHour?.toInt()?.let { hourStr = it.toString() }
+        s.dailyMinute?.toInt()?.let { minuteStr = it.toString() }
+        s.intervalDays?.toInt()?.let { daysStr = it.toString() }
+        label = s.label.orEmpty()
+        // Anchor the N-day cycle on the current next-due day, not today — a
+        // label-only edit must not shift the phase of a 14-day injection cycle.
+        val zone = java.time.ZoneId.systemDefault()
+        startDateMs = java.time.Instant.ofEpochMilli(s.nextDueAtMs).atZone(zone)
+            .toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+        seededFromSchedule = true
+    }
 
     // Ask the user for POST_NOTIFICATIONS if needed.
     val notifLauncher = rememberLauncherForActivityResult(
@@ -139,7 +235,13 @@ fun AddScheduleScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.schedule_add_title)) },
+                title = {
+                    Text(
+                        stringResource(
+                            if (isEditing) R.string.schedule_edit_title else R.string.schedule_add_title
+                        )
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -224,30 +326,56 @@ fun AddScheduleScreen(
                 }
             }
 
+            // Free-text override for what the reminder says ("Aller chercher le
+            // traitement"…). Never shown while the content mode is GENERIC —
+            // say so instead of letting the user type text that goes nowhere.
+            val notifMode by vm.notifMode.collectAsState()
+            OutlinedTextField(
+                value = label,
+                onValueChange = { label = it.take(60) },
+                label = { Text(stringResource(R.string.schedule_field_label)) },
+                supportingText = {
+                    Text(
+                        stringResource(
+                            if (notifMode == com.douxev.eggshell.reminders.NotifContentPrefs.Mode.GENERIC) {
+                                R.string.schedule_field_label_generic_warn
+                            } else {
+                                R.string.schedule_field_label_hint
+                            }
+                        )
+                    )
+                },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             Button(
                 onClick = {
+                    val trimmedLabel = label.trim().ifBlank { null }
                     when (kind) {
                         "interval" -> {
                             val h = hoursStr.toIntOrNull()?.takeIf { it > 0 }
-                            if (h != null) vm.submitInterval(h)
+                            if (h != null) vm.submitInterval(h, trimmedLabel)
                         }
                         "days_interval" -> {
                             val d = daysStr.toIntOrNull()?.takeIf { it > 0 }
                             val h = hourStr.toIntOrNull()?.takeIf { it in 0..23 }
                             val m = minuteStr.toIntOrNull()?.takeIf { it in 0..59 }
                             if (d != null && h != null && m != null) {
-                                vm.submitDaysInterval(d, h, m, startDateMs)
+                                vm.submitDaysInterval(d, h, m, startDateMs, trimmedLabel)
                             }
                         }
                         else -> {
                             val h = hourStr.toIntOrNull()?.takeIf { it in 0..23 }
                             val m = minuteStr.toIntOrNull()?.takeIf { it in 0..59 }
-                            if (h != null && m != null) vm.submitDaily(h, m)
+                            if (h != null && m != null) vm.submitDaily(h, m, trimmedLabel)
                         }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = status != AddScheduleViewModel.Status.Submitting,
+                // In edit mode, block Save until the reminder actually loaded.
+                enabled = status != AddScheduleViewModel.Status.Submitting &&
+                    (!isEditing || loaded != null),
             ) { Text(stringResource(R.string.schedule_save)) }
 
             if (needsExactAlarmPermission) {

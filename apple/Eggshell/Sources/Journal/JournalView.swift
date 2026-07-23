@@ -15,6 +15,17 @@ final class JournalViewModel: ObservableObject {
     @Published var entries: [JournalEntry] = []
     @Published var error: String?
 
+    /// Calendar overlays: bleeding days (continuous band) + medication days
+    /// (per-med colored dots), so dose↔mood correlations show at a glance.
+    /// Mirrors android JournalListViewModel.Overlays.
+    struct Overlays {
+        var bleedingDays: Set<Date> = []          // startOfDay keys
+        var medsByDay: [Date: [Int64]] = [:]      // startOfDay → distinct med ids
+        var medColors: [Int64: Int64] = [:]       // med id → ARGB
+        var medNames: [Int64: String] = [:]
+    }
+    @Published var overlays = Overlays()
+
     func load(_ session: VaultService) async {
         loading = true
         do {
@@ -24,6 +35,49 @@ final class JournalViewModel: ObservableObject {
             self.error = describe(error)
         }
         loading = false
+    }
+
+    /// (Re)load the overlay data for the month the calendar is showing.
+    /// Monotonic ticket so a slow older month's result can't overwrite the
+    /// overlays of the month currently on screen (fast prev/next paging).
+    private var overlaysTicket = 0
+
+    func loadOverlays(_ session: VaultService, month: Date, cal: Calendar) async {
+        overlaysTicket += 1
+        let ticket = overlaysTicket
+        guard let interval = cal.dateInterval(of: .month, for: month) else { return }
+        let fromMs = Int64(interval.start.timeIntervalSince1970 * 1000)
+        let toMs = Int64(interval.end.timeIntervalSince1970 * 1000) - 1
+        do {
+            let doses = try await session.listDoseEventsBetween(fromMs: fromMs, toMs: toMs)
+                .filter { $0.status == "taken" }
+            let meds = try await session.listMedications(includeArchived: true)
+            // Bleeding entries are newest-first; one page comfortably covers
+            // years of cycle history.
+            let bleeding = try await session.listBleedingEntries(limit: 1000)
+            var byDay: [Date: [Int64]] = [:]
+            for d in doses {
+                let day = cal.startOfDay(for: Date(timeIntervalSince1970: Double(d.takenAtMs) / 1000))
+                var ids = byDay[day] ?? []
+                if !ids.contains(d.medicationId) { ids.append(d.medicationId) }
+                byDay[day] = ids
+            }
+            var o = Overlays()
+            o.bleedingDays = Set(bleeding.map {
+                cal.startOfDay(for: Date(timeIntervalSince1970: Double($0.atMs) / 1000))
+            })
+            o.medsByDay = byDay
+            o.medColors = Dictionary(uniqueKeysWithValues: meds.compactMap { m in
+                m.color.map { (m.id, $0) }
+            })
+            o.medNames = Dictionary(uniqueKeysWithValues: meds.map { ($0.id, $0.name) })
+            guard ticket == overlaysTicket else { return } // superseded by a newer month
+            overlays = o
+        } catch {
+            // Overlays are decorative — but stale ones from another month are
+            // worse than none, so reset instead of keeping the old grid.
+            if ticket == overlaysTicket { overlays = Overlays() }
+        }
     }
 
     /// Entries grouped by their calendar day (local time zone).
@@ -96,7 +150,17 @@ struct JournalView: View {
             .clipShape(Circle())
             .padding(Spacing.xl)
         }
-        .task { if let s = app.session { await vm.load(s) } }
+        .task {
+            if let s = app.session {
+                await vm.load(s)
+                await vm.loadOverlays(s, month: visibleMonth, cal: cal)
+            }
+        }
+        .onChange(of: visibleMonth) { _, newMonth in
+            if let s = app.session {
+                Task { await vm.loadOverlays(s, month: newMonth, cal: cal) }
+            }
+        }
     }
 
     // MARK: - List filtering
@@ -163,6 +227,45 @@ struct JournalView: View {
                     }
                 }
             }
+
+            // Legend — only for what the visible month actually shows.
+            let monthDays: [Date] = (0..<daysInMonth).compactMap {
+                cal.date(byAdding: .day, value: $0, to: monthStart)
+            }.map { cal.startOfDay(for: $0) }
+            let monthHasBleeding = monthDays.contains { vm.overlays.bleedingDays.contains($0) }
+            let monthMedIds = distinctMedIds(monthDays)
+            if monthHasBleeding || !monthMedIds.isEmpty {
+                FlowLayout(spacing: Spacing.m) {
+                    if monthHasBleeding {
+                        legendItem(color: palette.error.opacity(0.35), label: "Règles", band: true)
+                    }
+                    ForEach(monthMedIds, id: \.self) { id in
+                        legendItem(
+                            color: vm.overlays.medColors[id].map { MedColor.color(fromArgb: $0) } ?? palette.tertiary,
+                            label: vm.overlays.medNames[id] ?? "",
+                            band: false)
+                    }
+                }
+                .padding(.top, Spacing.xs)
+            }
+        }
+    }
+
+    /// Distinct med ids seen across the given days, in first-seen order.
+    private func distinctMedIds(_ days: [Date]) -> [Int64] {
+        var ids: [Int64] = []
+        for day in days {
+            for id in vm.overlays.medsByDay[day] ?? [] where !ids.contains(id) {
+                ids.append(id)
+            }
+        }
+        return ids
+    }
+
+    private func legendItem(color: Color, label: String, band: Bool) -> some View {
+        HStack(spacing: 4) {
+            Capsule().fill(color).frame(width: band ? 14 : 6, height: 6)
+            Text(label).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
         }
     }
 
@@ -174,6 +277,19 @@ struct JournalView: View {
 
         let moods = dayEntries.compactMap { $0.mood }.map { Double($0) }
         let avgMood: Double? = moods.isEmpty ? nil : moods.reduce(0, +) / Double(moods.count)
+
+        // Bleeding band: continuous across adjacent bleeding days, so the caps
+        // are only rounded where the span actually starts/ends.
+        let bleeding = vm.overlays.bleedingDays.contains(day)
+        let bleedsLeft = bleeding && (cal.date(byAdding: .day, value: -1, to: day)
+            .map { vm.overlays.bleedingDays.contains(cal.startOfDay(for: $0)) } ?? false)
+        let bleedsRight = bleeding && (cal.date(byAdding: .day, value: 1, to: day)
+            .map { vm.overlays.bleedingDays.contains(cal.startOfDay(for: $0)) } ?? false)
+
+        // One dot per medication taken that day; nil = med without a color.
+        let medDots: [Color?] = (vm.overlays.medsByDay[day] ?? []).map { id in
+            vm.overlays.medColors[id].map { MedColor.color(fromArgb: $0) }
+        }
 
         let container: Color = isSelected ? palette.primary
             : (isToday ? palette.primaryContainer : Color.clear)
@@ -193,15 +309,37 @@ struct JournalView: View {
                 if isSelected { selectedDay = nil } else { selectedDay = day }
             }
         } label: {
-            VStack(spacing: 2) {
-                Text("\(cal.component(.day, from: day))")
-                    .font(.eggCallout.weight(isToday || isSelected ? .bold : .regular))
-                    .foregroundStyle(onContainer)
-                Circle().fill(dotColor).frame(width: 5, height: 5)
+            ZStack {
+                if bleeding {
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: bleedsLeft ? 0 : 13,
+                        bottomLeadingRadius: bleedsLeft ? 0 : 13,
+                        bottomTrailingRadius: bleedsRight ? 0 : 13,
+                        topTrailingRadius: bleedsRight ? 0 : 13)
+                        .fill(palette.error.opacity(0.18))
+                        .frame(height: 26)
+                        .padding(.leading, bleedsLeft ? 0 : 3)
+                        .padding(.trailing, bleedsRight ? 0 : 3)
+                }
+                VStack(spacing: 2) {
+                    Text("\(cal.component(.day, from: day))")
+                        .font(.eggCallout.weight(isToday || isSelected ? .bold : .regular))
+                        .foregroundStyle(onContainer)
+                    HStack(spacing: 2) {
+                        Circle().fill(dotColor).frame(width: 5, height: 5)
+                        // Up to three treatment dots keep the cell readable; a
+                        // fourth med collapses into the legend below the grid.
+                        ForEach(Array(medDots.prefix(3).enumerated()), id: \.offset) { _, medColor in
+                            Circle()
+                                .fill(medColor ?? (isSelected ? palette.onPrimary : palette.tertiary))
+                                .frame(width: 4, height: 4)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Spacing.xs)
+                .background(Circle().fill(container).padding(2))
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, Spacing.xs)
-            .background(Circle().fill(container).padding(2))
         }
         .buttonStyle(.plain)
     }

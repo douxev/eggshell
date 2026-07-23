@@ -161,7 +161,14 @@
 
     <!-- Log dose -->
     <string name="med_log_dose_title">Noter une prise</string>
+    <string name="med_dose_edit_title">Modifier la prise</string>
+    <string name="med_dose_load_error">Impossible de charger la prise.</string>
     <string name="med_dose_datetime">Date et heure de la prise</string>
+    <string name="med_dose_mode_single">Une prise</string>
+    <string name="med_dose_mode_range">Période</string>
+    <string name="med_dose_range_label">Période</string>
+    <string name="med_dose_time_label">Heure de chaque prise</string>
+    <string name="med_dose_range_count_fmt">%1$d prises seront enregistrées.</string>
     <string name="med_save_dose">Enregistrer</string>
     <string name="med_injection_site">Site d\'injection</string>
     <string name="med_injection_suggested">Suggéré : %1$s</string>
@@ -219,6 +226,9 @@
     <string name="reminder_channel_priority_description">Bandeau en haut, vibration, son.</string>
     <string name="reminder_action_mark_taken">Pris</string>
     <string name="lab_reminder_title">Analyse à prévoir</string>
+    <string name="photo_reminder_title">Photo à prendre</string>
+    <string name="voice_reminder_title">Enregistrement à faire</string>
+    <string name="journal_reminder_title">Moment journal</string>
     <!-- Generic, content-free copy shown on the lockscreen and on the
          paired watch when the user hasn't unlocked the device. Hides the
          specific lab / dose details from anyone glancing at the screen. -->
@@ -233,6 +243,10 @@
     <string name="schedule_list_title">Rappels</string>
     <string name="schedule_add">Ajouter un rappel</string>
     <string name="schedule_add_title">Nouveau rappel</string>
+    <string name="schedule_edit_title">Modifier le rappel</string>
+    <string name="schedule_field_label">Texte du rappel (optionnel)</string>
+    <string name="schedule_field_label_hint">Affiché à la place du nom du traitement. Jamais montré en mode générique.</string>
+    <string name="schedule_field_label_generic_warn">Mode générique actif : ce texte ne sera affiché dans aucune notification (réglable dans Rappels).</string>
     <string name="schedule_none">Aucun rappel programmé pour ce traitement.</string>
     <string name="schedule_kind_interval">Toutes les N heures</string>
     <string name="schedule_kind_daily">Chaque jour à HH:MM</string>
@@ -383,6 +397,10 @@
     <string name="hormone_fsh">FSH</string>
     <string name="hormone_prolactin">Prolactine</string>
     <string name="hormone_shbg">SHBG</string>
+    <string name="hormone_bp_systolic">Tension systolique</string>
+    <string name="hormone_bp_diastolic">Tension diastolique</string>
+    <string name="hormone_hemoglobin">Hémoglobine</string>
+    <string name="hormone_hematocrit">Hématocrite</string>
     <string name="hormone_other">Autre</string>
 
     <!-- ===== Phase 5 : Photos ===== -->
@@ -470,11 +488,22 @@
     <string name="reminders_add_voice">Ajouter un rappel voix</string>
     <string name="reminders_voice_dialog_title">Nouveau rappel voix</string>
     <string name="reminders_voice_default_label">Enregistrement voix</string>
+    <string name="reminders_section_journal">Journal d\'humeur</string>
+    <string name="reminders_section_journal_hint">Un rappel pour noter ton humeur du jour. Désactivable, comme tout.</string>
+    <string name="reminders_no_journal">Aucun rappel journal.</string>
+    <string name="reminders_add_journal">Ajouter un rappel journal</string>
+    <string name="reminders_journal_dialog_title">Nouveau rappel journal</string>
+    <string name="reminders_journal_edit_dialog_title">Modifier le rappel journal</string>
+    <string name="reminders_journal_default_label">Journal du jour</string>
+    <string name="reminders_section_appointments">Rendez-vous</string>
+    <string name="reminders_section_appointments_hint">Rappels ponctuels de tes prochains RDV. Ils se gèrent depuis l\'onglet RDV.</string>
+    <string name="reminders_no_appointments">Aucun rappel de rendez-vous à venir.</string>
+    <string name="reminders_appointment_generic">Rendez-vous</string>
 
     <!-- ===== Réglages / hub ===== -->
     <string name="more_title">Réglages</string>
     <string name="more_row_reminders">Rappels &amp; notifications</string>
-    <string name="more_row_reminders_sub">Traitements, analyses, photo, voix</string>
+    <string name="more_row_reminders_sub">Traitements, analyses, photo, voix, journal, RDV</string>
     <string name="more_row_advanced">Paramètres avancés</string>
     <string name="more_row_advanced_sub">Sécurité, masquage, sauvegarde, langue</string>
     <string name="more_row_pdf">Export PDF</string>
@@ -627,6 +656,7 @@
     <string name="bleeding_edit_title">Modifier l\'entrée</string>
     <string name="bleeding_save">Enregistrer</string>
     <string name="bleeding_error">Échec de l\'enregistrement.</string>
+    <string name="bleeding_load_error">Impossible de charger l\'entrée.</string>
     <string name="bleeding_kind_label">Type</string>
     <string name="bleeding_kind_bleed">Règles</string>
     <string name="bleeding_kind_spotting">Spotting</string>
@@ -635,6 +665,13 @@
     <string name="bleeding_gauge_flow">Abondance</string>
     <string name="bleeding_gauge_pain">Douleur</string>
     <string name="bleeding_gauge_cramps">Crampes</string>
+    <string name="bleeding_date_label">Date</string>
+    <string name="bleeding_mode_single">Un jour</string>
+    <string name="bleeding_mode_range">Plusieurs jours</string>
+    <string name="bleeding_range_label">Période</string>
+    <string name="bleeding_range_count_fmt">%1$d jours seront enregistrés.</string>
+    <string name="daterange_pick">Choisir la période</string>
+    <string name="journal_legend_bleeding">Règles</string>
 
     <!-- Customizable metric sliders (features 4 & 5) -->
     <string name="metric_editor_open">Personnaliser les indicateurs</string>

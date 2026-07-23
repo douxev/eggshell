@@ -14,9 +14,9 @@ class LabReminderPrefs(context: Context) {
     private val prefs: SharedPreferences =
         com.douxev.eggshell.data.SecurePrefs.get(context, PREFS_NAME)
 
-    /** Free-form category tag: "lab" (default), "photo", "voice". The category
-     *  is what lets the Reminders screen group entries into separate sections
-     *  with the right icon and notification copy. */
+    /** Free-form category tag: "lab" (default), "photo", "voice", "journal".
+     *  The category is what lets the Reminders screen group entries into
+     *  separate sections with the right icon and notification copy. */
     data class Entry(
         val id: Long,
         val label: String,
@@ -95,6 +95,7 @@ class LabReminderPrefs(context: Context) {
         const val CATEGORY_LAB = "lab"
         const val CATEGORY_PHOTO = "photo"
         const val CATEGORY_VOICE = "voice"
+        const val CATEGORY_JOURNAL = "journal"
 
         private const val PREFS_NAME = "transition_lab_reminder_prefs"
         private const val KEY_IDS = "ids"

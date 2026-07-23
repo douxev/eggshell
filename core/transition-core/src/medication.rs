@@ -222,6 +222,98 @@ pub fn log_dose(db: &Database, d: NewDoseEvent) -> Result<DoseEvent, TransitionE
     })
 }
 
+/// Insert a batch of doses in one transaction. Powers the "log a date range"
+/// flow (e.g. a daily topical applied for months, declared in one go) —
+/// per-row inserts would fsync once per day of history.
+pub fn log_doses(
+    db: &Database,
+    doses: Vec<NewDoseEvent>,
+) -> Result<Vec<DoseEvent>, TransitionError> {
+    // `Vault` serializes DB access behind a Mutex, so an unchecked (borrowed)
+    // transaction cannot race another statement on this connection.
+    let tx = db.conn().unchecked_transaction().map_err(map_sql)?;
+    let mut out = Vec::with_capacity(doses.len());
+    {
+        let mut stmt = tx
+            .prepare(
+                "INSERT INTO dose_events
+                    (medication_id, taken_at_ms, dose, dose_unit, route, injection_site, notes,
+                     status, scheduled_at_ms, schedule_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            )
+            .map_err(map_sql)?;
+        for d in doses {
+            stmt.execute(params![
+                d.medication_id, d.taken_at_ms, d.dose, d.dose_unit,
+                d.route, d.injection_site, d.notes,
+                d.status, d.scheduled_at_ms, d.schedule_id,
+            ])
+            .map_err(map_sql)?;
+            let id = tx.last_insert_rowid();
+            out.push(DoseEvent {
+                id,
+                medication_id: d.medication_id,
+                taken_at_ms: d.taken_at_ms,
+                dose: d.dose,
+                dose_unit: d.dose_unit,
+                route: d.route,
+                injection_site: d.injection_site,
+                notes: d.notes,
+                status: d.status,
+                scheduled_at_ms: d.scheduled_at_ms,
+                schedule_id: d.schedule_id,
+            });
+        }
+    }
+    tx.commit().map_err(map_sql)?;
+    Ok(out)
+}
+
+/// Overwrite every editable field of a recorded dose in place — the id stays
+/// stable. Lets the user fix a logged intake after the fact (wrong route,
+/// wrong day, missing dose amount) instead of delete + re-log. Like
+/// [`crate::dose_schedule::update`], `d.medication_id` is ignored — a dose
+/// never moves to another medication, so a mismatched caller-side id can't
+/// silently re-parent history.
+pub fn update_dose(db: &Database, id: i64, d: NewDoseEvent) -> Result<DoseEvent, TransitionError> {
+    let n = db
+        .conn()
+        .execute(
+            "UPDATE dose_events
+             SET taken_at_ms = ?1, dose = ?2, dose_unit = ?3, route = ?4,
+                 injection_site = ?5, notes = ?6, status = ?7, scheduled_at_ms = ?8,
+                 schedule_id = ?9
+             WHERE id = ?10",
+            params![
+                d.taken_at_ms, d.dose, d.dose_unit,
+                d.route, d.injection_site, d.notes,
+                d.status, d.scheduled_at_ms, d.schedule_id, id,
+            ],
+        )
+        .map_err(map_sql)?;
+    if n == 0 {
+        return Err(TransitionError::Database(format!("no dose event with id {id}")));
+    }
+    get_dose(db, id)?.ok_or_else(|| TransitionError::Database(format!("no dose event with id {id}")))
+}
+
+/// Fetch a single recorded dose by id.
+pub fn get_dose(db: &Database, id: i64) -> Result<Option<DoseEvent>, TransitionError> {
+    db.conn()
+        .query_row(
+            "SELECT id, medication_id, taken_at_ms, dose, dose_unit, route, injection_site, notes,
+                    status, scheduled_at_ms, schedule_id
+             FROM dose_events WHERE id = ?1",
+            [id],
+            parse_dose_event,
+        )
+        .map(Some)
+        .or_else(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            other => Err(map_sql(other)),
+        })
+}
+
 /// Page through doses for `medication_id`, newest first.
 pub fn list_doses(
     db: &Database,
@@ -657,6 +749,117 @@ mod tests {
         assert!(remaining.iter().all(|e| e.id != ids[1]));
         // Deleting a non-existent id is a no-op, not an error.
         delete_dose(&db, 999_999).unwrap();
+    }
+
+    #[test]
+    fn log_doses_bulk_inserts_all() {
+        let (_k, db) = fresh_db();
+        let m = add(&db, sample_medication("Estradiol gel"), 1_000).unwrap();
+        let day = 86_400_000i64;
+        let batch: Vec<NewDoseEvent> = (0..90)
+            .map(|i| NewDoseEvent {
+                medication_id: m.id,
+                taken_at_ms: 10_000 + i * day,
+                dose: Some(0.1),
+                dose_unit: Some("mg".into()),
+                route: Some("topical".into()),
+                injection_site: None,
+                notes: None,
+                status: "taken".into(),
+                scheduled_at_ms: None,
+                schedule_id: None,
+            })
+            .collect();
+        let inserted = log_doses(&db, batch).unwrap();
+        assert_eq!(inserted.len(), 90);
+        assert_eq!(list_doses(&db, m.id, 0, 200).unwrap().len(), 90);
+        // Ids are distinct and round-trip via get_dose.
+        assert_eq!(
+            get_dose(&db, inserted[0].id).unwrap().unwrap().taken_at_ms,
+            inserted[0].taken_at_ms
+        );
+    }
+
+    #[test]
+    fn update_dose_edits_in_place() {
+        let (_k, db) = fresh_db();
+        let m = add(&db, sample_medication("Estradiol"), 1_000).unwrap();
+        let ev = log_dose(
+            &db,
+            NewDoseEvent {
+                medication_id: m.id,
+                taken_at_ms: 10_000,
+                dose: Some(1.0),
+                dose_unit: Some("mg".into()),
+                route: Some("oral".into()),
+                injection_site: None,
+                notes: None,
+                status: "taken".into(),
+                scheduled_at_ms: None,
+                schedule_id: None,
+            },
+        )
+        .unwrap();
+        let updated = update_dose(
+            &db,
+            ev.id,
+            NewDoseEvent {
+                medication_id: m.id,
+                taken_at_ms: 9_000,
+                dose: Some(1.0),
+                dose_unit: Some("mg".into()),
+                route: Some("sublingual".into()),
+                injection_site: None,
+                notes: Some("corrigé après coup".into()),
+                status: "taken".into(),
+                scheduled_at_ms: None,
+                schedule_id: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.id, ev.id);
+        let got = get_dose(&db, ev.id).unwrap().unwrap();
+        assert_eq!(got.route.as_deref(), Some("sublingual"));
+        assert_eq!(got.taken_at_ms, 9_000);
+        assert_eq!(got.notes.as_deref(), Some("corrigé après coup"));
+        // A mismatched medication_id in the payload must not re-parent the dose.
+        let other = add(&db, sample_medication("Autre"), 2_000).unwrap();
+        let reparented = update_dose(
+            &db,
+            ev.id,
+            NewDoseEvent {
+                medication_id: other.id,
+                taken_at_ms: 9_000,
+                dose: None,
+                dose_unit: None,
+                route: None,
+                injection_site: None,
+                notes: None,
+                status: "taken".into(),
+                scheduled_at_ms: None,
+                schedule_id: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(reparented.medication_id, m.id);
+        // Unknown id → typed error, not a silent no-op (the UI needs to know).
+        assert!(update_dose(
+            &db,
+            999_999,
+            NewDoseEvent {
+                medication_id: m.id,
+                taken_at_ms: 1,
+                dose: None,
+                dose_unit: None,
+                route: None,
+                injection_site: None,
+                notes: None,
+                status: "taken".into(),
+                scheduled_at_ms: None,
+                schedule_id: None,
+            },
+        )
+        .is_err());
     }
 
     #[test]

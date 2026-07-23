@@ -214,18 +214,32 @@ fun HomeNavHost(
                 val id = it.arguments!!.getLong("id")
                 MedicationDetailScreen(
                     onLogDose = { nav.navigate(Routes.medLog(id)) },
+                    onEditDose = { doseId -> nav.navigate(Routes.medDoseEdit(id, doseId)) },
                     onAddSchedule = { nav.navigate(Routes.medSchedule(id)) },
+                    onEditSchedule = { scheduleId -> nav.navigate(Routes.medScheduleEdit(id, scheduleId)) },
                     onEditMedication = { nav.navigate(Routes.medEdit(id)) },
                     onBack = { nav.popBackStack() },
                 )
             }
             composable(
                 Routes.MED_LOG_DOSE,
-                arguments = listOf(navArgument("id") { type = NavType.LongType }),
+                arguments = listOf(
+                    navArgument("id") { type = NavType.LongType },
+                    navArgument("doseId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    },
+                ),
             ) { LogDoseScreen(onDone = { nav.popBackStack() }) }
             composable(
                 Routes.MED_ADD_SCHEDULE,
-                arguments = listOf(navArgument("id") { type = NavType.LongType }),
+                arguments = listOf(
+                    navArgument("id") { type = NavType.LongType },
+                    navArgument("scheduleId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    },
+                ),
             ) { AddScheduleScreen(onDone = { nav.popBackStack() }, onBack = { nav.popBackStack() }) }
 
             composable(Routes.JOURNAL) {
@@ -349,7 +363,12 @@ fun HomeNavHost(
                 )
             }
             composable(Routes.REMINDERS) {
-                RemindersScreen(onBack = { nav.popBackStack() })
+                RemindersScreen(
+                    onBack = { nav.popBackStack() },
+                    onEditMedSchedule = { medId, scheduleId ->
+                        nav.navigate(Routes.medScheduleEdit(medId, scheduleId))
+                    },
+                )
             }
             composable(Routes.HORMONE_UNITS) {
                 HormoneUnitsScreen(onBack = { nav.popBackStack() })
@@ -397,8 +416,8 @@ object Routes {
     const val MED_ADD = "med/add"
     const val MED_EDIT = "med/edit/{id}"
     const val MED_DETAIL = "med/detail/{id}"
-    const val MED_LOG_DOSE = "med/log/{id}"
-    const val MED_ADD_SCHEDULE = "med/schedule/{id}"
+    const val MED_LOG_DOSE = "med/log/{id}?doseId={doseId}"
+    const val MED_ADD_SCHEDULE = "med/schedule/{id}?scheduleId={scheduleId}"
     const val JOURNAL = "journal"
     const val JOURNAL_ADD = "journal/add"
     const val JOURNAL_EDIT = "journal/edit/{id}"
@@ -428,7 +447,9 @@ object Routes {
     fun medDetail(id: Long) = "med/detail/$id"
     fun medEdit(id: Long) = "med/edit/$id"
     fun medLog(id: Long) = "med/log/$id"
+    fun medDoseEdit(medId: Long, doseId: Long) = "med/log/$medId?doseId=$doseId"
     fun medSchedule(id: Long) = "med/schedule/$id"
+    fun medScheduleEdit(medId: Long, scheduleId: Long) = "med/schedule/$medId?scheduleId=$scheduleId"
     fun journalEdit(id: Long) = "journal/edit/$id"
     fun bleedingEdit(id: Long) = "bleeding/edit/$id"
     fun metricEditor(domain: String) = "metrics/editor/$domain"

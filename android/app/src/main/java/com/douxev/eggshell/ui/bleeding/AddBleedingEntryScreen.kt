@@ -45,8 +45,13 @@ import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.BleedingRepository
 import com.douxev.eggshell.data.MetricsRepository
+import com.douxev.eggshell.ui.common.DateRangePickerField
+import com.douxev.eggshell.ui.common.DateTimePickerField
 import com.douxev.eggshell.ui.common.MetricSlidersColumn
 import com.douxev.eggshell.ui.common.clickToDismissKeyboard
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import uniffi.transition.BleedingEntry
 import uniffi.transition.MetricDefinition
 import uniffi.transition.MetricValue
@@ -79,10 +84,19 @@ class AddBleedingEntryViewModel @Inject constructor(
         if (editingId > 0L) {
             viewModelScope.launch {
                 // Load slider values BEFORE the entry, so the screen's seed gate
-                // (which waits on `loaded`) sees a settled values map.
-                runCatching { metrics.values(MetricsRepository.DOMAIN_BLEEDING, editingId) }
-                    .onSuccess { v -> _values.value = v.associate { it.metricId to it.value } }
-                runCatching { repo.get(editingId) }.onSuccess { _loaded.value = it }
+                // (which waits on `loaded`) sees a settled values map. Either
+                // load failing must block the form (`loaded` stays null, Save
+                // stays disabled): saving an unseeded form would move the entry
+                // to today and wipe its stored sliders.
+                val vals = runCatching { metrics.values(MetricsRepository.DOMAIN_BLEEDING, editingId) }
+                    .getOrNull()
+                val entry = runCatching { repo.get(editingId) }.getOrNull()
+                if (vals == null || entry == null) {
+                    _status.value = Status.Error
+                    return@launch
+                }
+                _values.value = vals.associate { it.metricId to it.value }
+                _loaded.value = entry
             }
         }
     }
@@ -97,13 +111,48 @@ class AddBleedingEntryViewModel @Inject constructor(
     fun submit(entry: NewBleedingEntry, sliderValues: List<MetricValue>) {
         _status.value = Status.Submitting
         viewModelScope.launch {
-            val result = runCatching {
-                val saved = if (editingId > 0L) repo.update(editingId, entry) else repo.add(entry)
-                metrics.replaceValues(MetricsRepository.DOMAIN_BLEEDING, saved.id, sliderValues)
+            if (editingId > 0L) {
+                // Editing is idempotent — safe to retry as one unit.
+                runCatching {
+                    val saved = repo.update(editingId, entry)
+                    metrics.replaceValues(MetricsRepository.DOMAIN_BLEEDING, saved.id, sliderValues)
+                }
+                    .onSuccess { _status.value = Status.Done }
+                    .onFailure { _status.value = Status.Error }
+            } else {
+                val saved = runCatching { repo.add(entry) }.getOrNull()
+                if (saved == null) {
+                    _status.value = Status.Error
+                    return@launch
+                }
+                // Best-effort like submitMany: the entry is committed and a
+                // retry after a slider-write failure would duplicate it.
+                runCatching {
+                    metrics.replaceValues(MetricsRepository.DOMAIN_BLEEDING, saved.id, sliderValues)
+                }
+                _status.value = Status.Done
             }
-            result
-                .onSuccess { _status.value = Status.Done }
-                .onFailure { _status.value = Status.Error }
+        }
+    }
+
+    /** Log a whole span of days in one action — one entry per day, all sharing
+     *  the same kind/note/slider values. */
+    fun submitMany(entries: List<NewBleedingEntry>, sliderValues: List<MetricValue>) {
+        if (entries.isEmpty()) return
+        _status.value = Status.Submitting
+        viewModelScope.launch {
+            val saved = runCatching { repo.addMany(entries) }.getOrNull()
+            if (saved == null) {
+                _status.value = Status.Error
+                return@launch
+            }
+            // Slider writes are best-effort: the days are committed, and
+            // surfacing an error here would invite a retry that duplicates
+            // the whole span. Each day stays individually editable.
+            runCatching {
+                saved.forEach { metrics.replaceValues(MetricsRepository.DOMAIN_BLEEDING, it.id, sliderValues) }
+            }
+            _status.value = Status.Done
         }
     }
 
@@ -142,7 +191,15 @@ fun AddBleedingEntryScreen(
     // null = unspecified, true = spotting, false = full bleed.
     var isSpotting by remember { mutableStateOf<Boolean?>(null) }
     var freeText by remember { mutableStateOf("") }
+    // Editable date — defaults to now, so back-dating a forgotten day (or a
+    // whole past cycle) is just a tap away.
+    var atMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    // Range mode: log « cette semaine = règles » in one action.
+    var rangeMode by remember { mutableStateOf(false) }
+    var rangeStart by remember { mutableStateOf<LocalDate?>(null) }
+    var rangeEnd by remember { mutableStateOf<LocalDate?>(null) }
     var seeded by remember { mutableStateOf(false) }
+    val zone = remember { ZoneId.systemDefault() }
 
     LaunchedEffect(definitions, loaded, storedValues) {
         if (definitions.isEmpty()) return@LaunchedEffect
@@ -157,6 +214,7 @@ fun AddBleedingEntryScreen(
         loaded?.let {
             isSpotting = it.isSpotting
             freeText = it.freeText.orEmpty()
+            atMs = it.atMs
         }
         seeded = true
     }
@@ -202,6 +260,49 @@ fun AddBleedingEntryScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (!isEditing) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !rangeMode,
+                        onClick = { rangeMode = false },
+                        label = { Text(stringResource(R.string.bleeding_mode_single)) },
+                    )
+                    FilterChip(
+                        selected = rangeMode,
+                        onClick = { rangeMode = true },
+                        label = { Text(stringResource(R.string.bleeding_mode_range)) },
+                    )
+                }
+            }
+
+            if (rangeMode && !isEditing) {
+                DateRangePickerField(
+                    label = stringResource(R.string.bleeding_range_label),
+                    start = rangeStart,
+                    end = rangeEnd,
+                    onChange = { s, e -> rangeStart = s; rangeEnd = e },
+                    allowFuture = false,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                val s = rangeStart
+                val e = rangeEnd
+                if (s != null && e != null) {
+                    val dayCount = ChronoUnit.DAYS.between(s, e).toInt() + 1
+                    Text(
+                        stringResource(R.string.bleeding_range_count_fmt, dayCount),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            } else {
+                DateTimePickerField(
+                    label = stringResource(R.string.bleeding_date_label),
+                    atMs = atMs,
+                    onChange = { atMs = it },
+                    allowFuture = false,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
             Text(stringResource(R.string.bleeding_kind_label), style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
@@ -232,21 +333,49 @@ fun AddBleedingEntryScreen(
                         .mapNotNull { def ->
                             values[def.id]?.let { MetricValue(metricId = def.id, value = it.toInt().toUInt()) }
                         }
-                    vm.submit(
-                        NewBleedingEntry(
-                            atMs = loaded?.atMs ?: System.currentTimeMillis(),
-                            isSpotting = isSpotting,
-                            freeText = freeText.ifBlank { null },
-                        ),
-                        sliderValues,
-                    )
+                    val s = rangeStart
+                    val e = rangeEnd
+                    if (rangeMode && !isEditing && s != null && e != null) {
+                        val entries = generateSequence(s) { it.plusDays(1) }
+                            .takeWhile { !it.isAfter(e) }
+                            .map { day ->
+                                NewBleedingEntry(
+                                    // Noon keeps the entry inside its calendar day
+                                    // across every DST shift.
+                                    atMs = day.atTime(12, 0).atZone(zone).toInstant().toEpochMilli(),
+                                    isSpotting = isSpotting,
+                                    freeText = freeText.ifBlank { null },
+                                )
+                            }
+                            .toList()
+                        vm.submitMany(entries, sliderValues)
+                    } else {
+                        vm.submit(
+                            NewBleedingEntry(
+                                atMs = atMs,
+                                isSpotting = isSpotting,
+                                freeText = freeText.ifBlank { null },
+                            ),
+                            sliderValues,
+                        )
+                    }
                 },
-                enabled = status != AddBleedingEntryViewModel.Status.Submitting,
+                // In edit mode, block Save until entry + sliders actually
+                // loaded — an unseeded save would rewrite the record.
+                enabled = status != AddBleedingEntryViewModel.Status.Submitting &&
+                    (!isEditing || loaded != null) &&
+                    (!rangeMode || isEditing || (rangeStart != null && rangeEnd != null)),
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.bleeding_save)) }
 
             if (status == AddBleedingEntryViewModel.Status.Error) {
-                Text(stringResource(R.string.bleeding_error), color = MaterialTheme.colorScheme.error)
+                Text(
+                    stringResource(
+                        if (isEditing && loaded == null) R.string.bleeding_load_error
+                        else R.string.bleeding_error
+                    ),
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         }
     }

@@ -46,6 +46,9 @@ vault.setMedicationArchived(id: Int64, archived: Bool) throws
 
 // Doses + sites d'injection
 vault.logDose(dose: NewDoseEvent) throws -> DoseEvent
+vault.logDoses(doses: [NewDoseEvent]) throws -> [DoseEvent]          // batch, 1 transaction (log par période)
+vault.updateDose(id: Int64, dose: NewDoseEvent) throws -> DoseEvent  // édition en place, id stable
+vault.getDose(id: Int64) throws -> DoseEvent?
 vault.listDoses(medicationId: Int64, offset: Int64, limit: Int64) throws -> [DoseEvent]
 vault.suggestNextInjectionSite(medicationId: Int64, historyDepth: Int64) throws -> String?
 
@@ -53,8 +56,12 @@ vault.suggestNextInjectionSite(medicationId: Int64, historyDepth: Int64) throws 
 vault.addSchedule(schedule: NewDoseSchedule, nowMs: Int64) throws -> DoseSchedule
 vault.listActiveSchedules() throws -> [DoseSchedule]
 vault.listSchedulesForMedication(medicationId: Int64, includeInactive: Bool) throws -> [DoseSchedule]
+vault.updateSchedule(id: Int64, schedule: NewDoseSchedule) throws -> DoseSchedule // id stable; active/createdAtMs intouchés
 vault.setScheduleActive(id: Int64, active: Bool) throws
 vault.setScheduleNextDue(id: Int64, nextDueAtMs: Int64) throws
+
+// Règles / bleeding (batch — « cette semaine = règles »)
+vault.addBleedingEntries(entries: [NewBleedingEntry]) throws -> [BleedingEntry]
 
 // Journal
 vault.addJournalEntry(entry: NewJournalEntry) throws -> JournalEntry
@@ -91,7 +98,7 @@ vault.exportEncrypted(passphrase: String) throws -> Data            // bundle .t
 `Medication{id, name, kind, route, defaultDose:Double?, defaultDoseUnit:String?, color:Int64?, notes:String?, archived:Bool, createdAtMs:Int64}` ·
 `NewMedication{name, kind, route, defaultDose:Double?, defaultDoseUnit:String?, color:Int64?, notes:String?}` ·
 `DoseEvent / NewDoseEvent{medicationId, takenAtMs, dose:Double?, doseUnit:String?, route:String?, injectionSite:String?, notes:String?}` ·
-`DoseSchedule / NewDoseSchedule{medicationId, kind, intervalMinutes:UInt32?, dailyHour:UInt32?, dailyMinute:UInt32?, intervalDays:UInt32?, nextDueAtMs:Int64, ...}` ·
+`DoseSchedule / NewDoseSchedule{medicationId, kind, intervalMinutes:UInt32?, dailyHour:UInt32?, dailyMinute:UInt32?, intervalDays:UInt32?, nextDueAtMs:Int64, label:String? = nil, ...}` — `label` = texte de rappel personnalisé (schema v14) ·
 `JournalEntry / NewJournalEntry{atMs, mood:UInt32?, dysphoria:UInt32?, euphoria:UInt32?, libido:UInt32?, energy:UInt32?, freeText:String?, sideEffects:String?}` ·
 `HormoneMeasurement / NewHormoneMeasurement{atMs, hormone, value:Double, unit, labName:String?, notes:String?}` ·
 `PhotoRecord / NewPhotoRecord{atMs, category:String?, filePath, notes:String?}` ·
