@@ -60,3 +60,9 @@ apple/.bundle/
 
 # Local release artifacts (apk/aab)
 /dist/
+
+# Local working notes / scratch files
+/labels-to-edit.json
+
+# Claude Code local state
+.claude/
