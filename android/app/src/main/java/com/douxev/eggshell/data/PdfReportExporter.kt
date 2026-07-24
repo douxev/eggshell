@@ -72,26 +72,35 @@ class PdfReportExporter @Inject constructor(
         }
 
         if (options.hormones) {
+            // Weight shares the storage but is not a hormone level — it must
+            // not show up in the doctor's "Taux hormonaux" section.
             val distinct = runCatching { hormones.distinct() }.getOrDefault(emptyList())
-            ctx.section("Taux hormonaux", distinct.size)
-            if (distinct.isEmpty()) {
-                ctx.bodyMuted("Aucune mesure hormonale.")
+                .filter { it != com.douxev.eggshell.ui.hormones.HormoneCatalog.WEIGHT }
+            // Build the in-period series first: the section counter must say
+            // how many analytes actually appear below, not how many exist in
+            // the database (they can differ when everything is older than
+            // the selected period).
+            val blocks = distinct.mapNotNull { hormone ->
+                val raw = runCatching { hormones.listForHormone(hormone, 0, 50) }
+                    .getOrDefault(emptyList())
+                    .filter { it.atMs >= cutoff }
+                    .sortedBy { it.atMs }
+                if (raw.isEmpty()) return@mapNotNull null
+                val target = units.getEffective(hormone)
+                val series = raw.map { m ->
+                    val converted = if (target != null && target != m.unit) {
+                        hormones.convert(m.value, m.unit, target, hormone) ?: m.value
+                    } else m.value
+                    HormonePoint(m, converted, target ?: m.unit)
+                }
+                hormone to series
+            }
+            ctx.section("Taux hormonaux", blocks.size)
+            if (blocks.isEmpty()) {
+                ctx.bodyMuted("Aucune mesure sur la période.")
             } else {
-                distinct.forEach { hormone ->
-                    val raw = runCatching { hormones.listForHormone(hormone, 0, 50) }
-                        .getOrDefault(emptyList())
-                        .filter { it.atMs >= cutoff }
-                        .sortedBy { it.atMs }
-                    if (raw.isNotEmpty()) {
-                        val target = units.getEffective(hormone)
-                        val series = raw.map { m ->
-                            val converted = if (target != null && target != m.unit) {
-                                hormones.convert(m.value, m.unit, target, hormone) ?: m.value
-                            } else m.value
-                            HormonePoint(m, converted, target ?: m.unit)
-                        }
-                        ctx.hormoneBlock(hormone, series)
-                    }
+                blocks.forEach { (hormone, series) ->
+                    ctx.hormoneBlock(analyteLabel(hormone), series)
                 }
             }
         }
@@ -105,6 +114,10 @@ class PdfReportExporter @Inject constructor(
                 ctx.bodyMuted("Aucune entrée pour la période.")
             } else {
                 entries.take(40).forEach { e -> ctx.journalRow(e) }
+                if (entries.size > 40) {
+                    // Never truncate silently in a medical document.
+                    ctx.bodyMuted("… et ${entries.size - 40} autres entrées sur la période (40 plus récentes affichées).")
+                }
             }
         }
 
@@ -139,6 +152,24 @@ class PdfReportExporter @Inject constructor(
     // ------------------------------------------------------------------
     // Rendering helpers
     // ------------------------------------------------------------------
+
+    /** Human label for an analyte id — the doctor must read « Tension
+     *  systolique », never the raw `bp_systolic` identifier. Same resources
+     *  as [com.douxev.eggshell.ui.hormones.HormoneCatalog.kindLabel]. */
+    private fun analyteLabel(id: String): String = when (id) {
+        "estradiol" -> context.getString(com.douxev.eggshell.R.string.hormone_estradiol)
+        "progesterone" -> context.getString(com.douxev.eggshell.R.string.hormone_progesterone)
+        "testosterone" -> context.getString(com.douxev.eggshell.R.string.hormone_testosterone)
+        "lh" -> context.getString(com.douxev.eggshell.R.string.hormone_lh)
+        "fsh" -> context.getString(com.douxev.eggshell.R.string.hormone_fsh)
+        "prolactin" -> context.getString(com.douxev.eggshell.R.string.hormone_prolactin)
+        "shbg" -> context.getString(com.douxev.eggshell.R.string.hormone_shbg)
+        "bp_systolic" -> context.getString(com.douxev.eggshell.R.string.hormone_bp_systolic)
+        "bp_diastolic" -> context.getString(com.douxev.eggshell.R.string.hormone_bp_diastolic)
+        "hemoglobin" -> context.getString(com.douxev.eggshell.R.string.hormone_hemoglobin)
+        "hematocrit" -> context.getString(com.douxev.eggshell.R.string.hormone_hematocrit)
+        else -> id.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.getDefault()) }
+    }
 
     private data class HormonePoint(val raw: HormoneMeasurement, val displayValue: Double, val displayUnit: String)
 
@@ -282,12 +313,12 @@ class PdfReportExporter @Inject constructor(
             y += 22f
         }
 
-        fun hormoneBlock(hormone: String, series: List<HormonePoint>) {
+        fun hormoneBlock(label: String, series: List<HormonePoint>) {
             val needed = 130f + 14f * series.size.coerceAtMost(6)
             ensureSpace(needed)
             val c = canvas!!
-            // Title
-            c.drawText(hormone.replaceFirstChar { it.titlecase(Locale.getDefault()) }, marginX, y, pBodyBold)
+            // Title — already resolved to a display label by the caller.
+            c.drawText(label, marginX, y, pBodyBold)
             val latest = series.last()
             val latestText = "${trim(latest.displayValue)} ${latest.displayUnit}"
             val tw = pBodyBold.measureText(latestText)
@@ -328,7 +359,10 @@ class PdfReportExporter @Inject constructor(
                 e.energy?.let { "Énergie $it" },
             ).joinToString(" · ")
             val freeLines = wrap(e.freeText.orEmpty(), pBody, pageW - 2 * marginX - 12f)
-            ensureSpace(36f + 12f * freeLines.size)
+            // The optional side-effects line must be part of the reservation,
+            // or the row can overflow into the bottom margin.
+            val sideEffectsLine = if (e.sideEffects.isNullOrBlank()) 0f else 12f
+            ensureSpace(36f + 12f * freeLines.size + sideEffectsLine)
             val c = canvas!!
             c.drawText(dateTimeFmt.format(Date(e.atMs)), marginX, y, pBodyBold)
             y += 13f

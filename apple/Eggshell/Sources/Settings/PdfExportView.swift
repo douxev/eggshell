@@ -366,6 +366,10 @@ private enum PdfReportRenderer {
                     cursor.muted("Aucune entrée de journal sur la période.")
                 } else {
                     for e in journal.prefix(60) { journalRow(&cursor, e) }
+                    if journal.count > 60 {
+                        // Never truncate silently in a medical document.
+                        cursor.muted("… et \(journal.count - 60) autres entrées sur la période (60 plus récentes affichées).")
+                    }
                 }
             }
 
