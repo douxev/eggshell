@@ -9,7 +9,7 @@ import SwiftUI
 
 enum WhatsNewCatalog {
     /// Highest version code. Compared against WhatsNewStore.lastSeen.
-    static let latestVersion: Int = 12
+    static let latestVersion: Int = 13
 
     struct Release: Identifiable {
         var id: Int { version }
@@ -21,7 +21,7 @@ enum WhatsNewCatalog {
     /// Releases, newest first.
     static let releases: [Release] = [
         Release(
-            version: 12,
+            version: 13,
             title: "Quoi de neuf",
             highlights: [
                 "Règles — note un jour passé, ou « cette semaine = règles » en une seule action.",
