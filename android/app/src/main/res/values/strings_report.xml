@@ -92,7 +92,7 @@
     <string name="report_mod_questions">Questions à aborder</string>
     <string name="report_mod_questions_sub_fmt">%1$s du rendez-vous du %2$s</string>
     <string name="report_mod_questions_none">Aucun rendez-vous à venir</string>
-    <string name="report_mod_bleeding">Règles</string>
+    <string name="report_mod_bleeding">Menstruations</string>
     <string name="report_mod_voice">Voix</string>
     <string name="report_mod_voice_sub_fmt">Hauteur moyenne · %1$s</string>
     <string name="report_mod_photos">Photos d’évolution</string>

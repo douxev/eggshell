@@ -125,7 +125,7 @@ actor VaultService {
     // MARK: Bleeding / cycle tracking
     @discardableResult
     func addBleedingEntry(_ e: NewBleedingEntry) throws -> BleedingEntry { try vault.addBleedingEntry(entry: e) }
-    /// Batch insert in one core transaction — « cette semaine = règles »
+    /// Batch insert in one core transaction — « cette semaine = menstruations »
     /// logged in one action instead of one entry per day.
     @discardableResult
     func addBleedingEntries(_ entries: [NewBleedingEntry]) throws -> [BleedingEntry] {

@@ -1023,7 +1023,7 @@ private struct ModulesStep: View {
                 ToggleRow(label: "Ressenti", systemImage: "face.smiling", isOn: $features.journal)
                 ToggleRow(label: "Analyses", systemImage: "drop.fill", isOn: $features.hormones)
                 ToggleRow(label: "Poids", systemImage: "ruler", isOn: $features.weight)
-                ToggleRow(label: "Règles", systemImage: "calendar.badge.clock", isOn: $features.bleeding)
+                ToggleRow(label: "Menstruations", systemImage: "calendar.badge.clock", isOn: $features.bleeding)
                 ToggleRow(label: "Rendez-vous", systemImage: "calendar", isOn: $features.appointments)
                 ToggleRow(label: "Photos", systemImage: "camera.fill", isOn: $features.photos)
                 ToggleRow(label: "Voix", systemImage: "waveform", isOn: $features.voice,

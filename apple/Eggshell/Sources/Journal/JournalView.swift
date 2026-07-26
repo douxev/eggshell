@@ -2,7 +2,8 @@ import SwiftUI
 import TransitionCore
 
 // Ressenti (§6.7) — one pushed screen for everything you feel: the journal and
-// its month calendar, the Règles log, and the Corrélations overlay, behind a
+// its month calendar, the Menstruations log, and the Corrélations overlay,
+// behind a
 // single segmented selector.
 //
 // The refonte reorganises, it removes nothing (D5): « Ton résumé » and
@@ -168,14 +169,14 @@ struct JournalView: View {
     @Environment(\.palette) private var palette
     @StateObject private var vm = JournalViewModel()
 
-    /// Segment identities, stable whatever the selector shows. « Règles »
+    /// Segment identities, stable whatever the selector shows. « Menstruations »
     /// disappears entirely when the module is off, so a position in the control
     /// is not an identity: keeping the two apart is what lets the flag flip
     /// without silently moving the user to another segment.
     private static let segmentJournal = 0
     private static let segmentBleeding = 1
     private static let segmentCorrelations = 2
-    private static let segmentTitles = ["Journal", "Règles", "Corrélations"]
+    private static let segmentTitles = ["Journal", "Menstruations", "Corrélations"]
 
     /// Which segment the selector offers. Bleeding is opt-in — it says
     /// something strong about a body — so the module being off removes the
@@ -195,7 +196,7 @@ struct JournalView: View {
     }
 
     /// Bridges the control's *position* to the segment *identity*, so that
-    /// hiding « Règles » shifts nothing under the user.
+    /// hiding « Menstruations » shifts nothing under the user.
     private var segmentSelection: Binding<Int> {
         Binding(
             get: { self.availableSegments.firstIndex(of: self.effectiveSegment) ?? 0 },
@@ -245,7 +246,7 @@ struct JournalView: View {
         .searchable(text: $search, prompt: "Rechercher dans tes notes")
         .eggActionBar {
             if effectiveSegment == Self.segmentBleeding {
-                ActionBarButton("Noter mes règles", systemImage: "plus") {
+                ActionBarButton("Noter mes menstruations", systemImage: "plus") {
                     router.push(.addBleeding(id: nil))
                 }
             } else {
@@ -672,7 +673,7 @@ private struct CalendarCard: View {
                                 band: false)
                         }
                         if hasBleeding {
-                            legendItem(palette.errorContainer, "Règles", band: true)
+                            legendItem(palette.errorContainer, "Menstruations", band: true)
                         }
                     }
                     .padding(.top, 12)
@@ -732,7 +733,7 @@ private struct CalendarCard: View {
         } else if doseCount > 1 {
             parts.append("\(doseCount) traitements pris")
         }
-        if bleeding { parts.append("règles") }
+        if bleeding { parts.append("menstruations") }
         return parts.joined(separator: ", ")
     }
 }

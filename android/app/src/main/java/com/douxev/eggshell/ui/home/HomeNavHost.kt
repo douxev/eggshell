@@ -224,7 +224,7 @@ fun HomeNavHost(
                 com.douxev.eggshell.ui.summary.SummaryScreen(onBack = { nav.popBackStack() })
             }
 
-            // ---- Règles ---------------------------------------------------
+            // ---- Menstruations --------------------------------------------
             composable(Routes.BLEEDING) {
                 BleedingScreen(
                     onBack = { nav.popBackStack() },
@@ -372,7 +372,7 @@ object Routes {
     const val MED_LOG_DOSE = "med/log/{id}?doseId={doseId}"
     const val MED_ADD_SCHEDULE = "med/schedule/{id}?scheduleId={scheduleId}"
 
-    /** « Ressenti » — the journal screen with its Journal/Règles/Corrélations segments. */
+    /** « Ressenti » — the journal screen with its Journal/Menstruations/Corrélations segments. */
     const val FEELING = "feeling"
     const val JOURNAL_ADD = "journal/add"
     const val JOURNAL_EDIT = "journal/edit/{id}"

@@ -851,7 +851,7 @@ internal class ReportBuilder(
         .replace(DIACRITICS, "")
 
     // -----------------------------------------------------------------------
-    // Règles
+    // Menstruations
     // -----------------------------------------------------------------------
 
     private suspend fun bleedingSection(from: Long, to: Long): Section? {

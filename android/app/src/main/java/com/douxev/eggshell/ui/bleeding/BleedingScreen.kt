@@ -75,11 +75,11 @@ class BleedingListViewModel @Inject constructor(
 }
 
 /**
- * The Règles content, as list items.
+ * The Menstruations content, as list items.
  *
- * Two doors lead here — the launcher tile and the `Règles` segment of Ressenti
- * — and they must show the same thing, so the content lives in one place and
- * each door supplies its own header and action band.
+ * Two doors lead here — the launcher tile and the `Menstruations` segment of
+ * Ressenti — and they must show the same thing, so the content lives in one
+ * place and each door supplies its own header and action band.
  *
  * No cycle prediction, ever: this records what happened, it never guesses what
  * comes next.

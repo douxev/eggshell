@@ -24,7 +24,7 @@
     <string name="pdfdoc_s_hormones">TAUX HORMONAUX</string>
     <string name="pdfdoc_s_weight">POIDS</string>
     <string name="pdfdoc_s_feel">RESSENTI DÉCLARÉ</string>
-    <string name="pdfdoc_s_bleeding">RÈGLES</string>
+    <string name="pdfdoc_s_bleeding">MENSTRUATIONS</string>
     <string name="pdfdoc_s_voice">VOIX</string>
     <string name="pdfdoc_s_questions">QUESTIONS À ABORDER</string>
     <string name="pdfdoc_s_photos">PHOTOS D’ÉVOLUTION</string>
@@ -117,14 +117,14 @@
     <string name="pdfdoc_caption_effects">EFFETS LES PLUS SIGNALÉS</string>
     <string name="pdfdoc_effect_days_fmt">%1$d j</string>
 
-    <!-- ===== Règles ===== -->
+    <!-- ===== Menstruations ===== -->
     <string name="pdfdoc_col_start">DÉBUT</string>
     <string name="pdfdoc_col_end">FIN</string>
     <string name="pdfdoc_col_duration">DURÉE</string>
     <string name="pdfdoc_col_nature">NATURE</string>
-    <string name="pdfdoc_bleeding_period">Règles</string>
+    <string name="pdfdoc_bleeding_period">Menstruations</string>
     <string name="pdfdoc_bleeding_spotting">Spotting</string>
-    <string name="pdfdoc_bleeding_both">Règles et spotting</string>
+    <string name="pdfdoc_bleeding_both">Menstruations et spotting</string>
     <plurals name="pdfdoc_bleeding_days">
         <item quantity="one">%1$d jour</item>
         <item quantity="other">%1$d jours</item>

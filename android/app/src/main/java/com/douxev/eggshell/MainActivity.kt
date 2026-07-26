@@ -191,15 +191,21 @@ class AppRootViewModel @Inject constructor(
     private val _pendingDeepLink = MutableStateFlow<DeepLink?>(null)
     val pendingDeepLink: StateFlow<DeepLink?> = _pendingDeepLink.asStateFlow()
 
-    /** True iff the current versionCode is higher than the last seen one,
-     *  i.e. the user just upgraded and hasn't seen the changelog yet. */
+    /**
+     * True iff there is release copy the user has not read yet.
+     *
+     * Gated on the **catalogue's** version, not on `BuildConfig.VERSION_CODE`:
+     * the sheet is about what changed, and a patch release that ships no new
+     * copy must not re-open the previous release's notes at someone who has
+     * already dismissed them.
+     */
     private val _showWhatsNew = MutableStateFlow(
-        whatsNew.shouldShow(BuildConfig.VERSION_CODE)
+        whatsNew.shouldShow(WhatsNewCatalog.LATEST.versionCode)
     )
     val showWhatsNew: StateFlow<Boolean> = _showWhatsNew.asStateFlow()
 
     fun dismissWhatsNew() {
-        whatsNew.markSeen(BuildConfig.VERSION_CODE)
+        whatsNew.markSeen(WhatsNewCatalog.LATEST.versionCode)
         _showWhatsNew.value = false
     }
 

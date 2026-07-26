@@ -1,7 +1,7 @@
 import SwiftUI
 import TransitionCore
 
-// « Noter mes règles » — one day or a whole span, new or edited.
+// « Noter mes menstruations » — one day or a whole span, new or edited.
 //
 // The kind chips are deselectable on purpose: tapping the selected one again
 // clears it back to « non précisé », because not knowing is an honest answer and
@@ -22,11 +22,11 @@ final class AddBleedingEntryViewModel: ObservableObject {
     @Published var error: String?
 
     @Published var date = Date()
-    /// nil = non précisé, true = spotting, false = règles.
+    /// nil = non précisé, true = spotting, false = menstruations.
     @Published var isSpotting: Bool?
     @Published var freeText = ""
 
-    /// Span mode (create only): log « cette semaine = règles » in one action.
+    /// Span mode (create only): log « cette semaine = menstruations » in one action.
     @Published var rangeMode = false
     @Published var rangeStart = Date()
     @Published var rangeEnd = Date()
@@ -209,7 +209,7 @@ struct AddBleedingEntryView: View {
             .padding(.bottom, Metrics.blockGap)
         }
         .background(palette.surface.ignoresSafeArea())
-        .navigationTitle(entryId == nil ? "Noter mes règles" : "Modifier")
+        .navigationTitle(entryId == nil ? "Noter mes menstruations" : "Modifier")
         .navigationBarTitleDisplayMode(.inline)
         .eggActionBar {
             ActionBarButton("Enregistrer", systemImage: "checkmark", enabled: canSave) { save() }
@@ -290,7 +290,7 @@ struct AddBleedingEntryView: View {
         VStack(alignment: .leading, spacing: 9) {
             MicroLabel("CE QUE C'EST")
             HStack(spacing: 7) {
-                PillView("Règles", selected: vm.isSpotting == false) {
+                PillView("Menstruations", selected: vm.isSpotting == false) {
                     vm.isSpotting = vm.isSpotting == false ? nil : false
                 }
                 PillView("Spotting", selected: vm.isSpotting == true) {

@@ -3,7 +3,7 @@ import TransitionCore
 
 // « Personnaliser les indicateurs » — the catalogue editor of one domain
 // (« journal » or « bleeding »). Reached from the Journal complet link and from
-// the Règles segment (D5).
+// the Menstruations segment (D5).
 //
 // A built-in can be hidden and reordered but never renamed or removed: the five
 // reserved accents of §6.2 have to keep meaning the same thing in the calendar,
@@ -228,7 +228,7 @@ struct MetricEditorView: View {
     }
 
     private var intro: String {
-        let subject = domain == "bleeding" ? "tes règles" : "ton ressenti"
+        let subject = domain == "bleeding" ? "tes menstruations" : "ton ressenti"
         return "Choisis ce que tu veux suivre pour \(subject) : masque ce qui ne te parle pas, "
             + "réordonne, ajoute les tiens. Masquer un indicateur ne supprime jamais "
             + "les valeurs déjà notées."

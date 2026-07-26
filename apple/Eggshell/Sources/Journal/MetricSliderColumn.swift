@@ -2,7 +2,7 @@ import SwiftUI
 import TransitionCore
 
 // The configurable indicator sliders of §6.2, shared by « Journal complet » and
-// « Noter mes règles ».
+// « Noter mes menstruations ».
 //
 // Each axis carries its own accent and the current value is written `n/10` in
 // that same accent: the number and the colour say the same thing, so nothing is
@@ -22,7 +22,7 @@ enum MetricAccents {
         case "euphoria":  return palette.tertiary
         case "libido":    return palette.secondary
         case "energy":    return palette.success
-        // Règles. `flow` is the saignement of §5.1; the two pain axes take the
+        // Menstruations. `flow` is the saignement of §5.1; the two pain axes take the
         // secondary and tertiary slots so no two sliders of the domain share a
         // colour.
         case "flow":      return palette.error

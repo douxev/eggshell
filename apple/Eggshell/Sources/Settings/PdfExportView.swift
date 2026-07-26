@@ -416,7 +416,7 @@ struct PdfExportView: View {
                 error: false,
                 binding: $vm.modules.questions),
             ModuleRow(
-                title: "Règles",
+                title: "Menstruations",
                 subtitle: v.bleedingDays == 0
                     ? ReportVolumes.empty
                     : plural(v.bleedingDays, "jour de saignement", "jours de saignement"),

@@ -337,7 +337,7 @@ struct CorrelationSection: View {
 
         // Bleeding days: a tick row at the very bottom, only when there are any.
         if !vm.bleedingDays.isEmpty {
-            label("RÈGLES", palette.error, at: bleedY)
+            label("MENSTRUATIONS", palette.error, at: bleedY)
             for bleed in vm.bleedingDays {
                 let x = xFor(bleed)
                 var tick = Path()
@@ -417,8 +417,8 @@ struct CorrelationSection: View {
 
     private var bleedingSentence: String? {
         guard let split = vm.bleedingSplit else { return nil }
-        return "Les jours de règles, ton humeur est en moyenne à "
-            + "\(Self.oneDecimal(split.with))/10 — hors règles, "
+        return "Les jours de menstruations, ton humeur est en moyenne à "
+            + "\(Self.oneDecimal(split.with))/10 — hors menstruations, "
             + "\(Self.oneDecimal(split.without))/10."
     }
 

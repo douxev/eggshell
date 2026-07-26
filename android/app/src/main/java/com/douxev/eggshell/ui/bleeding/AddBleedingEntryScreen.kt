@@ -191,7 +191,7 @@ class AddBleedingEntryViewModel @Inject constructor(
 }
 
 /**
- * Noter des règles — one day, or a whole span in a single gesture.
+ * Noter mes menstruations — one day, or a whole span in a single gesture.
  *
  * It records what happened and nothing else: no cycle length, no prediction,
  * no « next period in N days ».

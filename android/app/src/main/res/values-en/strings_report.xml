@@ -92,7 +92,7 @@
     <string name="report_mod_questions">Questions to raise</string>
     <string name="report_mod_questions_sub_fmt">%1$s from the %2$s appointment</string>
     <string name="report_mod_questions_none">No upcoming appointment</string>
-    <string name="report_mod_bleeding">Periods</string>
+    <string name="report_mod_bleeding">Menstruation</string>
     <string name="report_mod_voice">Voice</string>
     <string name="report_mod_voice_sub_fmt">Average pitch · %1$s</string>
     <string name="report_mod_photos">Progress photos</string>

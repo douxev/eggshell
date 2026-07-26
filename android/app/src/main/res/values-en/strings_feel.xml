@@ -9,7 +9,7 @@
     <!-- Feelings screen -->
     <string name="feel_title">Feelings</string>
     <string name="feel_seg_journal">Journal</string>
-    <string name="feel_seg_bleeding">Periods</string>
+    <string name="feel_seg_bleeding">Menstruation</string>
     <string name="feel_seg_correlations">Correlations</string>
     <string name="feel_summary_subtitle">What moved, on one card</string>
     <string name="feel_fab_journal">Log how you feel</string>

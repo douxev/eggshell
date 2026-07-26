@@ -907,7 +907,7 @@ struct DoctorReportBuilder {
             .map { (label: display[$0] ?? "", count: "\(days[$0]?.count ?? 0) j") }
     }
 
-    // MARK: - Règles
+    // MARK: - Menstruations
 
     private func bleedingSection(from: Int64, to: Int64) async -> ReportSection? {
         let entries = ((try? await session.listBleedingEntries(offset: 0, limit: Self.entryLimit)) ?? [])
@@ -938,9 +938,9 @@ struct DoctorReportBuilder {
         let rows = spans.reversed().map { span -> [String] in
             let length = span.end - span.start + 1
             let nature: String
-            if span.period && span.spotting { nature = "Règles et spotting" }
+            if span.period && span.spotting { nature = "Menstruations et spotting" }
             else if span.spotting { nature = "Spotting" }
-            else { nature = "Règles" }
+            else { nature = "Menstruations" }
             return [
                 f.slashed(msOfEpochDay(span.start)),
                 f.slashed(msOfEpochDay(span.end)),
@@ -968,7 +968,7 @@ struct DoctorReportBuilder {
             blocks.append(.paragraph(
                 text: "Intervalle moyen observé entre deux débuts : \(mean) jours.", note: true))
         }
-        return ReportSection(title: "RÈGLES", blocks: blocks)
+        return ReportSection(title: "MENSTRUATIONS", blocks: blocks)
     }
 
     // MARK: - 7 — Voix

@@ -540,7 +540,7 @@ private struct LauncherGrid: View {
                                     systemImage: "face.smiling", family: .feeling))
         }
         if features.bleeding {
-            all.append(LauncherSpec(module: .bleeding, label: "Règles",
+            all.append(LauncherSpec(module: .bleeding, label: "Menstruations",
                                     systemImage: "drop.fill", family: .feeling))
         }
         if features.hormones {

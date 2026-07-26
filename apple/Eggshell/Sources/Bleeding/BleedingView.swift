@@ -1,7 +1,8 @@
 import SwiftUI
 import TransitionCore
 
-// Règles — the `Règles` segment of the Ressenti screen (§6.7) and the pushed
+// Menstruations — the `Menstruations` segment of the Ressenti screen (§6.7)
+// and the pushed
 // screen of `Route.bleeding`, which shows exactly the same thing.
 //
 // Descriptive only: eggshell writes down what happened and never predicts a
@@ -72,7 +73,8 @@ final class BleedingViewModel: ObservableObject {
 
 // MARK: - Segment
 
-/// The body of the `Règles` segment. Owns its own query so it can live either
+/// The body of the `Menstruations` segment. Owns its own query so it can live
+/// either
 /// inside Ressenti or under its own route without either copy knowing.
 struct BleedingSection: View {
     @EnvironmentObject private var app: AppState
@@ -118,7 +120,7 @@ struct BleedingSection: View {
                         "Rien de noté pour l'instant. Quand ça arrive, note-le ici — "
                             + "tu verras la bande apparaître sur ton calendrier.",
                         systemImage: "drop",
-                        actionLabel: "Noter mes règles",
+                        actionLabel: "Noter mes menstruations",
                         action: { router.push(.addBleeding(id: nil)) })
                 } else {
                     EmptyStateView(
@@ -209,7 +211,7 @@ struct BleedingSection: View {
         switch isSpotting {
         case .some(false):
             StatusPillView(
-                "Règles", systemImage: "drop.fill",
+                "Menstruations", systemImage: "drop.fill",
                 container: palette.errorContainer, content: palette.onErrorContainer)
         case .some(true):
             StatusPillView(
@@ -285,11 +287,11 @@ struct BleedingView: View {
                 .padding(.bottom, Metrics.blockGap)
         }
         .background(palette.surface.ignoresSafeArea())
-        .navigationTitle("Règles")
+        .navigationTitle("Menstruations")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $search, prompt: "Rechercher dans tes notes")
         .eggActionBar {
-            ActionBarButton("Noter mes règles", systemImage: "plus") {
+            ActionBarButton("Noter mes menstruations", systemImage: "plus") {
                 router.push(.addBleeding(id: nil))
             }
         }

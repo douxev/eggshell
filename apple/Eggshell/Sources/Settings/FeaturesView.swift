@@ -73,7 +73,7 @@ struct FeaturesView: View {
                 systemImage: "heart.text.square",
                 binding: $features.journal),
             ModuleRow(
-                title: "Règles",
+                title: "Menstruations",
                 subtitle: "Tes saignements et leurs symptômes, jour par jour.",
                 systemImage: "drop",
                 binding: $features.bleeding),

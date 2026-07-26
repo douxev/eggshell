@@ -105,9 +105,9 @@ class JournalListViewModel @Inject constructor(
     private val features: FeaturesPrefs,
 ) : ViewModel() {
     /**
-     * Règles is opt-in: bleeding is a strong signal about someone's body, so
-     * the segment, its FAB and the calendar's band only exist once the module
-     * has been enabled. Exposed as the live flag so flipping it in Réglages is
+     * Menstruations is opt-in: bleeding is a strong signal about someone's
+     * body, so the segment, its FAB and the calendar's band only exist once
+     * the module has been enabled. Exposed as the live flag so flipping it in Réglages is
      * reflected the next time this screen is shown.
      */
     val bleedingEnabled: StateFlow<Boolean> = features.bleeding
@@ -227,8 +227,8 @@ class JournalListViewModel @Inject constructor(
 /**
  * Ressenti (§6.7) — one screen, three segments.
  *
- * `Journal` holds the month calendar and the history it filters, `Règles` and
- * `Corrélations` show exactly what their own screens show: the launcher tile
+ * `Journal` holds the month calendar and the history it filters, `Menstruations`
+ * and `Corrélations` show exactly what their own screens show: the launcher tile
  * and the segment must never disagree about what a module contains.
  *
  * The three `…Bleeding` callbacks default to [onOpenBleeding] so a host that
@@ -286,8 +286,9 @@ fun JournalListScreen(
     val zone = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zone) }
     var visibleMonth by remember { mutableStateOf(YearMonth.from(today)) }
-    // Keyed on the flag too: turning Règles off while the calendar is on screen
-    // must drop the band, not leave it drawn until the next month change.
+    // Keyed on the flag too: turning Menstruations off while the calendar is
+    // on screen must drop the band, not leave it drawn until the next month
+    // change.
     LaunchedEffect(visibleMonth, bleedingEnabled) { vm.loadOverlays(visibleMonth) }
 
     val byDate: Map<LocalDate, List<JournalEntry>> = remember(items) {

@@ -51,7 +51,7 @@
     <string name="set_module_appointments_sub">Tes consultations, les personnes qui te suivent, ce que tu veux leur demander.</string>
     <string name="set_module_journal">Journal</string>
     <string name="set_module_journal_sub">Ton humeur, tes indicateurs, les effets que tu ressens.</string>
-    <string name="set_module_bleeding">Règles</string>
+    <string name="set_module_bleeding">Menstruations</string>
     <string name="set_module_bleeding_sub">Tes saignements et leurs symptômes, jour par jour.</string>
     <string name="set_module_labs">Analyses</string>
     <string name="set_module_labs_sub">Tes taux hormonaux dans le temps, saisis ou importés.</string>

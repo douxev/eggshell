@@ -416,16 +416,16 @@
 
     <!-- Bleeding / cycle tracking (feature 4) -->
     <string name="feature_bleeding_title">Menstruations</string>
-    <string name="feature_bleeding_sub">Suivi des règles, du spotting et des symptômes, pour relier les changements de dose à leur effet. Désactivé par défaut.</string>
+    <string name="feature_bleeding_sub">Suivi des menstruations, du spotting et des symptômes, pour relier les changements de dose à leur effet. Désactivé par défaut.</string>
     <string name="bleeding_title">Menstruations</string>
-    <string name="bleeding_hint">Note tes règles, le spotting et les symptômes. Aucune prédiction de cycle.</string>
+    <string name="bleeding_hint">Note tes menstruations, le spotting et les symptômes. Aucune prédiction de cycle.</string>
     <string name="bleeding_empty">Aucune entrée pour l\'instant.</string>
     <string name="bleeding_add_title">Nouvelle entrée</string>
     <string name="bleeding_edit_title">Modifier l\'entrée</string>
     <string name="bleeding_save">Enregistrer</string>
     <string name="bleeding_error">Échec de l\'enregistrement.</string>
     <string name="bleeding_load_error">Impossible de charger l\'entrée.</string>
-    <string name="bleeding_kind_bleed">Règles</string>
+    <string name="bleeding_kind_bleed">Menstruations</string>
     <string name="bleeding_kind_spotting">Spotting</string>
     <string name="bleeding_kind_unspecified">Non précisé</string>
     <string name="bleeding_gauge_flow">Abondance</string>
@@ -437,7 +437,7 @@
     <string name="bleeding_range_label">Période</string>
     <string name="bleeding_range_count_fmt">%1$d jours seront enregistrés.</string>
     <string name="daterange_pick">Choisir la période</string>
-    <string name="journal_legend_bleeding">Règles</string>
+    <string name="journal_legend_bleeding">Menstruations</string>
 
     <!-- Customizable metric sliders (features 4 & 5) -->
     <string name="metric_editor_open">Personnaliser les indicateurs</string>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Zone « Ressenti » : journal, calendrier, règles, corrélations, résumé,
+  Zone « Ressenti » : journal, calendrier, menstruations, corrélations, résumé,
   indicateurs personnalisables. Refonte ergonomique — handoff §6.2, §6.7, §5.1.
   Les libellés en petites capitales sont écrits en majuscules dans la chaîne,
   jamais via une transformation : une traduction doit pouvoir en décider.
@@ -9,13 +9,13 @@
     <!-- Écran Ressenti -->
     <string name="feel_title">Ressenti</string>
     <string name="feel_seg_journal">Journal</string>
-    <string name="feel_seg_bleeding">Règles</string>
+    <string name="feel_seg_bleeding">Menstruations</string>
     <string name="feel_seg_correlations">Corrélations</string>
     <string name="feel_summary_subtitle">Ce qui a bougé, en une carte</string>
     <string name="feel_fab_journal">Noter mon ressenti</string>
-    <string name="feel_fab_bleeding">Noter des règles</string>
+    <string name="feel_fab_bleeding">Noter mes menstruations</string>
     <string name="feel_empty_journal">Rien de noté pour l’instant. Deux curseurs et un mot, et la courbe commence à se dessiner.</string>
-    <string name="feel_empty_bleeding_action">Noter des règles</string>
+    <string name="feel_empty_bleeding_action">Noter mes menstruations</string>
 
     <!-- Calendrier -->
     <string name="feel_calendar_legend_mood">Humeur</string>
@@ -23,7 +23,7 @@
     <string name="feel_cd_selected">jour sélectionné</string>
     <string name="feel_cd_mood_fmt">humeur %1$s sur 10</string>
     <string name="feel_cd_doses_fmt">%1$d prise(s) notée(s)</string>
-    <string name="feel_cd_bleeding">règles</string>
+    <string name="feel_cd_bleeding">menstruations</string>
 
     <!-- Historique -->
     <string name="feel_entry_today_fmt">AUJOURD’HUI · %1$s</string>
@@ -46,7 +46,7 @@
     <string name="feel_delete_title">Supprimer cette entrée ?</string>
     <string name="feel_delete_body">Elle disparaîtra de ton journal et des graphiques. C’est définitif.</string>
 
-    <!-- Règles -->
+    <!-- Menstruations -->
     <string name="feel_bleeding_note_label">NOTE</string>
     <string name="feel_bleeding_note_ghost">Ce que tu veux te rappeler de ce jour…</string>
     <string name="feel_bleeding_kind_label">TYPE</string>
@@ -59,12 +59,12 @@
     <string name="feel_corr_axis_doses">prises notées</string>
     <string name="feel_corr_axis_late">en retard</string>
     <string name="feel_corr_axis_missed_fmt">oubliées · %1$d</string>
-    <string name="feel_corr_axis_bleeding">règles</string>
+    <string name="feel_corr_axis_bleeding">menstruations</string>
     <string name="feel_corr_axis_changes_fmt">changements de traitement · %1$d</string>
     <string name="feel_corr_empty_action">Noter mon ressenti</string>
 
     <!-- Indicateurs -->
     <string name="feel_metric_hidden">Masqué</string>
     <string name="feel_metric_domain_journal">Ces curseurs apparaissent dans ton journal.</string>
-    <string name="feel_metric_domain_bleeding">Ces curseurs apparaissent quand tu notes des règles.</string>
+    <string name="feel_metric_domain_bleeding">Ces curseurs apparaissent quand tu notes tes menstruations.</string>
 </resources>

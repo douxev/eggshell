@@ -36,7 +36,7 @@
     <string name="module_meds">Meds</string>
     <string name="module_appointments">Visits</string>
     <string name="module_journal">Journal</string>
-    <string name="module_bleeding">Periods</string>
+    <string name="module_bleeding">Menstruation</string>
     <string name="module_labs">Labs</string>
     <string name="module_weight">Weight</string>
     <string name="module_photos">Photos</string>

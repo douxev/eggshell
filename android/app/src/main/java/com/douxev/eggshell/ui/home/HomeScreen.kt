@@ -47,10 +47,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -730,13 +733,52 @@ private fun LauncherCell(
                 null -> Unit
             }
         }
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = scheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
-            modifier = Modifier.clearAndSetSemantics {},
-        )
+        LauncherLabel(label, scheme.onSurfaceVariant)
     }
 }
+
+/**
+ * The launcher label, shrunk until it fits its track on **one line**.
+ *
+ * The grid is four fixed tracks wide (~76 dp at 360 dp), and a label that
+ * wraps would make its row taller than the next one — the whole grid would
+ * lose its alignment. « Menstruations » is the longest label we ship and does
+ * not fit at the nominal size, so the text steps down instead of being clipped
+ * or wrapped. Shrinking also absorbs a large system font scale, which clipping
+ * would simply swallow.
+ */
+@Composable
+private fun LauncherLabel(label: String, color: Color) {
+    val base = MaterialTheme.typography.labelSmall
+    // Keyed on the label so a locale change starts the search over.
+    var style by remember(label, base) { mutableStateOf(base) }
+    var measured by remember(label, base) { mutableStateOf(false) }
+    Text(
+        label,
+        style = style,
+        color = color,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+        onTextLayout = { result ->
+            when {
+                !result.didOverflowWidth -> measured = true
+                // Tracking goes first: 0.5 sp on thirteen glyphs is most of the
+                // overflow, and dropping it is far less visible than a word set
+                // smaller than its neighbours.
+                style.letterSpacing != 0.sp -> style = style.copy(letterSpacing = 0.sp)
+                style.fontSize > LauncherLabelMinSize ->
+                    style = style.copy(fontSize = (style.fontSize.value * 0.94f).sp)
+                // Nothing left to give: draw it rather than hide it.
+                else -> measured = true
+            }
+        },
+        // Drawn only once it fits, so the step-down is never a visible flicker.
+        modifier = Modifier
+            .clearAndSetSemantics {}
+            .drawWithContent { if (measured) drawContent() },
+    )
+}
+
+/** Floor for [LauncherLabel]: below this the label stops being readable. */
+private val LauncherLabelMinSize = 8.sp

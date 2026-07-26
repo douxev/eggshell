@@ -42,7 +42,7 @@ enum Route: Hashable {
     case summary
     case metricEditor(domain: String)
 
-    // Règles
+    // Menstruations
     case bleeding
     case addBleeding(id: Int64?)
 

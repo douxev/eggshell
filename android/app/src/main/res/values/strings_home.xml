@@ -46,7 +46,7 @@
     <string name="module_meds">Médics</string>
     <string name="module_appointments">RDV</string>
     <string name="module_journal">Journal</string>
-    <string name="module_bleeding">Règles</string>
+    <string name="module_bleeding">Menstruations</string>
     <string name="module_labs">Analyses</string>
     <string name="module_weight">Poids</string>
     <string name="module_photos">Photos</string>
