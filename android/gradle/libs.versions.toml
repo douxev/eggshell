@@ -3,28 +3,32 @@ agp = "9.3.1"
 kotlin = "2.3.21"
 ksp = "2.3.10"
 hilt = "2.60.1"
-hiltNavigationCompose = "1.2.0"
+# androidx.hilt 1.4 is the first release built against navigation 2.9 and
+# lifecycle 2.9. 1.2.0 (March 2024) was the one library left behind by the
+# 2.0.2 toolchain jump, and hiltViewModel() runs at the very first
+# composition — which is exactly where 2.0.2 dies.
+hiltNavigationCompose = "1.4.0"
 composeBom = "2026.06.01"
 # 1.11+ is the first release whose enableEdgeToEdge() stops calling the
 # setStatusBarColor / setNavigationBarColor / SHORT_EDGES APIs deprecated in
 # Android 15. It requires compileSdk 36, which is why this moved with AGP.
 activityCompose = "1.11.0"
-coreKtx = "1.15.0"
-lifecycleKtx = "2.8.7"
+coreKtx = "1.19.0"
+lifecycleKtx = "2.11.0"
 navigationCompose = "2.9.8"
-workManager = "2.10.0"
+workManager = "2.11.2"
 biometric = "1.2.0-alpha05"
-datastore = "1.1.1"
-cameraX = "1.4.1"
+datastore = "1.2.1"
+cameraX = "1.6.1"
 vico = "2.0.0-beta.3"
 # 5.17.0+ ships 16 KB page-aligned libjnidispatch.so (Android 15 requirement)
 jna = "5.17.0"
 reorderable = "2.4.3"
-appcompat = "1.7.0"
+appcompat = "1.7.1"
 pdfboxAndroid = "2.0.27.0"
 # 4.8.0+ ships 16 KB page-aligned native libs (libtesseract, libleptonica, …)
 tesseract4android = "4.9.0"
-exifinterface = "1.3.7"
+exifinterface = "1.4.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -43,7 +47,7 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
-androidx-work-hilt = { group = "androidx.hilt", name = "hilt-work", version = "1.2.0" }
+androidx-work-hilt = { group = "androidx.hilt", name = "hilt-work", version.ref = "hiltNavigationCompose" }
 androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "cameraX" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraX" }

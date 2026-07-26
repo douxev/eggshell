@@ -23,7 +23,7 @@ fun signingValue(propName: String, envName: String): String? =
 
 android {
     namespace = "com.douxev.eggshell"
-    compileSdk = 36
+    compileSdk = 37
     // Pin to the same NDK that cargo-ndk uses to build the Rust .so files.
     // Without this, AGP picks whichever NDK is newest on the machine
     // (currently 30.0.x) and its strip/objcopy can't process our libs
@@ -38,8 +38,8 @@ android {
         // Reminder for the next release: Play enforces strictly monotonic
         // versionCode across all tracks. Bump versionCode every upload,
         // even for a same-day re-build, otherwise Play refuses the AAB.
-        versionCode = 16
-        versionName = "2.0.2"
+        versionCode = 17
+        versionName = "2.0.3"
 
         ndk {
             // Limit ABIs to common phone architectures; can extend to x86 for emulators.
