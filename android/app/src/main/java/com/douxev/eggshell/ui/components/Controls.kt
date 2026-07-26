@@ -6,10 +6,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
@@ -179,6 +182,12 @@ fun ActionBand(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                // Android 15 draws every app edge to edge, so the band has to
+                // stand clear of the gesture bar itself: the surface still runs
+                // to the bottom of the screen — that is what makes it read as a
+                // band rather than a floating strip — but the action sits above
+                // the system inset instead of underneath it.
+                .windowInsetsPadding(WindowInsets.navigationBars)
                 .height(EggDim.ActionBandHeight)
                 .padding(horizontal = EggDim.ScreenMargin),
             contentAlignment = alignment,

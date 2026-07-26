@@ -2,7 +2,9 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    // No `kotlin.android` here: AGP 9 has built-in Kotlin support and refuses
+    // to run alongside the standalone plugin. The Compose compiler plugin is a
+    // separate compiler plugin and is still applied on its own.
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
@@ -21,7 +23,7 @@ fun signingValue(propName: String, envName: String): String? =
 
 android {
     namespace = "com.douxev.eggshell"
-    compileSdk = 35
+    compileSdk = 36
     // Pin to the same NDK that cargo-ndk uses to build the Rust .so files.
     // Without this, AGP picks whichever NDK is newest on the machine
     // (currently 30.0.x) and its strip/objcopy can't process our libs
@@ -32,12 +34,12 @@ android {
     defaultConfig {
         applicationId = "com.douxev.eggshell"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         // Reminder for the next release: Play enforces strictly monotonic
         // versionCode across all tracks. Bump versionCode every upload,
         // even for a same-day re-build, otherwise Play refuses the AAB.
-        versionCode = 15
-        versionName = "2.0.1"
+        versionCode = 16
+        versionName = "2.0.2"
 
         ndk {
             // Limit ABIs to common phone architectures; can extend to x86 for emulators.
@@ -106,7 +108,13 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
-    kotlinOptions { jvmTarget = "21" }
+    // AGP 9 owns the Kotlin compilation, so the old `kotlinOptions` block is
+    // gone; the target is set through the Kotlin compiler options instead.
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+        }
+    }
     buildFeatures {
         compose = true
         // AGP 8+ no longer generates BuildConfig by default; we need it for
@@ -118,8 +126,16 @@ android {
         named("main") {
             // jniLibs are populated by the cargoBuildRust task below
             jniLibs.srcDirs("src/main/jniLibs")
-            // Generated UniFFI Kotlin bindings
-            java.srcDirs(layout.buildDirectory.dir("generated/uniffi/kotlin"))
+            // Generated UniFFI Kotlin bindings. Two things changed with AGP 9:
+            // it rejects a Provider here (it cannot tell a generated read-only
+            // directory from a source one), and since it compiles Kotlin itself
+            // the `java` source set no longer feeds the Kotlin compilation —
+            // the directory has to be registered on `kotlin` too, or every
+            // `uniffi.*` reference fails to resolve.
+            val uniffiGenerated =
+                layout.buildDirectory.dir("generated/uniffi/kotlin").get().asFile
+            java.srcDirs(uniffiGenerated)
+            kotlin.srcDirs(uniffiGenerated)
         }
     }
 
@@ -140,7 +156,7 @@ val coreDir = layout.projectDirectory.dir("../../core")
 val jniLibsDir = layout.projectDirectory.dir("src/main/jniLibs")
 val uniffiKotlinOutDir = layout.buildDirectory.dir("generated/uniffi/kotlin")
 
-val cargoBuildRust by tasks.registering(Exec::class) {
+val cargoBuildRust = tasks.register<Exec>("cargoBuildRust") {
     group = "rust"
     description = "Build the transition-uniffi cdylib for all Android ABIs via cargo-ndk"
 
@@ -162,7 +178,7 @@ val cargoBuildRust by tasks.registering(Exec::class) {
     outputs.dir(jniLibsDir)
 }
 
-val cargoBuildRustHost by tasks.registering(Exec::class) {
+val cargoBuildRustHost = tasks.register<Exec>("cargoBuildRustHost") {
     group = "rust"
     description = "Build a host cdylib so uniffi-bindgen can read metadata from it"
 
@@ -174,7 +190,7 @@ val cargoBuildRustHost by tasks.registering(Exec::class) {
     outputs.file(coreDir.file("target/debug/libtransition_uniffi.so"))
 }
 
-val uniffiGenerateBindings by tasks.registering(Exec::class) {
+val uniffiGenerateBindings = tasks.register<Exec>("uniffiGenerateBindings") {
     group = "rust"
     description = "Generate Kotlin bindings from the transition-uniffi cdylib"
     dependsOn(cargoBuildRustHost)
@@ -197,6 +213,22 @@ val uniffiGenerateBindings by tasks.registering(Exec::class) {
     inputs.file(coreDir.file("target/debug/libtransition_uniffi.so"))
     outputs.dir(uniffiKotlinOutDir)
 }
+
+// AGP 9 compiles Kotlin itself, and its compile tasks no longer sit behind
+// `preBuild` the way the old Kotlin plugin's did — hooking there alone left the
+// generated UniFFI bindings absent at compile time. Depend on the generator
+// from the compile tasks directly, which is ordering that holds whichever
+// plugin owns the compilation.
+tasks.matching {
+    it.name.startsWith("compile") &&
+        (it.name.endsWith("Kotlin") || it.name.endsWith("JavaWithJavac"))
+}.configureEach {
+    dependsOn(uniffiGenerateBindings)
+}
+
+// The native libraries only have to exist by the time they are merged.
+tasks.matching { it.name.startsWith("merge") && it.name.contains("NativeLibs") }
+    .configureEach { dependsOn(cargoBuildRust) }
 
 tasks.named("preBuild") {
     dependsOn(cargoBuildRust, uniffiGenerateBindings)

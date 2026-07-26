@@ -2,6 +2,7 @@ package com.douxev.eggshell.ui.home
 
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -97,6 +98,12 @@ fun HomeNavHost(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        // This scaffold exists only to host the snackbar above the NavHost. It
+        // must not claim the system bars: every screen inside has its own
+        // scaffold that reads the same insets, and Compose does not consume
+        // them on the way down — so leaving the default here padded every
+        // pushed screen twice, once by this one and once by its own.
+        contentWindowInsets = WindowInsets(0),
     ) { padding ->
         NavHost(
             navController = nav,
