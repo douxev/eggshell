@@ -178,6 +178,15 @@ actor VaultService {
     }
     func deleteVoiceClip(_ id: String) throws { try vault.deleteVoiceClip(id: id) }
 
+    // MARK: Settings (in-vault key/value)
+    /// The only *encrypted* preference store the app has. An absent key reads
+    /// nil; the empty string is a value, so clear a field with `deleteSetting`.
+    func getSetting(_ key: String) throws -> String? { try vault.getSetting(key: key) }
+    func setSetting(_ key: String, _ value: String) throws {
+        try vault.setSetting(key: key, value: value)
+    }
+    func deleteSetting(_ key: String) throws { try vault.deleteSetting(key: key) }
+
     // MARK: Backup
     func exportEncrypted(passphrase: String) throws -> Data { try vault.exportEncrypted(passphrase: passphrase) }
 

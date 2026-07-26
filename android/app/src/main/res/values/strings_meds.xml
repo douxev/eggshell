@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Médics : la liste, le détail d’un traitement, la régularité des prises.
+  Refonte ergonomique — handoff §6.4 et §6.5.
+  Les libellés en petites capitales sont écrits en majuscules dans la chaîne,
+  jamais via une transformation : une traduction doit pouvoir en décider.
+-->
+<resources>
+    <!-- ===== Liste ===== -->
+    <string name="meds_search">Rechercher</string>
+    <string name="meds_search_close">Fermer la recherche</string>
+    <string name="meds_search_hint">Nom du traitement</string>
+    <string name="meds_filter_active">Actifs</string>
+    <string name="meds_filter_all">Tous</string>
+    <string name="meds_filter_archived">Archivés</string>
+    <string name="meds_add_treatment">Ajouter un traitement</string>
+    <string name="meds_archived_badge">Archivé</string>
+    <string name="meds_empty_archived">Rien d’archivé pour l’instant. Un traitement archivé se retrouve ici, avec tout son historique.</string>
+    <string name="meds_empty_search_fmt">Rien ne correspond à « %1$s ».</string>
+
+    <!-- Sous-titre d’une ligne : dose · voie · observance · écart moyen -->
+    <string name="meds_adherence_fmt">%1$d&#160;%%</string>
+    <string name="meds_mean_delay_fmt">%1$s en moyenne</string>
+
+    <!-- ===== Carte « Régularité » ===== -->
+    <string name="meds_regularity">Régularité</string>
+    <string name="meds_regularity_period">30 jours</string>
+    <string name="meds_stat_logged">prises notées</string>
+    <string name="meds_stat_mean_delay">retard moyen</string>
+    <string name="meds_stat_missed">oubliées</string>
+    <string name="meds_chart_caption">ÉCART À L’HEURE PRÉVUE · 30 DERNIÈRES PRISES</string>
+    <string name="meds_chart_cd">Écart de chaque prise à son heure prévue, sur 30 jours.</string>
+    <string name="meds_regularity_empty">Aucune heure prévue sur les 30 derniers jours : je n’ai rien à comparer. Programme un rappel et tes prises se placeront toutes seules ici.</string>
+
+    <!-- Phrase d’interprétation : calculée, jamais figée -->
+    <string name="meds_insight_good_fmt">Tout roule : %1$d prises sur %2$d notées dans les temps.</string>
+    <string name="meds_insight_late_fmt">Tu n’oublies presque rien, mais tu prends souvent tard : %1$d prises sur %2$d avec plus d’un quart d’heure de retard.</string>
+    <string name="meds_insight_missed_fmt">Quand tu prends, c’est à l’heure — mais %1$d prises sur %2$d sont passées à la trappe.</string>
+    <string name="meds_insight_both_fmt">Sur %3$d prises prévues, %1$d sont oubliées et %2$d arrivent en retard.</string>
+    <string name="meds_action_shift_fmt">Décaler le rappel de %1$s à %2$s ?</string>
+    <string name="meds_action_priority_fmt">Rendre le rappel de %1$s plus visible ?</string>
+    <string name="meds_action_none">Rien à changer pour l’instant.</string>
+
+    <!-- ===== Ponctualité : un glyphe, une couleur ET un mot ===== -->
+    <string name="meds_on_time">à l’heure</string>
+    <string name="meds_missed">manquée</string>
+    <string name="meds_skipped">passée</string>
+    <string name="meds_logged">notée</string>
+    <string name="meds_not_logged">Non notée</string>
+    <string name="meds_delta_minutes_fmt">+%1$d min</string>
+    <string name="meds_delta_hours_fmt">+%1$d h</string>
+    <string name="meds_delta_hours_minutes_fmt">+%1$d h %2$02d</string>
+    <string name="meds_delta_early_fmt">−%1$d min</string>
+    <string name="meds_chart_missed_fmt">oubliées · %1$d</string>
+
+    <!-- ===== Détail ===== -->
+    <!-- « Aujourd’hui » se réutilise depuis today_section_today. -->
+    <string name="meds_yesterday">Hier</string>
+    <string name="meds_dose_per_intake_fmt">%1$s par prise</string>
+    <string name="meds_dose_unspecified">Dose libre</string>
+    <string name="meds_alias_row">Alias dans les notifications</string>
+    <string name="meds_schedules">Schémas de prise</string>
+    <string name="meds_schedule_toggle">Activer le rappel</string>
+    <string name="meds_reminder_text">Texte du rappel</string>
+    <string name="meds_quoted_fmt">« %1$s »</string>
+    <string name="meds_unarchive">Sortir de l’archive</string>
+    <string name="meds_archived_notice">Ce traitement est archivé : il garde tout son historique, mais ne déclenche plus de rappel.</string>
+
+    <!-- ===== Formulaires (ajout / rappel / prise) ===== -->
+    <string name="meds_section_identity">Le traitement</string>
+    <string name="meds_section_dose">La dose</string>
+    <string name="meds_section_notification">Dans les notifications</string>
+    <string name="meds_section_color">Sa couleur</string>
+    <string name="meds_section_when">Quand</string>
+    <string name="meds_section_cadence">La cadence</string>
+    <string name="meds_section_site">Le site</string>
+    <string name="meds_section_note">Un mot</string>
+    <string name="meds_color_none_cd">Aucune couleur</string>
+    <string name="meds_color_swatch_cd">Couleur %1$d</string>
+</resources>

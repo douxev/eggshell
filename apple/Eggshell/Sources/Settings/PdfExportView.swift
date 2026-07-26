@@ -2,662 +2,983 @@ import SwiftUI
 import TransitionCore
 import UIKit
 
-// ===========================================================================
-// PUSHED SCREEN — "Export PDF". Parity with the Android PdfExportScreen +
-// PdfReportExporter. Pushed via Route.pdfExport, so NO TabScaffold: a plain
-// ScrollView/VStack with .navigationTitle.
+// « Rapport médecin » — the configuration of the doctor's export (§6.12).
 //
-//   • Period selector (30 / 90 / 180 days / all) via ChoiceChip.
-//   • Per-section inclusion toggles (Médicaments, Doses, Hormones, Journal,
-//     Saignements).
-//   • Generates an A4 multi-page PDF with UIGraphicsPDFRenderer: a cover page
-//     (title, date, period) then one section per checked category (simple
-//     tables). The file is written to AppPaths.cacheDir and offered via
-//     ShareLink.
-// ===========================================================================
-
-// MARK: - Period
-
-private enum PdfPeriod: Int, CaseIterable, Identifiable {
-    case days30, days90, days180, all
-    var id: Int { rawValue }
-
-    var label: String {
-        switch self {
-        case .days30:  return "30 jours"
-        case .days90:  return "90 jours"
-        case .days180: return "180 jours"
-        case .all:     return "Tout"
-        }
-    }
-
-    /// Cutoff timestamp (ms). `.all` keeps everything.
-    func cutoffMs(now: Int64) -> Int64 {
-        switch self {
-        case .days30:  return now - 30  * 86_400_000
-        case .days90:  return now - 90  * 86_400_000
-        case .days180: return now - 180 * 86_400_000
-        case .all:     return 0
-        }
-    }
-}
-
-// MARK: - Inclusion options
-
-private struct PdfOptions {
-    var medications = true
-    var doses = true
-    var hormones = true
-    var journal = true
-    var bleeding = true
-
-    var anySelected: Bool { medications || doses || hormones || journal || bleeding }
-}
-
-// MARK: - ViewModel
+// Reached from Rendez-vous (« Préparer ma consultation »), which is its only
+// entry point: the export left Réglages in the refonte (§2.4).
+//
+// Order is imposed: **period first, content second.** The period changes what
+// each module can offer, so choosing it afterwards would mean reading volumes
+// that belong to another window.
+//
+// This file is the *screen*. The document is assembled by `DoctorReportBuilder`
+// and painted by `DoctorReportRenderer` — 663 lines mixing the two is what made
+// the previous version unmaintainable.
 
 @MainActor
 final class PdfExportViewModel: ObservableObject {
+    @Published var period: ReportPeriod = ReportPrefs.period
+    @Published var shortcut: ReportShortcut = ReportPrefs.shortcut
+    @Published var modules: ReportModules = ReportPrefs.modules
+    /// Zero means « never typed »; the screen then follows the shortcut.
+    @Published var customFromMs: Int64 = ReportPrefs.customFromMs
+    @Published var customToMs: Int64 = ReportPrefs.customToMs
+
+    @Published private(set) var volumes = ReportVolumes()
+    @Published private(set) var lastVisitMs: Int64?
+    @Published private(set) var treatmentStartMs: Int64?
+    @Published private(set) var loadingVolumes = true
     @Published var generating = false
     @Published var error: String?
+    @Published var generated: URL?
 
-    /// Loads the requested data and renders the PDF, returning the on-disk URL.
-    fileprivate func generate(
-        _ session: VaultService,
-        options: PdfOptions,
-        period: PdfPeriod,
-        unitFor: @escaping (String) -> String?
-    ) async -> URL? {
+    /// True when the custom bounds were typed rather than derived from a chip.
+    var manualDates: Bool { customFromMs > 0 && customToMs > 0 }
+
+    var range: ReportRange {
+        ReportPeriodResolver.range(
+            period: period,
+            shortcut: shortcut,
+            customFromMs: customFromMs,
+            customToMs: customToMs,
+            lastVisitMs: lastVisitMs,
+            treatmentStartMs: treatmentStartMs)
+    }
+
+    var origin: String {
+        ReportPeriodResolver.origin(period: period, shortcut: shortcut, manual: manualDates)
+    }
+
+    func loadAnchors(_ session: VaultService, units: [String: String]) async {
+        let builder = DoctorReportBuilder(session: session, units: units)
+        let anchors = await builder.anchors()
+        lastVisitMs = anchors.lastVisitMs
+        treatmentStartMs = anchors.treatmentStartMs
+        await refreshVolumes(session, units: units)
+    }
+
+    func refreshVolumes(_ session: VaultService, units: [String: String]) async {
+        loadingVolumes = true
+        let builder = DoctorReportBuilder(session: session, units: units)
+        volumes = await builder.volumes(range: range)
+        loadingVolumes = false
+    }
+
+    func persist() {
+        ReportPrefs.period = period
+        ReportPrefs.shortcut = shortcut
+        ReportPrefs.modules = modules
+        ReportPrefs.customFromMs = customFromMs
+        ReportPrefs.customToMs = customToMs
+    }
+
+    /// Builds the document, paints it, and writes it where the share sheet can
+    /// reach it. Nothing leaves the device until the user picks a target.
+    func generate(_ session: VaultService, units: [String: String]) async {
         generating = true
         error = nil
+        generated = nil
         defer { generating = false }
 
+        let chosen = range
+        let wanted = modules
+        let builder = DoctorReportBuilder(session: session, units: units)
+        let document = await builder.build(range: chosen, modules: wanted)
+        let banner = "SUIVI DE TRANSITION — RAPPORT DE SUIVI"
+        let footer = "eggshell \(AppVersion.name) — document produit hors ligne, aucune donnée transmise."
+
+        let data = await Task.detached(priority: .userInitiated) {
+            DoctorReportRenderer(bannerLeft: banner, footerLeft: footer).pdfData(document)
+        }.value
+
         do {
-            let now = Time.nowMs()
-            let cutoff = period.cutoffMs(now: now)
-
-            // --- Gather data -------------------------------------------------
-            var meds: [Medication] = []
-            var doses: [DoseEvent] = []
-            var hormoneSeries: [(hormone: String, points: [HormonePoint])] = []
-            var journal: [JournalEntry] = []
-            var bleeding: [BleedingEntry] = []
-
-            // Medication lookup is useful for dose rows too.
-            if options.medications || options.doses {
-                meds = try await session.listMedications()
-            }
-            let medsById = Dictionary(uniqueKeysWithValues: meds.map { ($0.id, $0) })
-
-            if options.doses {
-                doses = try await session
-                    .listDoseEventsBetween(fromMs: cutoff, toMs: now)
-                    .sorted { $0.takenAtMs > $1.takenAtMs }
-            }
-
-            if options.hormones {
-                let distinct = try await session.distinctHormones()
-                    .filter { $0 != HormoneCatalog.weight }
-                for hormone in distinct {
-                    let raw = try await session
-                        .listHormoneMeasurements(hormone: hormone)
-                        .filter { $0.atMs >= cutoff }
-                        .sorted { $0.atMs < $1.atMs }
-                    guard !raw.isEmpty else { continue }
-                    let target = unitFor(hormone)
-                    let points = raw.map { m -> HormonePoint in
-                        let display: Double
-                        let unit: String
-                        if let t = target, t != m.unit,
-                           let conv = convertHormoneValue(value: m.value, fromUnit: m.unit, toUnit: t, hormone: hormone) {
-                            display = conv
-                            unit = t
-                        } else {
-                            display = m.value
-                            unit = m.unit
-                        }
-                        return HormonePoint(at: m.atMs, value: display, unit: unit, rawValue: m.value, rawUnit: m.unit)
-                    }
-                    hormoneSeries.append((hormone, points))
-                }
-            }
-
-            if options.journal {
-                journal = try await session.listJournalEntries()
-                    .filter { $0.atMs >= cutoff }
-                    .sorted { $0.atMs > $1.atMs }
-            }
-
-            if options.bleeding {
-                bleeding = try await session.listBleedingEntries()
-                    .filter { $0.atMs >= cutoff }
-                    .sorted { $0.atMs > $1.atMs }
-            }
-
-            // --- Render off the main thread ----------------------------------
-            let data = await Task.detached(priority: .userInitiated) {
-                PdfReportRenderer.render(
-                    period: period,
-                    options: options,
-                    meds: meds,
-                    medsById: medsById,
-                    doses: doses,
-                    hormoneSeries: hormoneSeries,
-                    journal: journal,
-                    bleeding: bleeding)
-            }.value
-
-            let url = AppPaths.cacheDir
-                .appendingPathComponent("bilan-transition-\(now).pdf")
-            try data.write(to: url, options: .atomic)
-            return url
+            let dir = Self.exportDir
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let url = dir.appendingPathComponent(document.fileName)
+            // Purge first: a previous export is decrypted health data whose file
+            // name shows up in the share sheet, and it has no reason to outlive
+            // the next one. The file about to be written is spared so re-exporting
+            // the same period never leaves an empty stub behind.
+            let existing = (try? FileManager.default.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: nil)) ?? []
+            for old in existing where old != url { AppPaths.secureDelete(old) }
+            // Same protection class the decrypted photo and voice copies get:
+            // this file carries a name, a date of birth and every hormone value,
+            // so it must be unreadable while the device is locked rather than
+            // taking the container default.
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+            generated = url
         } catch {
             self.error = describe(error)
-            return nil
         }
     }
-}
 
-// A single converted hormone reading, ready to print.
-private struct HormonePoint {
-    let at: Int64
-    let value: Double
-    let unit: String
-    let rawValue: Double
-    let rawUnit: String
-}
+    /// Erase every generated report.
+    ///
+    /// The document is the most concentrated plaintext the app ever writes — the
+    /// identity block, the hormone values, the punctuality figures, the bleeding
+    /// episodes, and decrypted progress photos when that module is on. It used
+    /// to survive until the *next* export replaced it, so one export left it
+    /// readable for ever. Called when the share sheet closes, when the screen
+    /// goes away, and when the app is backgrounded (which is when the vault
+    /// locks).
+    func purgeExports() {
+        let existing = (try? FileManager.default.contentsOfDirectory(
+            at: Self.exportDir, includingPropertiesForKeys: nil)) ?? []
+        for file in existing { AppPaths.secureDelete(file) }
+        generated = nil
+    }
 
-// MARK: - View
+    /// The only directory the document is ever written to.
+    private static var exportDir: URL {
+        AppPaths.cacheDir.appendingPathComponent("pdf_export", isDirectory: true)
+    }
+}
 
 struct PdfExportView: View {
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var hormoneUnits: HormoneUnitStore
     @Environment(\.palette) private var palette
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var vm = PdfExportViewModel()
+    /// Owned by this screen rather than by `AppState`: the two fields exist for
+    /// this document and are read nowhere else, so the object that holds them has
+    /// no reason to outlive the screen that decides to hand the document over.
+    @StateObject private var identity = ReportIdentityStore()
 
-    @State private var period: PdfPeriod = .days90
-    @State private var options = PdfOptions()
-    @State private var generatedURL: URL?
+    @State private var showCustomSheet = false
+    @State private var showIdentitySheet = false
+    /// Non-nil only while the share sheet that owns the file's clean-up is up.
+    @State private var shareTarget: PdfShareTarget?
 
     var body: some View {
         ScrollView {
-            VStack(spacing: Spacing.l) {
-                introCard
-                periodSection
-                includeSection
-                generateSection
-                if let e = vm.error { ErrorBanner(message: e) }
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                intentCard
+                identityRow
+                SectionTitleView("Période", prominent: true)
+                periodPills
+                recapLine
+                SectionTitleView(
+                    "Contenu",
+                    action: allChecked ? "Tout décocher" : "Tout cocher",
+                    onAction: toggleAll,
+                    prominent: true)
+                modulesCard
+                encryptedNote
+                if let message = vm.error {
+                    ErrorCardView(message, retryLabel: "Réessayer", retry: generate)
+                }
+                if let url = vm.generated { shareRow(url) }
+                Color.clear.frame(height: Spacing.s)
             }
-            .padding(Spacing.l)
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.top, Spacing.s)
         }
-        .navigationTitle("Export PDF")
+        .background(palette.surface.ignoresSafeArea())
+        .navigationTitle("Rapport médecin")
+        .navigationBarTitleDisplayMode(.inline)
+        .eggActionBar {
+            ActionBarButton(
+                generateLabel,
+                systemImage: "doc.richtext",
+                enabled: vm.modules.activeCount > 0 && !vm.generating && app.session != nil,
+                action: generate)
+        }
+        .sheet(isPresented: $showCustomSheet) {
+            CustomPeriodSheet(vm: vm, units: unitSnapshot, session: app.session)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showIdentitySheet) {
+            ReportIdentitySheet(store: identity, session: app.session)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $shareTarget) { target in
+            PdfShareSheet(url: target.url) { vm.purgeExports() }
+        }
+        .task {
+            guard let session = app.session else { return }
+            await identity.load(session)
+            await vm.loadAnchors(session, units: unitSnapshot)
+        }
+        // `.background` and not `.inactive`: presenting the share sheet makes the
+        // scene inactive for a moment, and wiping the file there would hand the
+        // receiving app an empty document.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { vm.purgeExports() }
+        }
+        .onDisappear { vm.purgeExports() }
     }
 
-    // Intro
-    private var introCard: some View {
-        SectionCard {
-            HStack(alignment: .top, spacing: Spacing.m) {
-                Image(systemName: "doc.richtext")
-                    .font(.title2)
-                    .foregroundStyle(palette.tertiary)
-                    .frame(width: 44, height: 44)
-                    .background(palette.tertiaryContainer, in: RoundedRectangle(cornerRadius: Corner.medium))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Bilan partageable")
-                        .font(.eggHeadline).foregroundStyle(palette.onSurface)
-                    Text("Génère un récapitulatif PDF de ton suivi. Tout est créé localement : aucune donnée ne quitte l'appareil.")
-                        .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+    // MARK: - Blocks
+
+    private var intentCard: some View {
+        EggCard(variant: .primary, spacing: Spacing.xs) {
+            HStack(alignment: .top, spacing: Spacing.l) {
+                Image(systemName: "doc.richtext.fill")
+                    .font(.system(size: 26))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Un PDF pour ta consultation")
+                        .font(EggFont.titleS)
+                    Text("Fabriqué sur l'appareil. Tu choisis ce qu'il contient, et à qui tu le donnes.")
+                        .font(EggFont.bodyS)
+                        .opacity(0.82)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
-    // Period
-    private var periodSection: some View {
-        SectionCard {
-            Text("Période").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: Spacing.s) {
-                ForEach(PdfPeriod.allCases) { p in
-                    ChoiceChip(label: p.label, selected: period == p) { period = p }
+    /// The identity block of §7.4.2, edited here and not in Réglages: it belongs
+    /// next to the decision to hand the document over, and it keeps a real name
+    /// out of a screen the user opens to change the theme.
+    private var identityRow: some View {
+        ListGroup {
+            ListRowView(
+                title: "Identité sur le rapport",
+                subtitle: identitySubtitle,
+                systemImage: "person.text.rectangle",
+                iconTint: identity.isPartial ? palette.error : nil,
+                showsChevron: true,
+                action: { showIdentitySheet = true })
+        }
+    }
+
+    /// States the truth about what the PDF will carry, never an invitation. The
+    /// half-filled case is named rather than rounded to « renseignée »: the box
+    /// needs both fields, and a subtitle that hid that would be a lie the
+    /// document then tells.
+    private var identitySubtitle: String {
+        guard identity.loaded else { return "Lecture du coffre…" }
+        if let person = identity.person, let birth = identity.birth {
+            return "\(person) · \(ReportIdentityFields.long(birth))"
+        }
+        if identity.isPartial {
+            return "Incomplète — il faut les deux, sinon le rapport n'en parle pas"
+        }
+        return "Non renseignée — le rapport n'en parlera pas"
+    }
+
+    private var periodPills: some View {
+        ChipFlowLayout(spacing: 7, lineSpacing: 7) {
+            ForEach(ReportPeriod.allCases) { option in
+                PillView(option.label, selected: vm.period == option) {
+                    if option == .custom {
+                        showCustomSheet = true
+                    } else {
+                        vm.period = option
+                        commit()
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    // Inclusion toggles
-    private var includeSection: some View {
-        SectionCard {
-            Text("Sections à inclure").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            includeRow("Traitements", "Doses et posologies", "pills", $options.medications)
-            includeRow("Doses", "Prises enregistrées sur la période", "syringe", $options.doses)
-            includeRow("Hormones", "Taux mesurés en laboratoire", "chart.line.uptrend.xyaxis", $options.hormones)
-            includeRow("Journal", "Ressentis et effets", "square.and.pencil", $options.journal)
-            includeRow("Menstruations", "Suivi des règles", "drop", $options.bleeding)
+    private var recapLine: some View {
+        HStack(spacing: Spacing.s) {
+            Image(systemName: "calendar")
+                .font(.system(size: 17))
+                .foregroundStyle(palette.onSurfaceVariant)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(rangeLabel)
+                    .font(.eggBody)
+                    .foregroundStyle(palette.onSurface)
+                Text("\(plural(vm.range.days, "jour", "jours")) · \(vm.origin)")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+            }
+            Spacer(minLength: Spacing.s)
+            Button { showCustomSheet = true } label: {
+                Text("Changer")
+                    .font(EggFont.micro)
+                    .tracking(0.5)
+                    .foregroundStyle(palette.primary)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, Spacing.l)
+        .padding(.vertical, Spacing.m)
+        .background(
+            palette.surfaceContainer,
+            in: RoundedRectangle(cornerRadius: Radius.field, style: .continuous))
+    }
+
+    private var modulesCard: some View {
+        ListGroup {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                moduleRow(row)
+                if index != rows.count - 1 {
+                    Rectangle()
+                        .fill(palette.outlineVariant)
+                        .frame(height: 1)
+                }
+            }
         }
     }
 
-    private func includeRow(_ title: String, _ sub: String, _ icon: String, _ value: Binding<Bool>) -> some View {
-        Toggle(isOn: value) {
+    private var encryptedNote: some View {
+        HStack(alignment: .top, spacing: Spacing.s) {
+            Image(systemName: "lock.shield")
+                .font(.system(size: 17))
+                .foregroundStyle(palette.primary)
+            Text("Le PDF est fabriqué hors ligne puis passé au partage du téléphone. Rien ne part tant que tu ne l'envoies pas.")
+                .font(EggFont.bodyS)
+                .foregroundStyle(palette.onSurfaceVariant)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, Spacing.l)
+        .padding(.vertical, Spacing.m)
+        .background(
+            palette.surfaceContainer,
+            in: RoundedRectangle(cornerRadius: Radius.field, style: .continuous))
+    }
+
+    /// The share step goes through a sheet of its own so the file can be wiped
+    /// the moment that sheet closes — the same clean-up the photo and voice
+    /// exports use, rather than leaving the document in the cache until the
+    /// next export happens to replace it.
+    private func shareRow(_ url: URL) -> some View {
+        EggCard(variant: .low, spacing: Spacing.s) {
+            Text("Ton rapport est prêt.")
+                .font(EggFont.titleS)
+                .foregroundStyle(palette.onSurface)
+            Text(url.lastPathComponent)
+                .font(EggFont.bodyS)
+                .foregroundStyle(palette.onSurfaceVariant)
+            Button {
+                shareTarget = PdfShareTarget(url: url)
+            } label: {
+                Label("Partager le PDF", systemImage: "square.and.arrow.up")
+                    .font(EggFont.label)
+                    .foregroundStyle(palette.primary)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: Metrics.touchTarget,
+                        alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - The eight module rows
+
+    private struct ModuleRow {
+        let title: String
+        let subtitle: String
+        let systemImage: String
+        let error: Bool
+        let binding: Binding<Bool>
+    }
+
+    private var rows: [ModuleRow] {
+        let v = vm.volumes
+        return [
+            ModuleRow(
+                title: "Traitements & régularité",
+                subtitle: v.molecules == 0
+                    ? ReportVolumes.empty
+                    : "\(plural(v.molecules, "molécule", "molécules")) · observance et retards",
+                systemImage: "pills",
+                error: false,
+                binding: $vm.modules.medications),
+            ModuleRow(
+                title: "Taux hormonaux",
+                subtitle: v.labs == 0
+                    ? ReportVolumes.empty
+                    : "\(plural(v.labs, "relevé", "relevés")) · courbes et tableau",
+                systemImage: "chart.line.uptrend.xyaxis",
+                error: false,
+                binding: $vm.modules.hormones),
+            ModuleRow(
+                title: "Poids",
+                subtitle: v.weights == 0
+                    ? ReportVolumes.empty
+                    : plural(v.weights, "pesée", "pesées"),
+                systemImage: "scalemass",
+                error: false,
+                binding: $vm.modules.weight),
+            // A privacy statement, not a volume: the free text never leaves.
+            ModuleRow(
+                title: "Ressenti",
+                subtitle: "Moyennes et effets signalés, sans le texte libre",
+                systemImage: "heart.text.square",
+                error: false,
+                binding: $vm.modules.feel),
+            ModuleRow(
+                title: "Questions à aborder",
+                subtitle: questionsSubtitle,
+                systemImage: "checklist",
+                error: false,
+                binding: $vm.modules.questions),
+            ModuleRow(
+                title: "Règles",
+                subtitle: v.bleedingDays == 0
+                    ? ReportVolumes.empty
+                    : plural(v.bleedingDays, "jour de saignement", "jours de saignement"),
+                systemImage: "drop",
+                error: false,
+                binding: $vm.modules.bleeding),
+            ModuleRow(
+                title: "Voix",
+                subtitle: v.clips == 0
+                    ? ReportVolumes.empty
+                    : "Hauteur moyenne · \(plural(v.clips, "enregistrement", "enregistrements"))",
+                systemImage: "waveform",
+                error: false,
+                binding: $vm.modules.voice),
+            // Never a volume, always the warning — and always in `error`.
+            ModuleRow(
+                title: "Photos d'évolution",
+                subtitle: "Jamais incluses par défaut",
+                systemImage: "photo.on.rectangle",
+                error: true,
+                binding: $vm.modules.photos),
+        ]
+    }
+
+    private var questionsSubtitle: String {
+        guard let date = vm.volumes.questionsDate else { return "Aucun rendez-vous à venir" }
+        guard vm.volumes.questions > 0 else { return ReportVolumes.empty }
+        return "\(plural(vm.volumes.questions, "note", "notes")) du rendez-vous du \(date)"
+    }
+
+    private func moduleRow(_ row: ModuleRow) -> some View {
+        Toggle(isOn: row.binding) {
             HStack(spacing: Spacing.m) {
-                Image(systemName: icon)
-                    .foregroundStyle(value.wrappedValue ? palette.primary : palette.onSurface.opacity(0.5))
-                    .frame(width: 30)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.eggCallout).foregroundStyle(palette.onSurface)
-                    Text(sub).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+                Image(systemName: row.systemImage)
+                    .font(.system(size: 17))
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.title)
+                        .font(.eggBody)
+                        .foregroundStyle(palette.onSurface)
+                    Text(row.subtitle)
+                        .font(EggFont.bodyS)
+                        .foregroundStyle(row.error ? palette.error : palette.onSurfaceVariant)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
         .tint(palette.primary)
+        .padding(.horizontal, Metrics.screenMargin)
+        .padding(.vertical, 11)
+        .frame(minHeight: Metrics.touchTarget)
+        .onChange(of: row.binding.wrappedValue) { _, _ in vm.persist() }
     }
 
-    // Generate + share
-    private var generateSection: some View {
-        SectionCard {
-            Button {
-                guard let session = app.session else { return }
-                let opts = options
-                let p = period
-                generatedURL = nil
-                Task {
-                    let url = await vm.generate(
-                        session,
-                        options: opts,
-                        period: p,
-                        unitFor: { hormoneUnits.effectiveUnit(for: $0) })
-                    generatedURL = url
-                }
-            } label: {
-                if vm.generating {
-                    HStack(spacing: Spacing.s) {
-                        ProgressView().tint(palette.onPrimary)
-                        Text("Génération…")
-                    }
-                    .frame(maxWidth: .infinity)
-                } else {
-                    Label("Générer le PDF", systemImage: "doc.badge.plus")
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .glassProminentButton().tint(palette.primary)
-            .disabled(vm.generating || app.session == nil || !options.anySelected)
+    // MARK: - Derived copy
 
-            if let url = generatedURL {
-                ShareLink(item: url) {
-                    Label("Partager le PDF", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
-                }
-                .glassButton().tint(palette.primary)
-            }
+    private var rangeLabel: String {
+        let f = ReportFormats()
+        let range = vm.range
+        let calendar = Calendar.current
+        let sameYear = calendar.component(
+            .year, from: Date(timeIntervalSince1970: Double(range.fromMs) / 1000))
+            == calendar.component(
+                .year, from: Date(timeIntervalSince1970: Double(range.toMs) / 1000))
+        let start = sameYear ? f.proseNoYear(range.fromMs) : f.prose(range.fromMs)
+        return "\(start) → \(f.prose(range.toMs))"
+    }
+
+    /// The button counts the pages live: `1 + ceil(n / 3)` (§6.12.6). Nothing
+    /// checked is not a greyed button with a stale label — the label says so.
+    private var generateLabel: String {
+        if vm.generating { return "Préparation…" }
+        let active = vm.modules.activeCount
+        guard active > 0 else { return "Rien à exporter" }
+        let pages = vm.modules.pages
+        return "Générer · \(pages) " + (pages <= 1 ? "page" : "pages")
+    }
+
+    /// Photos stay out of « Tout cocher »: forcing them on would contradict
+    /// « Jamais incluses par défaut », which is the guarantee of §6.12.4.
+    private var allChecked: Bool {
+        vm.modules.medications && vm.modules.hormones && vm.modules.weight && vm.modules.feel
+            && vm.modules.questions && vm.modules.bleeding && vm.modules.voice
+    }
+
+    private func toggleAll() {
+        let on = !allChecked
+        vm.modules.medications = on
+        vm.modules.hormones = on
+        vm.modules.weight = on
+        vm.modules.feel = on
+        vm.modules.questions = on
+        vm.modules.bleeding = on
+        vm.modules.voice = on
+        vm.persist()
+    }
+
+    private var unitSnapshot: [String: String] {
+        var out: [String: String] = [:]
+        for hormone in HormoneCatalog.kinds + [HormoneCatalog.weight] {
+            if let unit = hormoneUnits.effectiveUnit(for: hormone) { out[hormone] = unit }
         }
+        return out
+    }
+
+    private func plural(_ count: Int, _ one: String, _ many: String) -> String {
+        ReportVolumes.plural(count, one, many)
+    }
+
+    private func commit() {
+        vm.persist()
+        guard let session = app.session else { return }
+        let units = unitSnapshot
+        Task { await vm.refreshVolumes(session, units: units) }
+    }
+
+    private func generate() {
+        guard let session = app.session else { return }
+        let units = unitSnapshot
+        vm.persist()
+        Task { await vm.generate(session, units: units) }
     }
 }
 
-// MARK: - Renderer (pure, no SwiftUI / no actor isolation)
+// MARK: - Feuille de partage
 
-private enum PdfReportRenderer {
-    // A4 @ 72 dpi.
-    static let pageW: CGFloat = 595
-    static let pageH: CGFloat = 842
-    static let marginX: CGFloat = 42
-    static let marginTop: CGFloat = 56
-    static let marginBottom: CGFloat = 56
+/// Identifiable wrapper so `.sheet(item:)` can carry the plaintext URL.
+private struct PdfShareTarget: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
+}
 
-    // Lavender-leaning palette mirroring the app theme (rendering only).
-    static let primary = UIColor(red: 0x6A / 255, green: 0x4F / 255, blue: 0xA3 / 255, alpha: 1)
-    static let onSurface = UIColor(red: 0x1D / 255, green: 0x1B / 255, blue: 0x20 / 255, alpha: 1)
-    static let onSurfaceVariant = UIColor(red: 0x49 / 255, green: 0x45 / 255, blue: 0x4F / 255, alpha: 1)
-    static let ruleFaint = UIColor(red: 0xEB / 255, green: 0xE0 / 255, blue: 0xEB / 255, alpha: 1)
+/// The share step in a sheet of its own, so closing it wipes the document.
+private struct PdfShareSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.palette) private var palette
+    let url: URL
+    let onClose: () -> Void
 
-    static func render(
-        period: PdfPeriod,
-        options: PdfOptions,
-        meds: [Medication],
-        medsById: [Int64: Medication],
-        doses: [DoseEvent],
-        hormoneSeries: [(hormone: String, points: [HormonePoint])],
-        journal: [JournalEntry],
-        bleeding: [BleedingEntry]
-    ) -> Data {
-        let format = UIGraphicsPDFRendererFormat()
-        let bounds = CGRect(x: 0, y: 0, width: pageW, height: pageH)
-        let renderer = UIGraphicsPDFRenderer(bounds: bounds, format: format)
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                Text("Le PDF a été préparé en clair juste pour ce partage. "
+                     + "Il est effacé dès que tu fermes cette feuille.")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
 
-        return renderer.pdfData { ctx in
-            var cursor = Cursor(ctx: ctx)
-            cursor.beginPage(accent: false)
-            drawCover(&cursor, period: period)
+                ShareLink(item: url) {
+                    HStack(spacing: Spacing.s) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 17, weight: .semibold))
+                        Text("Partager le PDF").font(.system(size: 15.5, weight: .semibold))
+                    }
+                    .foregroundStyle(palette.onPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .background(palette.primary, in: Capsule())
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
 
-            if options.medications {
-                cursor.section("Traitements", count: meds.count)
-                if meds.isEmpty {
-                    cursor.muted("Aucun traitement enregistré.")
-                } else {
-                    for m in meds { medRow(&cursor, m) }
+                Spacer(minLength: 0)
+            }
+            .padding(Metrics.cardPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(palette.surface.ignoresSafeArea())
+            .navigationTitle("Partager")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Fermer") { dismiss() }
                 }
             }
+        }
+        .presentationDetents([.height(260)])
+        .presentationDragIndicator(.visible)
+        .onDisappear { onClose() }
+    }
+}
 
-            if options.doses {
-                cursor.section("Doses", count: doses.count)
-                if doses.isEmpty {
-                    cursor.muted("Aucune prise sur la période.")
-                } else {
-                    for d in doses.prefix(120) { doseRow(&cursor, d, medsById: medsById) }
-                }
-            }
+// MARK: - « Identité sur le rapport »
 
-            if options.hormones {
-                cursor.section("Hormones", count: hormoneSeries.count)
-                if hormoneSeries.isEmpty {
-                    cursor.muted("Aucune mesure hormonale.")
-                } else {
-                    for s in hormoneSeries { hormoneBlock(&cursor, hormone: s.hormone, points: s.points) }
-                }
-            }
+/// The two fields of the report's boxed header (§7.4.2).
+///
+/// Both are optional and the sheet says why in two sentences rather than a
+/// warning panel: the trade-off is the user's to make, and it is legible here
+/// because here is where the document gets handed over. Leaving them empty is a
+/// supported answer, not a mistake — the box simply does not exist on the page.
+private struct ReportIdentitySheet: View {
+    @ObservedObject var store: ReportIdentityStore
+    let session: VaultService?
 
-            if options.journal {
-                cursor.section("Journal", count: journal.count)
-                if journal.isEmpty {
-                    cursor.muted("Aucune entrée de journal sur la période.")
-                } else {
-                    for e in journal.prefix(60) { journalRow(&cursor, e) }
-                    if journal.count > 60 {
-                        // Never truncate silently in a medical document.
-                        cursor.muted("… et \(journal.count - 60) autres entrées sur la période (60 plus récentes affichées).")
+    @Environment(\.palette) private var palette
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var name = ""
+    /// The picker always has a value, so « no date » is a state of its own rather
+    /// than a sentinel day someone would eventually mistake for an answer.
+    @State private var hasBirth = false
+    @State private var birth = ReportIdentitySheet.pickerStart
+    @State private var busy = false
+    @State private var error: String?
+
+    /// Where the picker opens when there is nothing stored. Today's date would
+    /// read as a filled-in answer; a generation back is visibly a starting point.
+    private static var pickerStart: Date {
+        Calendar.current.date(byAdding: .year, value: -30, to: Date()) ?? Date()
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.l) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Identité sur le rapport")
+                            .font(EggFont.titleL)
+                            .foregroundStyle(palette.onSurface)
+                        Text("Ces deux informations restent dans ton coffre chiffré et n'apparaissent que sur le PDF que tu remets. Si tu les laisses vides, le rapport n'a simplement pas d'encadré d'identité.")
+                            .font(EggFont.bodyS)
+                            .foregroundStyle(palette.onSurfaceVariant)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    field("NOM SUR LE RAPPORT") {
+                        TextField("Facultatif", text: $name)
+                            .font(.eggBody)
+                            .foregroundStyle(palette.onSurface)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .frame(minHeight: Metrics.touchTarget, alignment: .leading)
+                    }
+
+                    field("DATE DE NAISSANCE") {
+                        if hasBirth {
+                            HStack(spacing: Spacing.s) {
+                                DatePicker(
+                                    "",
+                                    selection: $birth,
+                                    in: ...Date(),
+                                    displayedComponents: [.date])
+                                    .labelsHidden()
+                                    .datePickerStyle(.compact)
+                                    .tint(palette.primary)
+                                    .environment(\.locale, Locale(identifier: "fr_FR"))
+                                Spacer(minLength: Spacing.s)
+                                Button("Retirer") { hasBirth = false }
+                                    .font(EggFont.label)
+                                    .foregroundStyle(palette.primary)
+                                    .buttonStyle(.plain)
+                            }
+                            .frame(minHeight: Metrics.touchTarget)
+                        } else {
+                            Button {
+                                hasBirth = true
+                            } label: {
+                                Text("Ajouter une date")
+                                    .font(EggFont.label)
+                                    .foregroundStyle(palette.primary)
+                                    .frame(
+                                        maxWidth: .infinity,
+                                        minHeight: Metrics.touchTarget,
+                                        alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    note("Le nom et la date vont ensemble : avec une seule des deux, l'encadré n'est pas imprimé.")
+
+                    if let error {
+                        ErrorCardView(error)
+                    }
+
+                    if store.person != nil || store.birth != nil {
+                        Button(role: .destructive) {
+                            act { session in try await store.erase(session) }
+                        } label: {
+                            Label("Effacer ces deux informations", systemImage: "trash")
+                                .font(EggFont.label)
+                                .foregroundStyle(palette.error)
+                                .frame(
+                                    maxWidth: .infinity,
+                                    minHeight: Metrics.touchTarget,
+                                    alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(busy)
                     }
                 }
+                .padding(.horizontal, Metrics.screenMargin)
+                .padding(.top, Spacing.s)
             }
-
-            if options.bleeding {
-                cursor.section("Menstruations", count: bleeding.count)
-                if bleeding.isEmpty {
-                    cursor.muted("Aucune entrée enregistrée sur la période.")
-                } else {
-                    for b in bleeding.prefix(120) { bleedingRow(&cursor, b) }
+            .background(palette.surfaceContainerHigh.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annuler") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Enregistrer") {
+                        act { session in
+                            try await store.save(
+                                person: name, birth: hasBirth ? birth : nil, session)
+                        }
+                    }
+                    .disabled(busy || session == nil)
                 }
             }
-
-            cursor.footer()
+            .onAppear { restore() }
         }
     }
 
-    // --- Sections ---------------------------------------------------------
-
-    private static func drawCover(_ c: inout Cursor, period: PdfPeriod) {
-        c.text("Bilan", font: serif(28, .bold), color: onSurface)
-        c.advance(6)
-        let now = Date()
-        c.text("Édition du \(longDate.string(from: now))", font: sans(11), color: onSurfaceVariant)
-        c.advance(2)
-        c.text("Période : \(period.label)", font: sans(11), color: onSurfaceVariant)
-        c.advance(12)
-        c.rule()
-        c.advance(8)
+    private func restore() {
+        name = store.person ?? ""
+        hasBirth = store.birth != nil
+        birth = store.birth ?? Self.pickerStart
     }
 
-    private static func medRow(_ c: inout Cursor, _ m: Medication) {
-        c.ensure(34)
-        c.text(m.name, font: sans(11, .bold), color: onSurface)
-        var detail = MedCatalog.kindLabel(m.kind) + " · " + MedCatalog.routeLabel(m.route)
-        if let dose = m.defaultDose {
-            detail += " · " + trim(dose) + " " + (m.defaultDoseUnit ?? "")
-        }
-        c.advance(13)
-        c.text(detail, font: sans(9.5), color: onSurfaceVariant)
-        c.advance(10)
-        c.divider()
-    }
-
-    private static func doseRow(_ c: inout Cursor, _ d: DoseEvent, medsById: [Int64: Medication]) {
-        c.ensure(20)
-        let name = medsById[d.medicationId]?.name ?? "Traitement"
-        var right = ""
-        if let dose = d.dose { right = trim(dose) + " " + (d.doseUnit ?? "") }
-        if let site = d.injectionSite, !site.isEmpty {
-            right += (right.isEmpty ? "" : " · ") + MedCatalog.injectionSiteLabel(site)
-        }
-        c.row(left: dateTime.string(from: date(d.takenAtMs)) + " — " + name, right: right)
-        c.divider()
-    }
-
-    private static func hormoneBlock(_ c: inout Cursor, hormone: String, points: [HormonePoint]) {
-        c.ensure(40)
-        let title = HormoneCatalog.kindLabel(hormone)
-        var headerRight = ""
-        if let last = points.last { headerRight = trim(last.value) + " " + last.unit }
-        c.row(left: title, right: headerRight, bold: true)
-        c.advance(4)
-        for p in points.suffix(8).reversed() {
-            c.ensure(16)
-            var value = trim(p.value) + " " + p.unit
-            if p.unit != p.rawUnit {
-                value += " (" + trim(p.rawValue) + " " + p.rawUnit + ")"
-            }
-            c.row(left: dateOnly.string(from: date(p.at)), right: value, small: true)
-        }
-        c.advance(4)
-        c.divider()
-    }
-
-    private static func journalRow(_ c: inout Cursor, _ e: JournalEntry) {
-        let gauges: [String] = [
-            e.mood.map { "Humeur \($0)" },
-            e.dysphoria.map { "Dysphorie \($0)" },
-            e.euphoria.map { "Euphorie \($0)" },
-            e.libido.map { "Libido \($0)" },
-            e.energy.map { "Énergie \($0)" },
-        ].compactMap { $0 }
-
-        c.ensure(28)
-        c.text(dateTime.string(from: date(e.atMs)), font: sans(10.5, .bold), color: onSurface)
-        c.advance(12)
-        if !gauges.isEmpty {
-            c.text(gauges.joined(separator: " · "), font: sans(9.5), color: onSurfaceVariant)
-            c.advance(11)
-        }
-        if let free = e.freeText, !free.isEmpty {
-            c.wrapped(free, font: sans(10), color: onSurface, indent: 8)
-        }
-        if let side = e.sideEffects, !side.isEmpty {
-            c.wrapped("Effets : " + side, font: sans(9.5), color: onSurfaceVariant, indent: 8)
-        }
-        c.advance(4)
-        c.divider()
-    }
-
-    private static func bleedingRow(_ c: inout Cursor, _ b: BleedingEntry) {
-        c.ensure(20)
-        var label = "Règles"
-        if let spotting = b.isSpotting { label = spotting ? "Léger (spotting)" : "Règles" }
-        let detail = (b.freeText?.isEmpty == false) ? (b.freeText ?? "") : ""
-        c.row(left: dateTime.string(from: date(b.atMs)) + " — " + label, right: detail)
-        c.divider()
-    }
-
-    // --- Formatting helpers ----------------------------------------------
-
-    private static func date(_ ms: Int64) -> Date { Date(timeIntervalSince1970: Double(ms) / 1000) }
-
-    private static let longDate: DateFormatter = {
-        let f = DateFormatter(); f.locale = Locale(identifier: "fr_FR"); f.dateFormat = "d MMMM yyyy"; return f
-    }()
-    private static let dateOnly: DateFormatter = {
-        let f = DateFormatter(); f.locale = Locale(identifier: "fr_FR"); f.dateFormat = "d MMM yy"; return f
-    }()
-    private static let dateTime: DateFormatter = {
-        let f = DateFormatter(); f.locale = Locale(identifier: "fr_FR"); f.dateFormat = "d MMM yy · HH:mm"; return f
-    }()
-
-    private static func sans(_ size: CGFloat, _ weight: UIFont.Weight = .regular) -> UIFont {
-        UIFont.systemFont(ofSize: size, weight: weight)
-    }
-    private static func serif(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont {
-        let base = UIFont.systemFont(ofSize: size, weight: weight)
-        if let desc = base.fontDescriptor.withDesign(.serif) {
-            return UIFont(descriptor: desc, size: size)
-        }
-        return base
-    }
-
-    static func trim(_ v: Double) -> String {
-        let rounded = (v * 100).rounded() / 100
-        if rounded == rounded.rounded() { return String(Int(rounded)) }
-        return String(format: "%g", rounded)
-    }
-
-    // A mutable drawing cursor that handles pagination + layout.
-    fileprivate struct Cursor {
-        let ctx: UIGraphicsPDFRendererContext
-        var y: CGFloat = PdfReportRenderer.marginTop
-        var pageNumber = 0
-
-        mutating func beginPage(accent: Bool = true) {
-            ctx.beginPage()
-            pageNumber += 1
-            y = PdfReportRenderer.marginTop
-            // Accent bar at the top.
-            let bar = CGRect(x: 0, y: 0, width: PdfReportRenderer.pageW, height: 6)
-            PdfReportRenderer.primary.setFill()
-            ctx.cgContext.fill(bar)
-            // Page number, right-aligned.
-            let label = "page \(pageNumber)"
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: PdfReportRenderer.sans(8),
-                .foregroundColor: PdfReportRenderer.onSurfaceVariant,
-            ]
-            let size = (label as NSString).size(withAttributes: attrs)
-            (label as NSString).draw(
-                at: CGPoint(x: PdfReportRenderer.pageW - PdfReportRenderer.marginX - size.width, y: 24),
-                withAttributes: attrs)
-            y = PdfReportRenderer.marginTop + 6
-        }
-
-        mutating func ensure(_ needed: CGFloat) {
-            if y + needed > PdfReportRenderer.pageH - PdfReportRenderer.marginBottom {
-                beginPage()
+    /// One place for the two writes, so neither can dismiss over a failure: a
+    /// sheet that closes on an error would look like it saved.
+    private func act(_ body: @escaping (VaultService) async throws -> Void) {
+        guard let session else { return }
+        busy = true
+        error = nil
+        Task {
+            do {
+                try await body(session)
+                busy = false
+                dismiss()
+            } catch {
+                self.error = describe(error)
+                busy = false
             }
         }
+    }
 
-        mutating func advance(_ dy: CGFloat) { y += dy }
-
-        mutating func text(_ s: String, font: UIFont, color: UIColor) {
-            ensure(font.lineHeight + 2)
-            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-            (s as NSString).draw(at: CGPoint(x: PdfReportRenderer.marginX, y: y), withAttributes: attrs)
-            y += font.lineHeight
+    private func field<Content: View>(
+        _ label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            MicroLabel(label)
+            content()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Spacing.l)
+        .padding(.vertical, Spacing.m)
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.field, style: .continuous)
+                .stroke(palette.outline, lineWidth: 1))
+    }
 
-        mutating func muted(_ s: String) {
-            text(s, font: PdfReportRenderer.sans(10), color: PdfReportRenderer.onSurfaceVariant)
-            advance(4)
+    private func note(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 16))
+                .foregroundStyle(palette.onSurfaceVariant)
+            Text(text)
+                .font(EggFont.bodyS)
+                .foregroundStyle(palette.onSurfaceVariant)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .padding(.horizontal, Spacing.l)
+        .padding(.vertical, Spacing.m)
+        .background(
+            palette.surfaceContainer,
+            in: RoundedRectangle(cornerRadius: Radius.field, style: .continuous))
+    }
+}
 
-        mutating func section(_ title: String, count: Int) {
-            ensure(48)
-            advance(16)
-            let circleR: CGFloat = 11
-            let cx = PdfReportRenderer.marginX + circleR
-            let cy = y + circleR
-            PdfReportRenderer.primary.setFill()
-            ctx.cgContext.fillEllipse(in: CGRect(x: PdfReportRenderer.marginX, y: y, width: circleR * 2, height: circleR * 2))
-            // Count inside the circle.
-            let countStr = String(count)
-            let cAttrs: [NSAttributedString.Key: Any] = [
-                .font: PdfReportRenderer.sans(10, .bold),
-                .foregroundColor: UIColor.white,
-            ]
-            let cSize = (countStr as NSString).size(withAttributes: cAttrs)
-            (countStr as NSString).draw(
-                at: CGPoint(x: cx - cSize.width / 2, y: cy - cSize.height / 2),
-                withAttributes: cAttrs)
-            // Title.
-            let tAttrs: [NSAttributedString.Key: Any] = [
-                .font: PdfReportRenderer.sans(15, .bold),
-                .foregroundColor: PdfReportRenderer.primary,
-            ]
-            (title as NSString).draw(
-                at: CGPoint(x: PdfReportRenderer.marginX + circleR * 2 + 10, y: y + 2),
-                withAttributes: tAttrs)
-            y += circleR * 2 + 6
-            rule()
-            advance(8)
-        }
+// MARK: - « Période personnalisée »
 
-        mutating func row(left: String, right: String, bold: Bool = false, small: Bool = false) {
-            let size: CGFloat = small ? 9.5 : 10.5
-            let leftFont = PdfReportRenderer.sans(size, bold ? .bold : .regular)
-            let rightFont = PdfReportRenderer.sans(size, bold ? .bold : .regular)
-            ensure(leftFont.lineHeight + 4)
-            let leftColor = small ? PdfReportRenderer.onSurfaceVariant : PdfReportRenderer.onSurface
-            (left as NSString).draw(
-                at: CGPoint(x: PdfReportRenderer.marginX, y: y),
-                withAttributes: [.font: leftFont, .foregroundColor: leftColor])
-            if !right.isEmpty {
-                let rAttrs: [NSAttributedString.Key: Any] = [
-                    .font: rightFont, .foregroundColor: PdfReportRenderer.onSurface,
-                ]
-                let rSize = (right as NSString).size(withAttributes: rAttrs)
-                (right as NSString).draw(
-                    at: CGPoint(x: PdfReportRenderer.pageW - PdfReportRenderer.marginX - rSize.width, y: y),
-                    withAttributes: rAttrs)
+/// The custom-period sheet of §6.12.3. Its default is « Depuis la dernière
+/// consultation » — the period a consultation is actually about.
+private struct CustomPeriodSheet: View {
+    @ObservedObject var vm: PdfExportViewModel
+    let units: [String: String]
+    let session: VaultService?
+
+    @Environment(\.palette) private var palette
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var shortcut: ReportShortcut = .lastVisit
+    @State private var from = Date()
+    @State private var to = Date()
+    @State private var manual = false
+    @State private var preview = ReportVolumes()
+    @State private var previewDays = 0
+    /// The last bounds *we* wrote into the pickers. `onChange` fires after the
+    /// view update, so comparing against these is the only way to tell a hand
+    /// edit from our own derivation — otherwise picking a shortcut would
+    /// immediately mark the period as hand-typed and stop following it.
+    @State private var derived: ReportRange?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.l) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Période personnalisée")
+                            .font(EggFont.titleL)
+                            .foregroundStyle(palette.onSurface)
+                        Text("Choisis un raccourci, ou les deux dates.")
+                            .font(EggFont.bodyS)
+                            .foregroundStyle(palette.onSurfaceVariant)
+                    }
+
+                    ChipFlowLayout(spacing: 7, lineSpacing: 7) {
+                        ForEach(ReportShortcut.offered) { option in
+                            PillView(
+                                option.label,
+                                selected: !manual && shortcut == option,
+                                enabled: enabled(option)
+                            ) {
+                                shortcut = option
+                                applyShortcut(option)
+                            }
+                        }
+                    }
+
+                    HStack(spacing: Spacing.s) {
+                        dateField("DU", date: $from)
+                        dateField("AU", date: $to)
+                    }
+
+                    HStack(alignment: .center, spacing: 9) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 16))
+                            .foregroundStyle(palette.onSurfaceVariant)
+                        Text(previewLine)
+                            .font(EggFont.bodyS)
+                            .foregroundStyle(palette.onSurfaceVariant)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, Spacing.l)
+                    .padding(.vertical, Spacing.m)
+                    .background(
+                        palette.surfaceContainer,
+                        in: RoundedRectangle(cornerRadius: Radius.field, style: .continuous))
+                }
+                .padding(.horizontal, Metrics.screenMargin)
+                .padding(.top, Spacing.s)
             }
-            y += leftFont.lineHeight + 2
-        }
-
-        mutating func wrapped(_ s: String, font: UIFont, color: UIColor, indent: CGFloat) {
-            let maxWidth = PdfReportRenderer.pageW - 2 * PdfReportRenderer.marginX - indent
-            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-            var line = ""
-            for word in s.split(separator: " ", omittingEmptySubsequences: true) {
-                let candidate = line.isEmpty ? String(word) : line + " " + word
-                if (candidate as NSString).size(withAttributes: attrs).width <= maxWidth {
-                    line = candidate
-                } else {
-                    flushLine(line, attrs: attrs, indent: indent, lineHeight: font.lineHeight)
-                    line = String(word)
+            .background(palette.surfaceContainerHigh.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annuler") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Appliquer") { apply() }
                 }
             }
-            if !line.isEmpty { flushLine(line, attrs: attrs, indent: indent, lineHeight: font.lineHeight) }
+            .onAppear { restore() }
+            .onChange(of: from) { _, _ in noteEdit() }
+            .onChange(of: to) { _, _ in noteEdit() }
         }
+    }
 
-        private mutating func flushLine(_ line: String, attrs: [NSAttributedString.Key: Any], indent: CGFloat, lineHeight: CGFloat) {
-            ensure(lineHeight + 2)
-            (line as NSString).draw(
-                at: CGPoint(x: PdfReportRenderer.marginX + indent, y: y),
-                withAttributes: attrs)
-            y += lineHeight
+    private func noteEdit() {
+        if let derived, derived == currentRange {
+            // Our own write coming back through the picker: not an edit.
+        } else {
+            manual = true
         }
+        refresh()
+    }
 
-        mutating func rule() {
-            let cg = ctx.cgContext
-            cg.setStrokeColor(PdfReportRenderer.ruleFaint.cgColor)
-            cg.setLineWidth(1)
-            cg.move(to: CGPoint(x: PdfReportRenderer.marginX, y: y))
-            cg.addLine(to: CGPoint(x: PdfReportRenderer.pageW - PdfReportRenderer.marginX, y: y))
-            cg.strokePath()
-        }
+    private var currentRange: ReportRange {
+        ReportRange(
+            fromMs: Int64(from.timeIntervalSince1970 * 1000),
+            toMs: Int64(to.timeIntervalSince1970 * 1000))
+    }
 
-        mutating func divider() {
-            y += 4
-            rule()
-            y += 6
+    private func dateField(_ label: String, date: Binding<Date>) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(EggFont.micro)
+                .tracking(0.5)
+                .foregroundStyle(palette.onSurfaceVariant)
+            DatePicker("", selection: date, displayedComponents: [.date])
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .tint(palette.primary)
+                .environment(\.locale, Locale(identifier: "fr_FR"))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Spacing.l)
+        .padding(.vertical, Spacing.m)
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.field, style: .continuous)
+                .stroke(palette.outline, lineWidth: 1))
+    }
 
-        mutating func footer() {
-            let cg = ctx.cgContext
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: PdfReportRenderer.sans(8.5),
-                .foregroundColor: PdfReportRenderer.onSurfaceVariant,
-            ]
-            let text = "Généré localement par Eggshell · aucune donnée n'a quitté l'appareil."
-            (text as NSString).draw(
-                at: CGPoint(x: PdfReportRenderer.marginX, y: PdfReportRenderer.pageH - PdfReportRenderer.marginBottom + 24),
-                withAttributes: attrs)
+    /// « Depuis la dernière consultation » needs a past consultation to exist.
+    private func enabled(_ option: ReportShortcut) -> Bool {
+        option != .lastVisit || vm.lastVisitMs != nil
+    }
+
+    private var previewLine: String {
+        "\(ReportVolumes.plural(previewDays, "jour", "jours")) · "
+            + "\(ReportVolumes.plural(preview.labs, "relevé", "relevés")), "
+            + "\(ReportVolumes.plural(preview.doses, "prise", "prises")), "
+            + ReportVolumes.plural(preview.feelEntries, "entrée de ressenti", "entrées de ressenti")
+    }
+
+    private func restore() {
+        shortcut = vm.shortcut
+        if vm.manualDates {
+            write(vm.range, manual: true)
+        } else {
+            applyShortcut(shortcut)
         }
+    }
+
+    private func applyShortcut(_ option: ReportShortcut) {
+        write(
+            ReportPeriodResolver.shortcutRange(
+                option,
+                lastVisitMs: vm.lastVisitMs,
+                treatmentStartMs: vm.treatmentStartMs),
+            manual: false)
+    }
+
+    private func write(_ range: ReportRange, manual isManual: Bool) {
+        derived = range
+        manual = isManual
+        from = Date(timeIntervalSince1970: Double(range.fromMs) / 1000)
+        to = Date(timeIntervalSince1970: Double(range.toMs) / 1000)
+        refresh()
+    }
+
+    private func refresh() {
+        guard let session else { return }
+        let range = currentRange
+        previewDays = range.days
+        let snapshot = units
+        Task {
+            let builder = DoctorReportBuilder(session: session, units: snapshot)
+            preview = await builder.volumes(range: range)
+        }
+    }
+
+    private func apply() {
+        vm.period = .custom
+        vm.shortcut = shortcut
+        if manual {
+            vm.customFromMs = Int64(from.timeIntervalSince1970 * 1000)
+            vm.customToMs = Int64(to.timeIntervalSince1970 * 1000)
+        } else {
+            // A shortcut is a *rule*, not a pair of dates: stored as bounds it
+            // would silently stop following the last consultation.
+            vm.customFromMs = 0
+            vm.customToMs = 0
+        }
+        vm.persist()
+        if let session {
+            let snapshot = units
+            Task { await vm.refreshVolumes(session, units: snapshot) }
+        }
+        dismiss()
     }
 }

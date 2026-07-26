@@ -14,20 +14,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -35,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -52,7 +49,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.ScheduleRepository
+import com.douxev.eggshell.ui.common.ScreenHeader
 import com.douxev.eggshell.ui.common.clickToDismissKeyboard
+import com.douxev.eggshell.ui.components.ActionBand
+import com.douxev.eggshell.ui.components.CardVariant
+import com.douxev.eggshell.ui.components.EggCard
+import com.douxev.eggshell.ui.components.SectionTitle
+import com.douxev.eggshell.ui.theme.EggDim
+import com.douxev.eggshell.ui.theme.EggShapes
 
 @HiltViewModel
 class AddScheduleViewModel @Inject constructor(
@@ -175,7 +179,6 @@ class AddScheduleViewModel @Inject constructor(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddScheduleScreen(
     onDone: () -> Unit,
@@ -233,34 +236,58 @@ fun AddScheduleScreen(
     val needsExactAlarmPermission = needsExactAlarmPermission(context)
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        stringResource(
-                            if (isEditing) R.string.schedule_edit_title else R.string.schedule_add_title
-                        )
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back),
-                        )
-                    }
-                },
-            )
-        }
+        containerColor = MaterialTheme.colorScheme.surface,
+        bottomBar = {
+            ActionBand(alignment = Alignment.Center) {
+                Button(
+                    shape = EggShapes.Pill,
+                    modifier = Modifier.fillMaxWidth(),
+                    // In edit mode, block Save until the reminder actually loaded.
+                    enabled = status != AddScheduleViewModel.Status.Submitting &&
+                        (!isEditing || loaded != null),
+                    onClick = {
+                        val trimmedLabel = label.trim().ifBlank { null }
+                        when (kind) {
+                            "interval" -> {
+                                val h = hoursStr.toIntOrNull()?.takeIf { it > 0 }
+                                if (h != null) vm.submitInterval(h, trimmedLabel)
+                            }
+                            "days_interval" -> {
+                                val d = daysStr.toIntOrNull()?.takeIf { it > 0 }
+                                val h = hourStr.toIntOrNull()?.takeIf { it in 0..23 }
+                                val m = minuteStr.toIntOrNull()?.takeIf { it in 0..59 }
+                                if (d != null && h != null && m != null) {
+                                    vm.submitDaysInterval(d, h, m, startDateMs, trimmedLabel)
+                                }
+                            }
+                            else -> {
+                                val h = hourStr.toIntOrNull()?.takeIf { it in 0..23 }
+                                val m = minuteStr.toIntOrNull()?.takeIf { it in 0..59 }
+                                if (h != null && m != null) vm.submitDaily(h, m, trimmedLabel)
+                            }
+                        }
+                    },
+                ) { Text(stringResource(R.string.schedule_save)) }
+            }
+        },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .clickToDismissKeyboard()
-                .padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = EggDim.ScreenMargin),
+            verticalArrangement = Arrangement.spacedBy(EggDim.BlockGap),
         ) {
+            ScreenHeader(
+                title = stringResource(
+                    if (isEditing) R.string.schedule_edit_title else R.string.schedule_add_title
+                ),
+                onBack = onBack,
+            )
+
+            SectionTitle(stringResource(R.string.meds_section_cadence))
             ChipGroup(
                 options = listOf("interval", "daily", "days_interval"),
                 selected = kind,
@@ -283,6 +310,7 @@ fun AddScheduleScreen(
                     label = { Text(stringResource(R.string.schedule_field_interval_hours)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
+                    shape = EggShapes.Field,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 else -> {
@@ -294,6 +322,7 @@ fun AddScheduleScreen(
                             label = { Text(stringResource(R.string.schedule_field_interval_days)) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
+                            shape = EggShapes.Field,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -303,6 +332,7 @@ fun AddScheduleScreen(
                         label = { Text(stringResource(R.string.schedule_field_hour)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
+                        shape = EggShapes.Field,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
@@ -311,11 +341,13 @@ fun AddScheduleScreen(
                         label = { Text(stringResource(R.string.schedule_field_minute)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
+                        shape = EggShapes.Field,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     if (kind == "days_interval") {
                         OutlinedButton(
                             onClick = { showDatePicker = true },
+                            shape = EggShapes.Pill,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(
@@ -330,6 +362,7 @@ fun AddScheduleScreen(
             // traitement"…). Never shown while the content mode is GENERIC —
             // say so instead of letting the user type text that goes nowhere.
             val notifMode by vm.notifMode.collectAsState()
+            SectionTitle(stringResource(R.string.meds_reminder_text))
             OutlinedTextField(
                 value = label,
                 onValueChange = { label = it.take(60) },
@@ -346,53 +379,32 @@ fun AddScheduleScreen(
                     )
                 },
                 singleLine = true,
+                shape = EggShapes.Field,
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Button(
-                onClick = {
-                    val trimmedLabel = label.trim().ifBlank { null }
-                    when (kind) {
-                        "interval" -> {
-                            val h = hoursStr.toIntOrNull()?.takeIf { it > 0 }
-                            if (h != null) vm.submitInterval(h, trimmedLabel)
-                        }
-                        "days_interval" -> {
-                            val d = daysStr.toIntOrNull()?.takeIf { it > 0 }
-                            val h = hourStr.toIntOrNull()?.takeIf { it in 0..23 }
-                            val m = minuteStr.toIntOrNull()?.takeIf { it in 0..59 }
-                            if (d != null && h != null && m != null) {
-                                vm.submitDaysInterval(d, h, m, startDateMs, trimmedLabel)
-                            }
-                        }
-                        else -> {
-                            val h = hourStr.toIntOrNull()?.takeIf { it in 0..23 }
-                            val m = minuteStr.toIntOrNull()?.takeIf { it in 0..59 }
-                            if (h != null && m != null) vm.submitDaily(h, m, trimmedLabel)
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                // In edit mode, block Save until the reminder actually loaded.
-                enabled = status != AddScheduleViewModel.Status.Submitting &&
-                    (!isEditing || loaded != null),
-            ) { Text(stringResource(R.string.schedule_save)) }
-
             if (needsExactAlarmPermission) {
-                Text(
-                    stringResource(R.string.permission_exact_alarm_rationale),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                OutlinedButton(
-                    onClick = { openExactAlarmSettings(context) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.action_open_settings)) }
+                EggCard(variant = CardVariant.Outlined) {
+                    Text(
+                        stringResource(R.string.permission_exact_alarm_rationale),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(
+                        onClick = { openExactAlarmSettings(context) },
+                        shape = EggShapes.Pill,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp),
+                    ) { Text(stringResource(R.string.action_open_settings)) }
+                }
             }
 
             error?.let {
                 Text(
                     stringResource(R.string.med_error_prefix, it),
                     color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
         }

@@ -3,13 +3,17 @@ import TransitionCore
 import UIKit
 
 // ===========================================================================
-// PUSHED screen — create OR edit a medication.
-//   • init(editId:) nil  → create a new medication, then chain into its
-//     schedule setup (router.push addSchedule).
-//   • init(editId:) set  → load the medication, prefill the form, save via
-//     updateMedication AND record dose/unit/route edits as timestamped
-//     TreatmentChange audit rows (for the correlation timeline), then pop.
-//   Parity with Android AddMedicationScreen. All UI strings in French.
+// Médics — create or edit a treatment (handoff §6.4, action bar « Ajouter un
+// traitement »).
+//
+//   • init(editId:) nil  → create, then chain straight into its first reminder
+//     (a treatment nobody reminds you of is a treatment you forget).
+//   • init(editId:) set  → load, prefill, save via updateMedication AND record
+//     dose/unit/route edits as timestamped TreatmentChange rows, so the detail
+//     screen and the correlation timeline can say when the dose moved.
+//
+// Everything the old form could do it still does: the accent colour (shared with
+// Android through the vault) and the notification alias are both here (D5).
 // ===========================================================================
 
 @MainActor
@@ -20,13 +24,16 @@ final class AddMedicationViewModel: ObservableObject {
 
     // Editable fields
     @Published var name = ""
-    @Published var kind = MedCatalog.kinds.first ?? "hrt"
+    @Published var kind = MedCatalog.kinds.first ?? "estrogen"
     @Published var route = MedCatalog.routes.first ?? "oral"
     @Published var doseText = ""
     @Published var unit = ""
-    @Published var colorEnabled = false
-    @Published var pickedColor: Color = Color(hex: 0x6A4FA3)   // default lavender
+    /// Opaque ARGB, or nil for « aucune couleur ».
+    @Published var argb: Int64?
     @Published var notes = ""
+    /// The decoy name shown in reminders. Lives in plain UserDefaults on
+    /// purpose: it is a label you chose precisely so nothing real leaks.
+    @Published var alias = ""
 
     let editId: Int64?
     private var original: Medication?
@@ -55,11 +62,9 @@ final class AddMedicationViewModel: ObservableObject {
                     route = med.route
                     doseText = med.defaultDose.map { formatDose($0) } ?? ""
                     unit = med.defaultDoseUnit ?? ""
-                    if let c = med.color {
-                        colorEnabled = true
-                        pickedColor = MedColor.color(fromArgb: c)
-                    }
+                    argb = med.color
                     notes = med.notes ?? ""
+                    alias = NotifPrefs.alias(for: id) ?? ""
                     seeded = true
                 }
             }
@@ -76,26 +81,26 @@ final class AddMedicationViewModel: ObservableObject {
         error = nil
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let parsedDose = Double(doseText.replacingOccurrences(of: ",", with: "."))
-        let parsedColor: Int64? = colorEnabled ? MedColor.argb(from: pickedColor) : nil
         let med = NewMedication(
             name: trimmed,
             kind: kind,
             route: route,
             defaultDose: parsedDose,
             defaultDoseUnit: unit.isEmpty ? nil : unit,
-            color: parsedColor,
+            color: argb,
             notes: notes.isEmpty ? nil : notes)
         do {
-            if let id = editId {
-                try await session.updateMedication(id, med)
-                await logTreatmentChanges(session, id: id, new: med)
-                status = .done
-                return id
+            let id: Int64
+            if let editId {
+                try await session.updateMedication(editId, med)
+                await logTreatmentChanges(session, id: editId, new: med)
+                id = editId
             } else {
-                let created = try await session.addMedication(med)
-                status = .done
-                return created.id
+                id = try await session.addMedication(med).id
             }
+            NotifPrefs.setAlias(alias, for: id)
+            status = .done
+            return id
         } catch {
             self.error = describe(error)
             status = .error(describe(error))
@@ -146,124 +151,122 @@ struct AddMedicationView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.l) {
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                if case let .error(message) = vm.status {
+                    ErrorCardView(message, retryLabel: "Réessayer") { save() }
+                } else if let e = vm.error {
+                    ErrorCardView(e)
+                }
+
                 if vm.loading {
-                    ProgressView().tint(palette.primary).frame(maxWidth: .infinity).padding()
+                    SkeletonBlock(height: 96)
+                    SkeletonBlock(height: 120)
+                    SkeletonBlock(height: 120)
                 } else {
-                    nameCard
-                    kindCard
-                    routeCard
-                    doseCard
-                    colorCard
-                    notesCard
-
-                    if case let .error(message) = vm.status {
-                        ErrorBanner(message: message)
-                    } else if let e = vm.error {
-                        ErrorBanner(message: e)
-                    }
-
-                    saveButton
+                    identityBlock
+                    kindBlock
+                    routeBlock
+                    doseBlock
+                    noteBlock
+                    notificationBlock
+                    colorBlock
                 }
             }
-            .padding(Spacing.l)
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.top, Spacing.xs)
+            .padding(.bottom, Metrics.blockGap)
         }
-        .navigationTitle(vm.isEditing ? "Modifier le traitement" : "Nouveau traitement")
+        .medsScreen(vm.isEditing ? "Modifier le traitement" : "Nouveau traitement")
+        .eggActionBar {
+            ActionBarButton(
+                vm.isEditing ? "Enregistrer" : "Créer",
+                systemImage: vm.isEditing ? "checkmark" : "plus",
+                enabled: !trimmedName.isEmpty && !vm.isSubmitting
+            ) { save() }
+        }
         .task { if let s = app.session { await vm.load(s) } }
     }
 
-    private var nameCard: some View {
-        SectionCard {
-            Text("Nom").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            TextField("Nom du traitement", text: $vm.name)
-                .font(.eggBody)
-                .foregroundStyle(palette.onSurface)
+    // MARK: - Blocks
+
+    private var identityBlock: some View {
+        MedsFormBlock("LE TRAITEMENT") {
+            MedsField(placeholder: "Nom du traitement", text: $vm.name)
         }
     }
 
-    private var kindCard: some View {
-        SectionCard {
-            Text("Type").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            FlowChips {
-                ForEach(MedCatalog.kinds, id: \.self) { value in
-                    ChoiceChip(label: MedCatalog.kindLabel(value), selected: vm.kind == value) {
-                        vm.kind = value
-                    }
-                }
-            }
+    private var kindBlock: some View {
+        MedsFormBlock("LE TYPE") {
+            MedsChipRow(
+                options: MedCatalog.kinds,
+                selected: vm.kind,
+                label: MedCatalog.kindLabel,
+                onSelect: { vm.kind = $0 })
         }
     }
 
-    private var routeCard: some View {
-        SectionCard {
-            Text("Voie d'administration").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            FlowChips {
-                ForEach(MedCatalog.routes, id: \.self) { value in
-                    ChoiceChip(label: MedCatalog.routeLabel(value), selected: vm.route == value) {
-                        vm.route = value
-                    }
-                }
-            }
+    private var routeBlock: some View {
+        MedsFormBlock("LA VOIE") {
+            MedsChipRow(
+                options: MedCatalog.routes,
+                selected: vm.route,
+                label: MedCatalog.routeLabel,
+                onSelect: { vm.route = $0 })
         }
     }
 
-    private var doseCard: some View {
-        SectionCard {
-            Text("Dose par défaut").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
+    private var doseBlock: some View {
+        MedsFormBlock("LA DOSE", footnote: "Ta dose habituelle : elle est proposée d'avance chaque fois que tu notes une prise.") {
             HStack(spacing: Spacing.m) {
-                TextField("0", text: $vm.doseText)
-                    .keyboardType(.decimalPad)
-                    .font(.eggBody)
-                    .foregroundStyle(palette.onSurface)
-                TextField("Unité", text: $vm.unit)
-                    .font(.eggBody)
-                    .foregroundStyle(palette.onSurface)
+                MedsField(placeholder: "0", text: $vm.doseText, keyboard: .decimalPad)
+                MedsField(placeholder: "unité", text: $vm.unit)
+                    .frame(maxWidth: 130)
             }
         }
     }
 
-    private var colorCard: some View {
-        SectionCard {
-            Toggle(isOn: $vm.colorEnabled) {
-                Text("Couleur").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            }
-            .tint(palette.primary)
-            if vm.colorEnabled {
-                ColorPicker(selection: $vm.pickedColor, supportsOpacity: false) {
-                    HStack(spacing: Spacing.s) {
-                        Circle().fill(vm.pickedColor).frame(width: 22, height: 22)
-                            .overlay(Circle().stroke(palette.outlineVariant, lineWidth: 1))
-                        Text("Choisir une couleur").font(.eggBody).foregroundStyle(palette.onSurface)
-                    }
-                }
-            }
+    private var noteBlock: some View {
+        MedsFormBlock("UN MOT") {
+            MedsField(
+                placeholder: "Ce que tu veux garder en tête (facultatif)",
+                text: $vm.notes,
+                multiline: true)
         }
     }
 
-    private var notesCard: some View {
-        SectionCard {
-            Text("Notes").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            TextField("Notes", text: $vm.notes, axis: .vertical)
-                .font(.eggBody)
-                .foregroundStyle(palette.onSurface)
-                .lineLimit(3...6)
+    private var notificationBlock: some View {
+        MedsFormBlock(
+            "DANS LES NOTIFICATIONS",
+            footnote: aliasFootnote
+        ) {
+            MedsField(placeholder: "Ex. : Vitamines", text: $vm.alias, maxLength: 40)
         }
     }
 
-    private var saveButton: some View {
-        Button {
-            save()
-        } label: {
-            if vm.isSubmitting {
-                ProgressView().tint(palette.onPrimary).frame(maxWidth: .infinity)
-            } else {
-                Text(vm.isEditing ? "Enregistrer" : "Créer").frame(maxWidth: .infinity)
-            }
+    /// Says whether the alias will actually be seen — the content mode lives in
+    /// Réglages → Rappels, and a field that quietly does nothing is worse than
+    /// no field at all.
+    private var aliasFootnote: String {
+        switch NotifPrefs.contentMode {
+        case .alias:
+            return "C'est ce nom-là que tes rappels afficheront, à la place du vrai."
+        case .name:
+            return "Tes rappels affichent le vrai nom pour l'instant. Passe en « Alias » dans Réglages → Rappels pour montrer celui-ci."
+        case .generic:
+            return "Tes rappels ne disent rien du traitement pour l'instant. Passe en « Alias » dans Réglages → Rappels pour montrer ce nom-là."
         }
-        .glassProminentButton()
-        .tint(palette.primary)
-        .disabled(trimmedName.isEmpty || vm.isSubmitting)
     }
+
+    private var colorBlock: some View {
+        MedsFormBlock(
+            "SA COULEUR",
+            footnote: "Elle te sert à le repérer d'un coup d'œil, dans la liste et sur le calendrier."
+        ) {
+            MedColorPicker(argb: $vm.argb)
+        }
+    }
+
+    // MARK: - Saving
 
     private func save() {
         guard !trimmedName.isEmpty, let session = app.session else { return }
@@ -272,7 +275,8 @@ struct AddMedicationView: View {
             guard let id = await vm.save(session) else { return }
             await app.refreshNotifications()
             dismiss()
-            // New medication → chain straight into its schedule setup.
+            // A new treatment goes straight to its first reminder: that is the
+            // difference between a list and a follow-up.
             if !editing { router.push(.addSchedule(medId: id)) }
         }
     }
@@ -296,50 +300,5 @@ enum MedColor {
               green: Double((v >> 8) & 0xFF) / 255,
               blue: Double(v & 0xFF) / 255,
               opacity: 1)
-    }
-}
-
-// Private layout helper: wraps chips so the routes flow onto multiple lines.
-private struct FlowChips: Layout {
-    var spacing: CGFloat = Spacing.s
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var rowWidth: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var totalHeight: CGFloat = 0
-        var totalWidth: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if rowWidth > 0, rowWidth + spacing + size.width > maxWidth {
-                totalHeight += rowHeight + spacing
-                totalWidth = max(totalWidth, rowWidth)
-                rowWidth = size.width
-                rowHeight = size.height
-            } else {
-                rowWidth += (rowWidth > 0 ? spacing : 0) + size.width
-                rowHeight = max(rowHeight, size.height)
-            }
-        }
-        totalHeight += rowHeight
-        totalWidth = max(totalWidth, rowWidth)
-        return CGSize(width: maxWidth.isFinite ? totalWidth : rowWidth, height: totalHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > bounds.maxX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
     }
 }

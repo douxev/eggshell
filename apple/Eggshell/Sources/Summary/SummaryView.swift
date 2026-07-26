@@ -220,108 +220,190 @@ struct SummaryView: View {
 
     private var period: SummaryPeriod { SummaryPeriod(rawValue: periodRaw) ?? .month }
 
+    /// The segmented selector speaks in indices; the stored preference speaks in
+    /// a period name, and that name is what has to survive a restart.
+    private var periodIndex: Binding<Int> {
+        Binding(
+            get: { period == .week ? 0 : 1 },
+            set: { periodRaw = ($0 == 0 ? SummaryPeriod.week : .month).rawValue })
+    }
+
+    private var windowWord: String { period == .week ? "cette semaine" : "ce mois" }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.m) {
-                Picker("Période", selection: $periodRaw) {
-                    Text("Semaine").tag(SummaryPeriod.week.rawValue)
-                    Text("Mois").tag(SummaryPeriod.month.rawValue)
-                }
-                .pickerStyle(.segmented)
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                SegmentedSelector(
+                    options: ["Semaine", "Mois"],
+                    selection: periodIndex,
+                    accessibilityLabel: "Période comparée")
 
                 if vm.loading {
-                    // Show the spinner on every (re)compute, not just the first —
-                    // otherwise switching Semaine/Mois leaves the previous period's
-                    // numbers on screen under the new label until the async finishes.
-                    ProgressView().tint(palette.primary).frame(maxWidth: .infinity).padding(.vertical, Spacing.xxl)
-                } else if let r = vm.result, r.hasData {
-                    headlineCard(r)
-                    if r.hasJournal { moodCard(r) }
-                    if r.hasMedications && (r.expectedCurrent > 0 || r.takenCurrent > 0 || r.expectedPrevious > 0) {
-                        dosesCard(r)
+                    // Skeletons on every recompute, not just the first: switching
+                    // Semaine/Mois must never leave the previous period's numbers
+                    // sitting under the new label.
+                    SkeletonBlock(height: 76, cornerRadius: Radius.card)
+                    SkeletonBlock(height: 96, cornerRadius: Radius.card)
+                    SkeletonBlock(height: 96, cornerRadius: Radius.card)
+                } else if let result = vm.result, result.hasData {
+                    headlineCard(result)
+                    if result.hasJournal { moodCard(result) }
+                    if result.hasMedications
+                        && (result.expectedCurrent > 0 || result.takenCurrent > 0
+                            || result.expectedPrevious > 0) {
+                        dosesCard(result)
                     }
-                    if !r.customMetrics.isEmpty { symptomsCard(r) }
-                    if r.hasJournal { journalCard(r) }
-                    Text("Comparé à la même durée juste avant. À titre indicatif, sans lien de cause à effet.")
-                        .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+                    if !result.customMetrics.isEmpty { symptomsCard(result) }
+                    if result.hasJournal { journalCard(result) }
+                    Text("Comparé à la même durée juste avant. C'est une photo, pas un jugement — "
+                            + "et sûrement pas un lien de cause à effet.")
+                        .font(EggFont.bodyS)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    EmptyStateCard(
-                        text: "Pas encore assez de données pour comparer. Continue à noter tes ressentis et tes prises, ton résumé arrivera bientôt 💛",
+                    EmptyStateView(
+                        "Pas encore assez de données pour comparer. Continue à noter tes "
+                            + "ressentis et tes prises : ton résumé arrivera tout seul.",
                         systemImage: "chart.bar")
                 }
             }
-            .padding(Spacing.l)
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.top, Spacing.s)
+            .padding(.bottom, Metrics.blockGap)
         }
         .background(palette.surface.ignoresSafeArea())
         .navigationTitle("Ton résumé")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: periodRaw) {
-            if let s = app.session { await vm.compute(s, period: period, gates: features) }
-        }
-    }
-
-    private func headlineCard(_ r: SummaryResult) -> some View {
-        let text: String
-        if let m = r.moodCurrent, let p = r.moodPrevious, m >= p + 0.3 {
-            text = "Belle énergie : ton humeur moyenne est en hausse ✨"
-        } else if r.hasMedications && r.missedCurrent < r.missedPrevious {
-            text = "Bravo — moins d'oublis que la période précédente 💪"
-        } else if r.journalCountCurrent > 0 {
-            text = "Tu prends le temps de noter — continue, ça compte 💛"
-        } else {
-            text = "Tu gardes le cap. Prends soin de toi 💛"
-        }
-        return SectionCard {
-            Text(text).font(.eggHeadline).foregroundStyle(palette.onSurface)
-        }
-    }
-
-    private func moodCard(_ r: SummaryResult) -> some View {
-        SectionCard {
-            Text("Humeur moyenne").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
-                Text("\(fmt(r.moodCurrent)) / 10").font(.eggTitle).foregroundStyle(palette.primary)
-                Text("vs \(fmt(r.moodPrevious)) avant").font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.6))
+            if let session = app.session {
+                await vm.compute(session, period: period, gates: features)
             }
         }
     }
 
+    // MARK: - Cartes
+
+    private func headlineCard(_ r: SummaryResult) -> some View {
+        let text: String
+        if let mood = r.moodCurrent, let previous = r.moodPrevious, mood >= previous + 0.3 {
+            text = "Ton humeur moyenne est en hausse. Ça se voit, et ça compte."
+        } else if r.hasMedications && r.missedCurrent < r.missedPrevious {
+            text = "Moins d'oublis que la période d'avant. Beau travail."
+        } else if r.journalCountCurrent > 0 {
+            text = "Tu prends le temps de noter. C'est déjà beaucoup."
+        } else {
+            text = "Tu gardes le cap. Prends soin de toi."
+        }
+        return EggCard(variant: .primary) {
+            Text(text)
+                .font(EggFont.titleL)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func moodCard(_ r: SummaryResult) -> some View {
+        EggCard(variant: .low, spacing: Spacing.s) {
+            HStack(alignment: .top) {
+                MicroLabel("HUMEUR MOYENNE")
+                Spacer(minLength: Spacing.s)
+                deltaPill(r.moodCurrent, r.moodPrevious)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+                Text(fmt(r.moodCurrent))
+                    .font(.system(size: 34, weight: .medium))
+                    .foregroundStyle(palette.primary)
+                Text("/ 10")
+                    .font(EggFont.titleS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+            }
+            Text("\(fmt(r.moodPrevious)) / 10 sur la période d'avant")
+                .font(EggFont.bodyS)
+                .foregroundStyle(palette.onSurfaceVariant)
+        }
+    }
+
     private func dosesCard(_ r: SummaryResult) -> some View {
-        SectionCard {
-            Text("Prises de traitement").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            Text("\(r.takenCurrent) prises notées sur \(r.expectedCurrent) prévues")
-                .font(.eggHeadline).foregroundStyle(palette.onSurface)
-            Text("\(r.missedCurrent) oublis estimés (vs \(r.missedPrevious) avant)")
-                .font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.7))
-            Text("« Prévues » et « oublis » sont estimés à partir de tes rappels.")
-                .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+        EggCard(variant: .low, spacing: Spacing.s) {
+            MicroLabel("TES PRISES")
+            Text("\(r.takenCurrent) "
+                    + (r.takenCurrent == 1 ? "prise notée" : "prises notées")
+                    + " sur \(r.expectedCurrent) prévues \(windowWord)")
+                .font(EggFont.titleS)
+                .foregroundStyle(palette.onSurface)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("\(r.missedCurrent) "
+                    + (r.missedCurrent == 1 ? "oubli estimé" : "oublis estimés")
+                    + " · \(r.missedPrevious) sur la période d'avant")
+                .font(EggFont.bodyS)
+                .foregroundStyle(palette.onSurfaceVariant)
+            CardRule()
+            // D2: nothing here is back-filled. « Prévues » is a replay of the
+            // schedules, and the screen says so rather than passing an estimate
+            // off as a measurement.
+            Text("« Prévues » est rejoué depuis tes rappels : c'est une estimation, "
+                    + "pas un relevé.")
+                .font(EggFont.bodyS)
+                .foregroundStyle(palette.onSurfaceVariant)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private func symptomsCard(_ r: SummaryResult) -> some View {
-        SectionCard {
-            Text("Symptômes (curseurs perso)").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            ForEach(r.customMetrics) { m in
-                HStack {
-                    Text(m.label).font(.eggCallout).foregroundStyle(palette.onSurface)
-                    Spacer()
-                    Text("\(fmt(m.current)) (vs \(fmt(m.previous)) avant)")
-                        .font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.7))
+        EggCard(variant: .low, spacing: Spacing.s) {
+            MicroLabel("TES INDICATEURS")
+            ForEach(r.customMetrics) { metric in
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+                    Text(metric.label)
+                        .font(EggFont.titleS)
+                        .foregroundStyle(palette.onSurface)
+                    Spacer(minLength: Spacing.s)
+                    Text("\(fmt(metric.current)) · avant \(fmt(metric.previous))")
+                        .font(EggFont.bodyS)
+                        .foregroundStyle(palette.onSurfaceVariant)
                 }
+                .frame(minHeight: 28)
             }
         }
     }
 
     private func journalCard(_ r: SummaryResult) -> some View {
-        SectionCard {
-            Text("Notes du journal").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            Text("\(r.journalCountCurrent) entrées (vs \(r.journalCountPrevious) avant)")
-                .font(.eggCallout).foregroundStyle(palette.onSurface)
+        EggCard(variant: .low, spacing: Spacing.s) {
+            MicroLabel("TES NOTES")
+            Text("\(r.journalCountCurrent) "
+                    + (r.journalCountCurrent == 1 ? "entrée" : "entrées")
+                    + " \(windowWord)")
+                .font(EggFont.titleS)
+                .foregroundStyle(palette.onSurface)
+            Text("\(r.journalCountPrevious) sur la période d'avant")
+                .font(EggFont.bodyS)
+                .foregroundStyle(palette.onSurfaceVariant)
         }
     }
 
-    private func fmt(_ v: Double?) -> String {
-        guard let v else { return "—" }
-        return String(format: "%.1f", v)
+    /// Glyph + word + colour, all three (§10). Below a tenth of a point the
+    /// answer is « stable » — a delta of 0,04 dressed as a rise would be noise.
+    @ViewBuilder
+    private func deltaPill(_ current: Double?, _ previous: Double?) -> some View {
+        if let current, let previous {
+            let delta = current - previous
+            if delta >= 0.1 {
+                StatusPillView(
+                    "en hausse", systemImage: "arrow.up.right",
+                    container: palette.successContainer, content: palette.onSuccessContainer)
+            } else if delta <= -0.1 {
+                StatusPillView(
+                    "en baisse", systemImage: "arrow.down.right",
+                    container: palette.surfaceContainerHighest, content: palette.onSurfaceVariant)
+            } else {
+                StatusPillView(
+                    "stable", systemImage: "equal",
+                    container: palette.surfaceContainerHighest, content: palette.onSurfaceVariant)
+            }
+        }
+    }
+
+    private func fmt(_ value: Double?) -> String {
+        guard let value else { return "—" }
+        return String(format: "%.1f", value).replacingOccurrences(of: ".", with: ",")
     }
 }

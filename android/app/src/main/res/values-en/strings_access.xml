@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Unlock (§6.13) and first run (§6.14). -->
+<resources>
+
+    <!-- ================================ Unlock =============================== -->
+    <string name="access_unlock_welcome">Good to see you again</string>
+    <!-- Read out on every digit: the pips carry no text of their own. -->
+    <string name="access_unlock_pin_progress">%1$d of 4 digits</string>
+    <string name="access_unlock_locked_title">Let\'s take a breath</string>
+    <string name="access_unlock_locked_body">Too many tries in a row. Try again in %1$s.</string>
+    <plurals name="access_unlock_attempts_left">
+        <item quantity="one">%1$d try left before the vault erases itself.</item>
+        <item quantity="other">%1$d tries left before the vault erases itself.</item>
+    </plurals>
+    <string name="access_unlock_wrong_pin">That code doesn\'t match.</string>
+
+    <string name="access_duration_s">%1$ds</string>
+    <string name="access_duration_min_s">%1$dm %2$ds</string>
+    <string name="access_duration_h_min">%1$dh %2$dm</string>
+
+    <!-- =============================== First run ============================= -->
+    <string name="access_onboarding_skip">Skip</string>
+    <string name="access_onboarding_progress_cd">Step %1$d of 3</string>
+    <string name="access_onboarding_back_cd">Go back</string>
+    <string name="access_onboarding_skip_confirm_title">Skip setup?</string>
+    <string name="access_onboarding_skip_confirm_body">The app will open without a code. Your data stays encrypted on the device, and you can add a code whenever you like from Settings.</string>
+    <string name="access_onboarding_skip_confirm_yes">Skip anyway</string>
+
+    <!-- Step 1 — a question about your situation, not a technical choice. -->
+    <string name="access_onboarding_who_title">Who might pick up your phone?</string>
+    <string name="access_onboarding_who_body">One question, and the app configures itself. You can change all of it later.</string>
+    <string name="access_onboarding_who_calm_title">Nobody, I\'m fine</string>
+    <string name="access_onboarding_who_calm_body">Opens right away. Your data stays encrypted on the device.</string>
+    <string name="access_onboarding_who_close_title">People around me, sometimes</string>
+    <string name="access_onboarding_who_close_body">Fingerprint or face every time you open it.</string>
+    <string name="access_onboarding_who_forced_title">Someone could make me open it</string>
+    <string name="access_onboarding_who_forced_body">A secret phrase, a second code that opens an ordinary notes app, and a disguised icon.</string>
+    <string name="access_onboarding_who_forced_endorsement">Recommended if you\'re unsure</string>
+    <string name="access_onboarding_manual">Set it up manually</string>
+
+    <!-- Step 2 — what you want to track. -->
+    <string name="access_onboarding_track_title">What do you want to track?</string>
+    <string name="access_onboarding_track_body">Tick whatever speaks to you. Nothing is final: it all stays adjustable.</string>
+    <string name="access_onboarding_modules_section">What the app follows for you</string>
+    <string name="access_onboarding_first_med_section">Your first treatment</string>
+    <string name="access_onboarding_first_med_body">If you take one. Otherwise leave it blank and carry on.</string>
+    <string name="access_onboarding_first_med_remind">Remind me every day</string>
+    <string name="access_onboarding_reminders_section">Small nudges</string>
+    <string name="access_onboarding_reminder_labs">Remember my blood work</string>
+    <string name="access_onboarding_reminder_labs_sub">Every 90 days</string>
+    <string name="access_onboarding_reminder_photos">My progress photo</string>
+    <string name="access_onboarding_reminder_photos_sub">Every 30 days</string>
+    <string name="access_onboarding_reminder_voice">A clip of my voice</string>
+    <string name="access_onboarding_reminder_voice_sub">Every 30 days</string>
+
+    <!-- Step 3 — how it looks. -->
+    <string name="access_onboarding_look_title">How should it look?</string>
+    <string name="access_onboarding_look_body">Pick a mood. It applies straight away, so try a few.</string>
+    <string name="access_onboarding_ready_title">All set ✓</string>
+    <string name="access_onboarding_ready_body">You can start now. Every option stays editable in Settings.</string>
+    <string name="access_onboarding_start">Let\'s go</string>
+
+    <plurals name="access_unlock_attempts_left_neutral">
+        <item quantity="one">%1$d try left before the data is erased.</item>
+        <item quantity="other">%1$d tries left before the data is erased.</item>
+    </plurals>
+</resources>

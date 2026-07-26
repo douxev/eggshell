@@ -1,8 +1,17 @@
 package com.douxev.eggshell.ui.hormones
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.douxev.eggshell.R
+
+/**
+ * Filter chips of the Mesures zone. The refonte keeps two distinct species
+ * (D4): the selector chip at radius 10, and the period pill at radius 100.
+ * Harmonising them would make a filter indistinguishable from a period.
+ */
+internal val MeasureChipShape = RoundedCornerShape(10.dp)
 
 object HormoneCatalog {
     /** Analytes surfaced in the Hormones tab. Weight uses the same storage

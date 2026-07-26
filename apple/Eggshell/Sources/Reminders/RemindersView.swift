@@ -1,15 +1,13 @@
 import SwiftUI
 import TransitionCore
 
-// Pushed settings screen (Route.reminders). Mirrors android RemindersScreen:
-//   1. active medication schedules — pause/resume, tap-to-edit,
-//   2. lab / photo / voice / journal reminders (LabReminderStore) — add /
-//      edit / delete,
-//   3. notification content mode (générique / nom / alias) + per-med alias,
-//   4. priority (heads-up) toggle,
-//   5. read-only recap of upcoming appointment reminders (managed in RDV tab).
-// After any content change we ask AppState to re-schedule med notifications;
-// after any lab change we re-schedule lab notifications.
+// The reminders hub, reached from the « Rappels » section of Réglages.
+//
+// The refonte moved the *content* of a notification up a level — the three chips
+// and the lock-screen preview live in Réglages now — and left the CRUD here: the
+// medication schedules, the lab / photo / voice / journal reminders, the
+// per-treatment aliases and the priority switch. Everything the app can notify
+// you about, in one place (D5).
 
 @MainActor
 final class RemindersViewModel: ObservableObject {
@@ -17,7 +15,7 @@ final class RemindersViewModel: ObservableObject {
     @Published var schedules: [DoseSchedule] = []
     @Published var medsById: [Int64: Medication] = [:]
     /// Upcoming one-shot appointment reminders — read-only here, managed from
-    /// the RDV tab. Listed so this screen shows every notification the app
+    /// Rendez-vous. Listed so this screen really shows every notification the app
     /// may fire.
     @Published var appointmentReminders: [Appointment] = []
     @Published var error: String?
@@ -27,7 +25,8 @@ final class RemindersViewModel: ObservableObject {
         do {
             let meds = try await session.listMedications(includeArchived: true)
             medsById = Dictionary(uniqueKeysWithValues: meds.map { ($0.id, $0) })
-            schedules = try await session.listActiveSchedules().sorted { $0.nextDueAtMs < $1.nextDueAtMs }
+            schedules = try await session.listActiveSchedules()
+                .sorted { $0.nextDueAtMs < $1.nextDueAtMs }
             let now = Time.nowMs()
             appointmentReminders = try await session.listAppointments()
                 .filter { ($0.reminderAtMs ?? 0) > now }
@@ -40,8 +39,8 @@ final class RemindersViewModel: ObservableObject {
 
     func medName(_ id: Int64) -> String { medsById[id]?.name ?? "Traitement" }
 
-    /// Medications that have at least one active schedule (the only ones whose
-    /// alias affects a real reminder).
+    /// Medications that have at least one active schedule — the only ones whose
+    /// alias affects a real reminder.
     var aliasableMeds: [Medication] {
         let ids = Set(schedules.map(\.medicationId))
         return ids.compactMap { medsById[$0] }.sorted { $0.name < $1.name }
@@ -51,7 +50,9 @@ final class RemindersViewModel: ObservableObject {
         do {
             try await session.setScheduleActive(schedule.id, active)
             await load(session)
-        } catch { self.error = describe(error) }
+        } catch {
+            self.error = describe(error)
+        }
     }
 }
 
@@ -61,54 +62,64 @@ struct RemindersView: View {
     @Environment(\.palette) private var palette
     @StateObject private var vm = RemindersViewModel()
 
-    // Notification-content settings live in NotifPrefs (plain UserDefaults), not
-    // in @Published state, so we mirror them into local @State for live UI.
-    @State private var contentMode: NotifContentMode = NotifPrefs.contentMode
+    /// Notification priority lives in `NotifPrefs` (plain UserDefaults), not in
+    /// published state, so it is mirrored into local state for live UI.
     @State private var highPriority: Bool = NotifPrefs.highPriority
+    @State private var contentMode: NotifContentMode = NotifPrefs.contentMode
 
-    // Lab-reminder editor sheet target (nil = closed).
     @State private var labEditor: LabEditorTarget?
-    // Med schedule pending delete confirmation.
     @State private var confirmPause: DoseSchedule?
-    // Med schedule being edited (sheet with the full schedule form).
     @State private var editingSchedule: ScheduleEditTarget?
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.l) {
-                // Spinner only on first load — reloads (e.g. after the edit
-                // sheet closes) keep the sections on screen instead of
-                // flashing the whole page blank.
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                Text("Tout ce que l'app peut te notifier, au même endroit. Le contenu affiché se règle depuis Réglages.")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // Skeletons on first load only: a reload after the edit sheet
+                // closes keeps the sections on screen instead of blanking them.
                 if vm.loading && vm.schedules.isEmpty {
-                    ProgressView().tint(palette.primary).frame(maxWidth: .infinity).padding()
+                    SkeletonBlock(height: 140, cornerRadius: Radius.card)
+                    SkeletonBlock(height: 120, cornerRadius: Radius.card)
                 } else {
                     medicationsSection
-                    labSection(kind: LabReminderKind.lab,
-                               title: "Bilans sanguins",
-                               hint: "Un rappel récurrent pour vos prises de sang.",
-                               addLabel: "Ajouter un bilan")
-                    labSection(kind: LabReminderKind.photo,
-                               title: "Photos de suivi",
-                               hint: "Un rappel pour votre journal photo.",
-                               addLabel: "Ajouter un rappel photo")
-                    labSection(kind: LabReminderKind.voice,
-                               title: "Suivi de la voix",
-                               hint: "Un rappel pour enregistrer un clip vocal.",
-                               addLabel: "Ajouter un rappel voix")
-                    labSection(kind: LabReminderKind.journal,
-                               title: "Journal d'humeur",
-                               hint: "Un rappel pour noter ton humeur du jour.",
-                               addLabel: "Ajouter un rappel journal")
-                    contentModeSection
+                    labSection(
+                        kind: LabReminderKind.lab,
+                        title: "BILANS SANGUINS",
+                        hint: "Un rappel récurrent pour tes prises de sang.",
+                        addLabel: "Ajouter un bilan")
+                    labSection(
+                        kind: LabReminderKind.photo,
+                        title: "PHOTOS DE SUIVI",
+                        hint: "Un rappel pour ton journal photo.",
+                        addLabel: "Ajouter un rappel photo")
+                    labSection(
+                        kind: LabReminderKind.voice,
+                        title: "SUIVI DE LA VOIX",
+                        hint: "Un rappel pour enregistrer un extrait vocal.",
+                        addLabel: "Ajouter un rappel voix")
+                    labSection(
+                        kind: LabReminderKind.journal,
+                        title: "JOURNAL D'HUMEUR",
+                        hint: "Un rappel pour noter ton humeur du jour.",
+                        addLabel: "Ajouter un rappel journal")
+                    aliasSection
                     prioritySection
                     appointmentsSection
                 }
-                if let e = vm.error { ErrorBanner(message: e) }
+                if let message = vm.error { ErrorCardView(message) }
+                Color.clear.frame(height: Spacing.s)
             }
-            .padding(Spacing.l)
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.top, Spacing.s)
         }
+        .background(palette.surface.ignoresSafeArea())
         .navigationTitle("Rappels")
-        .task { if let s = app.session { await vm.load(s) } }
+        .navigationBarTitleDisplayMode(.inline)
+        .task { if let session = app.session { await vm.load(session) } }
         .sheet(item: $labEditor) { target in
             LabReminderEditor(target: target) { saved in
                 labReminders.upsert(saved)
@@ -119,23 +130,25 @@ struct RemindersView: View {
             }
         }
         .sheet(item: $editingSchedule, onDismiss: {
-            // The edit form saves through its own path; reload so the list
-            // (cadence, label) reflects any change.
-            if let s = app.session { Task { await vm.load(s) } }
+            // The edit form saves through its own path; reload so the cadence and
+            // label shown here reflect any change.
+            if let session = app.session { Task { await vm.load(session) } }
         }) { target in
             NavigationStack {
                 AddScheduleView(medicationId: target.schedule.medicationId,
                                 editScheduleId: target.schedule.id)
             }
         }
-        .alert("Suspendre ce planning ?", isPresented: confirmPauseBinding, presenting: confirmPause) { s in
+        .alert("Suspendre ce planning ?", isPresented: confirmPauseBinding, presenting: confirmPause) { schedule in
             Button("Suspendre", role: .destructive) {
-                if let session = app.session { Task { await vm.setActive(s, false, session: session) } }
+                if let session = app.session {
+                    Task { await vm.setActive(schedule, false, session: session) }
+                }
                 confirmPause = nil
             }
             Button("Annuler", role: .cancel) { confirmPause = nil }
         } message: { _ in
-            Text("Le rappel ne se déclenchera plus tant que vous ne le réactivez pas.")
+            Text("Le rappel ne se déclenchera plus tant que tu ne le réactives pas.")
         }
     }
 
@@ -143,164 +156,162 @@ struct RemindersView: View {
         Binding(get: { confirmPause != nil }, set: { if !$0 { confirmPause = nil } })
     }
 
-    // MARK: - Medications
+    // MARK: - Médics
 
     private var medicationsSection: some View {
-        SectionCard {
-            Text("Médics").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            Text("Tes plannings de traitements actifs. Mets un rappel en pause sans supprimer le planning.")
-                .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            SectionTitleView("MÉDICS")
             if vm.schedules.isEmpty {
-                Text("Aucun planning actif").font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.6))
+                EmptyStateView("Aucun planning actif pour l'instant. Ajoute un rappel depuis la fiche d'un traitement.")
             } else {
-                ForEach(vm.schedules, id: \.id) { s in
-                    HStack(spacing: Spacing.m) {
-                        // Tap the row to edit the schedule in place; the pause
-                        // button stays its own tap target.
-                        Button {
-                            editingSchedule = ScheduleEditTarget(schedule: s)
-                        } label: {
-                            HStack(spacing: Spacing.m) {
-                                Image(systemName: medIcon(s)).font(.title3).foregroundStyle(palette.primary)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(vm.medName(s.medicationId)).font(.eggCallout).foregroundStyle(palette.onSurface)
-                                    Text(scheduleSubtitle(s)).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
-                                }
-                                Spacer()
+                ListGroup {
+                    ForEach(Array(vm.schedules.enumerated()), id: \.element.id) { index, schedule in
+                        HStack(spacing: 0) {
+                            ListRowView(
+                                title: vm.medName(schedule.medicationId),
+                                subtitle: scheduleSubtitle(schedule),
+                                systemImage: medIcon(schedule),
+                                action: { editingSchedule = ScheduleEditTarget(schedule: schedule) })
+                            Button { confirmPause = schedule } label: {
+                                Text("Suspendre")
+                                    .font(EggFont.label)
+                                    .foregroundStyle(palette.primary)
+                                    .padding(.trailing, Metrics.screenMargin)
+                                    .frame(minHeight: Metrics.touchTarget)
+                                    .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                        Button("Suspendre") { confirmPause = s }
-                            .glassButton().tint(palette.primary)
+                        if index != vm.schedules.count - 1 {
+                            Rectangle()
+                                .fill(palette.outlineVariant)
+                                .frame(height: 1)
+                                .padding(.leading, ListRowView.separatorInset)
+                        }
                     }
                 }
             }
         }
     }
 
-    private func medIcon(_ s: DoseSchedule) -> String {
-        guard let route = vm.medsById[s.medicationId]?.route else { return "pills" }
+    private func medIcon(_ schedule: DoseSchedule) -> String {
+        guard let route = vm.medsById[schedule.medicationId]?.route else { return "pills" }
         if MedCatalog.isInjection(route) { return "syringe" }
         if route == "transdermal" || route == "topical" { return "bandage" }
         return "pills"
     }
 
-    /// Cadence plus the schedule's optional custom label, mirroring android:
-    /// «Tous les jours à 8:00 · « Aller chercher le traitement »».
-    private func scheduleSubtitle(_ s: DoseSchedule) -> String {
-        let cadence = NextDueCalculator.describe(s)
-        if let label = s.label?.trimmingCharacters(in: .whitespaces), !label.isEmpty {
+    /// Cadence plus the schedule's optional custom label:
+    /// « Tous les jours à 8:00 · « Aller chercher le traitement » ».
+    private func scheduleSubtitle(_ schedule: DoseSchedule) -> String {
+        let cadence = NextDueCalculator.describe(schedule)
+        if let label = schedule.label?.trimmingCharacters(in: .whitespaces), !label.isEmpty {
             return "\(cadence) · « \(label) »"
         }
         return cadence
     }
 
-    // MARK: - Lab / photo / voice
+    // MARK: - Analyses / photo / voix / journal
 
     @ViewBuilder
-    private func labSection(kind: String, title: String, hint: String, addLabel: String) -> some View {
-        let items = labReminders.items.filter { $0.kind == kind }.sorted { $0.nextDueMs < $1.nextDueMs }
-        SectionCard {
-            Text(title).font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            Text(hint).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+    private func labSection(
+        kind: String,
+        title: String,
+        hint: String,
+        addLabel: String
+    ) -> some View {
+        let items = labReminders.items
+            .filter { $0.kind == kind }
+            .sorted { $0.nextDueMs < $1.nextDueMs }
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            SectionTitleView(title, action: "Ajouter", onAction: { labEditor = .new(kind: kind) })
             if items.isEmpty {
-                Text("Aucun rappel").font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.6))
+                EmptyStateView(hint, actionLabel: addLabel, action: { labEditor = .new(kind: kind) })
             } else {
-                ForEach(items) { r in
-                    labRow(r)
-                }
-            }
-            Button {
-                labEditor = .new(kind: kind)
-            } label: {
-                Label(addLabel, systemImage: "plus")
-            }
-            .glassButton().tint(palette.primary)
-        }
-    }
-
-    private func labRow(_ r: LabReminder) -> some View {
-        HStack(spacing: Spacing.m) {
-            Image(systemName: LabReminderKind.systemImage(r.kind)).font(.title3).foregroundStyle(palette.primary)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(r.label).font(.eggCallout).foregroundStyle(palette.onSurface)
-                Text(intervalLabel(r)).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
-            }
-            Spacer()
-            Button { labEditor = .edit(r) } label: {
-                Image(systemName: "pencil").foregroundStyle(palette.primary)
-            }
-            .buttonStyle(.plain)
-            Button {
-                labReminders.delete(id: r.id)
-                Task { await NotificationManager.scheduleLabReminders(labReminders.items) }
-            } label: {
-                Image(systemName: "trash").foregroundStyle(palette.error)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private func intervalLabel(_ r: LabReminder) -> String {
-        let suffix = r.enabled ? "" : " · désactivé"
-        return "Tous les \(max(1, r.intervalDays)) j" + suffix
-    }
-
-    // MARK: - Content mode
-
-    private var contentModeSection: some View {
-        SectionCard {
-            Text("Contenu des notifications").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            Text("Ce qu'un rappel de traitement révèle. Par défaut, rien n'apparaît sur l'écran verrouillé.")
-                .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
-            ForEach(NotifContentMode.allCases) { mode in
-                Button {
-                    contentMode = mode
-                    NotifPrefs.contentMode = mode
-                    Task { await app.refreshNotifications() }
-                } label: {
-                    HStack(alignment: .top, spacing: Spacing.m) {
-                        Image(systemName: contentMode == mode ? "largecircle.fill.circle" : "circle")
-                            .foregroundStyle(contentMode == mode ? palette.primary : palette.outline)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(mode.label).font(.eggCallout).foregroundStyle(palette.onSurface)
-                            Text(mode.detail).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+                ListGroup {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, reminder in
+                        HStack(spacing: 0) {
+                            ListRowView(
+                                title: reminder.label,
+                                subtitle: intervalLabel(reminder),
+                                systemImage: LabReminderKind.systemImage(reminder.kind),
+                                action: { labEditor = .edit(reminder) })
+                            Button {
+                                labReminders.delete(id: reminder.id)
+                                Task {
+                                    await NotificationManager.scheduleLabReminders(labReminders.items)
+                                }
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(palette.error)
+                                    .padding(.trailing, Metrics.screenMargin)
+                                    .frame(minHeight: Metrics.touchTarget)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Supprimer « \(reminder.label) »")
                         }
-                        Spacer()
+                        if index != items.count - 1 {
+                            Rectangle()
+                                .fill(palette.outlineVariant)
+                                .frame(height: 1)
+                                .padding(.leading, ListRowView.separatorInset)
+                        }
                     }
                 }
-                .buttonStyle(.plain)
-            }
-            if contentMode == .alias {
-                aliasEditors
             }
         }
     }
 
-    @ViewBuilder
-    private var aliasEditors: some View {
-        Divider().overlay(palette.outlineVariant)
-        Text("Alias par traitement").font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
-        if vm.aliasableMeds.isEmpty {
-            Text("Aucun traitement avec un planning actif").font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.5))
-        } else {
-            ForEach(vm.aliasableMeds, id: \.id) { med in
-                AliasField(medId: med.id, realName: med.name) {
-                    Task { await app.refreshNotifications() }
+    private func intervalLabel(_ reminder: LabReminder) -> String {
+        let suffix = reminder.enabled ? "" : " · désactivé"
+        return "Tous les \(max(1, reminder.intervalDays)) j" + suffix
+    }
+
+    // MARK: - Alias par traitement
+
+    /// An alias is a decoy label the user picked, so it can live in plain storage —
+    /// that is the whole point. It only reaches a lock screen when the content
+    /// mode in Réglages is set to « Alias ».
+    private var aliasSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            SectionTitleView("ALIAS PAR TRAITEMENT")
+            EggCard(variant: .low, spacing: Spacing.m) {
+                Text(contentMode == .alias
+                    ? "Ces surnoms s'affichent à la place du vrai nom sur l'écran verrouillé."
+                    : "Ces surnoms ne s'afficheront que si tu choisis « Alias » dans Réglages.")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
+                if vm.aliasableMeds.isEmpty {
+                    Text("Aucun traitement avec un planning actif.")
+                        .font(EggFont.bodyS)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                } else {
+                    ForEach(vm.aliasableMeds, id: \.id) { med in
+                        AliasField(medId: med.id, realName: med.name) {
+                            Task { await app.refreshNotifications() }
+                        }
+                    }
                 }
             }
         }
     }
 
-    // MARK: - Priority
+    // MARK: - Priorité
 
     private var prioritySection: some View {
-        SectionCard {
+        EggCard(variant: .low, spacing: Spacing.s) {
             Toggle(isOn: priorityBinding) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Rappels prioritaires").font(.eggCallout).foregroundStyle(palette.onSurface)
+                    Text("Rappels prioritaires")
+                        .font(.eggBody)
+                        .foregroundStyle(palette.onSurface)
                     Text("Notification proéminente (bannière, son) plutôt que silencieuse.")
-                        .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+                        .font(EggFont.bodyS)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .tint(palette.primary)
@@ -320,31 +331,21 @@ struct RemindersView: View {
             })
     }
 
-    // MARK: - Appointments (read-only recap)
+    // MARK: - Rendez-vous (récapitulatif)
 
-    // Upcoming appointment reminders — read-only so this screen really lists
-    // everything the app may fire; editing stays in the RDV tab where the
-    // full appointment form lives.
     private var appointmentsSection: some View {
-        SectionCard {
-            Text("Rendez-vous").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            Text("Rappels ponctuels de tes prochains RDV. Ils se gèrent depuis l'onglet RDV.")
-                .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            SectionTitleView("RENDEZ-VOUS")
             if vm.appointmentReminders.isEmpty {
-                Text("Aucun rappel de rendez-vous à venir.")
-                    .font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.6))
+                EmptyStateView("Aucun rappel de rendez-vous à venir. Ils se règlent depuis la fiche du rendez-vous.")
             } else {
-                ForEach(vm.appointmentReminders, id: \.id) { appt in
-                    HStack(spacing: Spacing.m) {
-                        Image(systemName: "calendar").font(.title3).foregroundStyle(palette.primary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(appointmentTitle(appt)).font(.eggCallout).foregroundStyle(palette.onSurface)
-                            if let ms = appt.reminderAtMs {
-                                Text(reminderDateLabel(ms))
-                                    .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
-                            }
-                        }
-                        Spacer()
+                ListGroup {
+                    ForEach(Array(vm.appointmentReminders.enumerated()), id: \.element.id) { index, appt in
+                        ListRowView(
+                            title: appointmentTitle(appt),
+                            subtitle: appt.reminderAtMs.map { reminderDateLabel($0) } ?? "",
+                            systemImage: "calendar",
+                            showsSeparator: index != vm.appointmentReminders.count - 1)
                     }
                 }
             }
@@ -366,8 +367,8 @@ struct RemindersView: View {
     }
 }
 
-// Sheet target wrapping the schedule to edit (DoseSchedule itself is not
-// Identifiable, which .sheet(item:) requires).
+// Sheet target wrapping the schedule to edit (`DoseSchedule` is not Identifiable,
+// which `.sheet(item:)` requires).
 private struct ScheduleEditTarget: Identifiable {
     let schedule: DoseSchedule
     var id: Int64 { schedule.id }
@@ -375,7 +376,7 @@ private struct ScheduleEditTarget: Identifiable {
 
 // MARK: - Alias field
 
-/// One per-medication alias text field. Reads/writes NotifPrefs directly and
+/// One per-medication alias text field. Reads and writes `NotifPrefs` directly and
 /// notifies the parent on commit so it can re-schedule notifications.
 private struct AliasField: View {
     @Environment(\.palette) private var palette
@@ -385,14 +386,24 @@ private struct AliasField: View {
     @State private var text: String = ""
 
     var body: some View {
-        HStack(spacing: Spacing.m) {
-            Image(systemName: "tag").foregroundStyle(palette.tertiary)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(realName)
+                .font(EggFont.bodyS)
+                .foregroundStyle(palette.onSurfaceVariant)
             TextField("Surnom (ex : Vitamines)", text: $text)
-                .textFieldStyle(.roundedBorder)
+                .font(.eggBody)
+                .foregroundStyle(palette.onSurface)
+                .padding(.horizontal, Spacing.m)
+                .padding(.vertical, 10)
+                .frame(minHeight: Metrics.touchTarget)
+                .background(
+                    palette.surfaceContainerHigh,
+                    in: RoundedRectangle(cornerRadius: Radius.field, style: .continuous))
                 .onSubmit { commit() }
         }
         .onAppear { text = NotifPrefs.alias(for: medId) ?? "" }
         .onChange(of: text) { _, _ in commit() }
+        .accessibilityLabel("Surnom de \(realName)")
     }
 
     private func commit() {
@@ -409,13 +420,13 @@ private enum LabEditorTarget: Identifiable {
 
     var id: String {
         switch self {
-        case .new(let kind):  return "new-\(kind)"
-        case .edit(let r):    return "edit-\(r.id)"
+        case .new(let kind):    return "new-\(kind)"
+        case .edit(let saved):  return "edit-\(saved.id)"
         }
     }
 }
 
-/// Create/edit a lab/photo/voice reminder (label + interval in days + enabled).
+/// Create or edit a lab / photo / voice / journal reminder.
 private struct LabReminderEditor: View {
     @Environment(\.palette) private var palette
     let target: LabEditorTarget
@@ -435,23 +446,23 @@ private struct LabReminderEditor: View {
             _label = State(initialValue: LabReminderKind.label(kind))
             _daysStr = State(initialValue: "90")
             _enabled = State(initialValue: true)
-        case .edit(let r):
-            _label = State(initialValue: r.label)
-            _daysStr = State(initialValue: String(r.intervalDays))
-            _enabled = State(initialValue: r.enabled)
+        case .edit(let saved):
+            _label = State(initialValue: saved.label)
+            _daysStr = State(initialValue: String(saved.intervalDays))
+            _enabled = State(initialValue: saved.enabled)
         }
     }
 
     private var kind: String {
         switch target {
-        case .new(let kind): return kind
-        case .edit(let r):   return r.kind
+        case .new(let kind):   return kind
+        case .edit(let saved): return saved.kind
         }
     }
 
     private var canSave: Bool {
-        !label.trimmingCharacters(in: .whitespaces).isEmpty &&
-        (Int(daysStr).map { $0 > 0 } ?? false)
+        !label.trimmingCharacters(in: .whitespaces).isEmpty
+            && (Int(daysStr).map { $0 > 0 } ?? false)
     }
 
     var body: some View {
@@ -482,6 +493,8 @@ private struct LabReminderEditor: View {
                 }
             }
         }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 
     private var title: String {

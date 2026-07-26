@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Photos et Voix — refonte ergonomique, handoff §6.10 et §6.11.
+  Les libellés en petites capitales sont écrits en majuscules dans la chaîne,
+  jamais via une transformation : une traduction doit pouvoir en décider.
+  Les titres d’écran réutilisent module_photos / module_voix du lanceur.
+-->
+<resources>
+
+    <!-- ================= Photos (§6.10) ================= -->
+    <string name="media_photos_section">Tes photos</string>
+    <string name="media_photos_add">Ajouter une photo</string>
+
+    <!-- Comparaison : légendes des deux vignettes -->
+    <string name="media_photos_before">AVANT · %1$s</string>
+    <string name="media_photos_now">MAINTENANT · %1$s</string>
+
+    <!-- Carte d’écart entre les deux clichés comparés -->
+    <plurals name="media_photos_span_months">
+        <item quantity="one">%d mois</item>
+        <item quantity="other">%d mois</item>
+    </plurals>
+    <plurals name="media_photos_span_days">
+        <item quantity="one">%d jour</item>
+        <item quantity="other">%d jours</item>
+    </plurals>
+    <plurals name="media_photos_span_sub">
+        <item quantity="one">entre ces deux photos · %d cliché au total</item>
+        <item quantity="other">entre ces deux photos · %d clichés au total</item>
+    </plurals>
+
+    <string name="media_photos_privacy">Tes photos vivent dans le coffre chiffré, jamais dans la galerie du téléphone. Les captures d’écran sont bloquées sur cet écran.</string>
+
+    <string name="media_photos_empty">Aucun cliché pour l’instant. Ajoute le premier : il part directement dans le coffre, jamais dans ta galerie.</string>
+    <string name="media_photos_compare_empty">Il faut deux clichés pour voir un chemin. Ajoutes-en un second et la comparaison s’affiche ici.</string>
+
+    <string name="media_photos_open">Ouvrir la photo du %1$s</string>
+    <string name="media_photos_photo">Photo du %1$s</string>
+    <string name="media_photos_viewer_close">Fermer</string>
+
+    <string name="media_photos_delete_title">Supprimer cette photo ?</string>
+    <string name="media_photos_delete_body">Elle sera effacée du coffre, et ça ne se rattrape pas.</string>
+    <string name="media_photos_deleted">Photo supprimée</string>
+    <string name="media_photos_save_failed">Impossible d’écrire dans la galerie du téléphone. La photo reste dans le coffre.</string>
+
+    <!-- ================= Voix (§6.11) ================= -->
+    <string name="media_voice_pitch_label">HAUTEUR MOYENNE · %1$s</string>
+    <string name="media_voice_hz">Hz</string>
+    <string name="media_voice_pitch">%1$d Hz</string>
+    <string name="media_voice_pitch_unknown">—</string>
+    <string name="media_voice_pitch_unknown_cd">Hauteur non détectée</string>
+
+    <!-- Pilule de delta : le glyphe et le mot portent l’info, jamais la couleur seule -->
+    <string name="media_voice_delta_glyph_up">↗</string>
+    <string name="media_voice_delta_glyph_down">↘</string>
+    <string name="media_voice_delta_glyph_flat">→</string>
+    <string name="media_voice_delta_up">+%1$d Hz</string>
+    <string name="media_voice_delta_down">−%1$d Hz</string>
+    <string name="media_voice_delta_flat">0 Hz</string>
+    <string name="media_voice_delta_up_cd">%1$d Hz de plus que ton premier extrait</string>
+    <string name="media_voice_delta_down_cd">%1$d Hz de moins que ton premier extrait</string>
+    <string name="media_voice_delta_flat_cd">Même hauteur qu’à ton premier extrait</string>
+
+    <plurals name="media_voice_clips_unit">
+        <item quantity="one">enregistrement</item>
+        <item quantity="other">enregistrements</item>
+    </plurals>
+    <string name="media_voice_trend_hint">Encore un enregistrement et la courbe démarre.</string>
+    <string name="media_voice_sparkline_cd">Hauteur de ta voix sur %1$d enregistrements, de %2$d à %3$d Hz</string>
+
+    <!-- Magnétophone : Repos → Enregistrement → Traitement -->
+    <string name="media_voice_record_title">Enregistrer 30 secondes</string>
+    <string name="media_voice_record_sub">Pièce calme, même paragraphe, téléphone à 30 cm — c’est ce qui rend la courbe comparable.</string>
+    <string name="media_voice_recording_title">Enregistrement · %1$s</string>
+    <string name="media_voice_recording_sub">Prends ton temps, lis jusqu’au bout. Appuie de nouveau quand tu as fini.</string>
+    <string name="media_voice_processing_title">Un instant, on met ça au coffre</string>
+    <string name="media_voice_processing_sub">La hauteur est mesurée, puis l’audio est chiffré. Quelques secondes, pas plus.</string>
+
+    <string name="media_voice_section_clips">Tes enregistrements</string>
+    <string name="media_voice_empty">Aucun extrait pour l’instant. Enregistre-toi une première fois : ce sera ton point de départ.</string>
+    <string name="media_voice_empty_action">Enregistrer maintenant</string>
+
+    <string name="media_voice_delete_title">Supprimer cet extrait ?</string>
+    <string name="media_voice_delete_body">Il sera effacé du coffre, et ça ne se rattrape pas.</string>
+    <string name="media_voice_deleted">Extrait supprimé</string>
+
+    <string name="media_voice_mic_denied">Sans accès au micro, impossible d’enregistrer. Tu peux l’autoriser dans les réglages du téléphone.</string>
+    <string name="media_voice_error">L’enregistrement s’est interrompu. Vérifie que rien d’autre n’utilise le micro, puis recommence.</string>
+    <string name="media_voice_error_retry">Recommencer</string>
+
+</resources>

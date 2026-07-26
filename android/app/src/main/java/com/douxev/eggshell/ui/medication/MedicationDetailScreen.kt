@@ -1,51 +1,72 @@
 package com.douxev.eggshell.ui.medication
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.text.DateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.time.format.TextStyle
+import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,41 +74,166 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.MedicationRepository
+import com.douxev.eggshell.data.PlannedDoses
 import com.douxev.eggshell.data.ScheduleRepository
+import com.douxev.eggshell.punctuality.DoseTiming
+import com.douxev.eggshell.punctuality.exactLabel
+import com.douxev.eggshell.punctuality.timingOf
 import com.douxev.eggshell.reminders.MedAliasPrefs
-import uniffi.transition.DoseEvent
+import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.components.ActionBand
+import com.douxev.eggshell.ui.components.CardRule
+import com.douxev.eggshell.ui.components.CardVariant
+import com.douxev.eggshell.ui.components.EggCard
+import com.douxev.eggshell.ui.components.EggFab
+import com.douxev.eggshell.ui.components.EmptyState
+import com.douxev.eggshell.ui.components.IconTile
+import com.douxev.eggshell.ui.components.SectionTitle
+import com.douxev.eggshell.ui.components.SkeletonBlock
+import com.douxev.eggshell.ui.components.StatusPill
+import com.douxev.eggshell.ui.theme.EggDim
+import com.douxev.eggshell.ui.theme.EggShapes
 import uniffi.transition.DoseSchedule
 import uniffi.transition.Medication
 
+/**
+ * Médics — one treatment (handoff §6.5).
+ *
+ * The history is not the raw dose table: it is the schedule's occurrences
+ * paired with what was actually logged, so a dose that never happened still
+ * shows up as a line saying « manquée ». Intakes recorded before this release
+ * carry no planned time and are shown as simply « notée » — we never guess
+ * which occurrence they belonged to (D2).
+ */
 @HiltViewModel
 class MedicationDetailViewModel @Inject constructor(
     state: SavedStateHandle,
     private val repo: MedicationRepository,
     private val schedules: ScheduleRepository,
     private val medAlias: MedAliasPrefs,
+    private val plannedDoses: PlannedDoses,
 ) : ViewModel() {
 
     private val medicationId: Long = state.get<Long>("id") ?: error("missing medication id")
 
+    /** How an intake sits against its prescribed time. */
+    enum class Timing { OnTime, Late, Missed, Skipped, Unlinked }
+
+    /** One line of the history: a real intake, or an occurrence nobody answered. */
+    data class HistoryEntry(
+        val key: String,
+        /** Null for a missed occurrence — there is no dose row to edit. */
+        val doseId: Long?,
+        /** The real time when logged, the planned one when missed. */
+        val atMs: Long,
+        val timing: Timing,
+        val deltaMin: Int?,
+        val dose: Double?,
+        val doseUnit: String?,
+        val route: String?,
+        val injectionSite: String?,
+    )
+
     private val _medication = MutableStateFlow<Medication?>(null)
     val medication: StateFlow<Medication?> = _medication.asStateFlow()
-    private val _doses = MutableStateFlow<List<DoseEvent>>(emptyList())
-    val doses: StateFlow<List<DoseEvent>> = _doses.asStateFlow()
     private val _schedules = MutableStateFlow<List<DoseSchedule>>(emptyList())
     val schedulesState: StateFlow<List<DoseSchedule>> = _schedules.asStateFlow()
     private val _alias = MutableStateFlow<String?>(null)
     val alias: StateFlow<String?> = _alias.asStateFlow()
+    private val _history = MutableStateFlow<List<HistoryEntry>>(emptyList())
+    val history: StateFlow<List<HistoryEntry>> = _history.asStateFlow()
+    private val _loading = MutableStateFlow(true)
+    val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
     init { refresh() }
 
     fun refresh() {
         viewModelScope.launch {
+            _loading.value = true
             _medication.value = runCatching { repo.get(medicationId) }.getOrNull()
-            _doses.value = runCatching { repo.listDoses(medicationId, 0, 50) }.getOrDefault(emptyList())
-            _schedules.value = runCatching { schedules.listForMedication(medicationId, includeInactive = true) }
-                .getOrDefault(emptyList())
+            _schedules.value = runCatching {
+                schedules.listForMedication(medicationId, includeInactive = true)
+            }.getOrDefault(emptyList())
             _alias.value = medAlias.get(medicationId)
+            _history.value = buildHistory()
+            _loading.value = false
         }
+    }
+
+    private suspend fun buildHistory(): List<HistoryEntry> {
+        val now = System.currentTimeMillis()
+        val from = now - WINDOW_MS
+        val doses = runCatching { repo.listDoses(medicationId, 0, HISTORY_LIMIT) }
+            .getOrDefault(emptyList())
+        val window = runCatching {
+            plannedDoses.window(fromMs = from, toMs = now, medicationId = medicationId)
+        }.getOrNull()
+
+        val out = ArrayList<HistoryEntry>()
+        val paired = HashSet<Long>()
+
+        window?.occurrences?.forEach { occurrence ->
+            val event = occurrence.event
+            if (event == null) {
+                out += HistoryEntry(
+                    key = "planned-${occurrence.scheduleId}-${occurrence.plannedAtMs}",
+                    doseId = null,
+                    atMs = occurrence.plannedAtMs,
+                    timing = Timing.Missed,
+                    deltaMin = null,
+                    dose = null,
+                    doseUnit = null,
+                    route = null,
+                    injectionSite = null,
+                )
+            } else {
+                paired += event.id
+                val delta = occurrence.deltaMin
+                out += HistoryEntry(
+                    key = "dose-${event.id}",
+                    doseId = event.id,
+                    atMs = event.takenAtMs,
+                    timing = when (timingOf(delta, MedicationCatalog.ON_TIME_TOLERANCE_MIN)) {
+                        DoseTiming.Late -> Timing.Late
+                        else -> Timing.OnTime
+                    },
+                    deltaMin = delta,
+                    dose = event.dose,
+                    doseUnit = event.doseUnit,
+                    route = event.route,
+                    injectionSite = event.injectionSite,
+                )
+            }
+        }
+
+        // Everything else the vault holds for this treatment: ad-hoc intakes,
+        // declared skips, and the whole pre-punctuality history. They are real
+        // — they just have no prescribed time to be measured against.
+        val missedAt = window?.occurrences?.filter { it.event == null }?.map { it.plannedAtMs }
+            .orEmpty()
+        doses.filterNot { it.id in paired }.forEach { event ->
+            // A declared skip inside the window is already on screen as the
+            // « manquée » occurrence it answered (D2 counts a skip as a miss).
+            // Listing the event too would show the same dose twice.
+            val alreadyShownAsMissed = event.status == "skipped" &&
+                missedAt.any { kotlin.math.abs(it - event.takenAtMs) <= SKIP_MATCH_MS }
+            if (alreadyShownAsMissed) return@forEach
+            out += HistoryEntry(
+                key = "dose-${event.id}",
+                doseId = event.id,
+                atMs = event.takenAtMs,
+                timing = if (event.status == "skipped") Timing.Skipped else Timing.Unlinked,
+                deltaMin = null,
+                dose = event.dose,
+                doseUnit = event.doseUnit,
+                route = event.route,
+                injectionSite = event.injectionSite,
+            )
+        }
+
+        // The card is one block, not a lazy list: cap it so a treatment logged
+        // twice a day for two years can't turn the screen into a wall.
+        return out.sortedByDescending { it.atMs }.take(HISTORY_ROWS)
     }
 
     fun setAlias(alias: String?) {
@@ -122,6 +268,15 @@ class MedicationDetailViewModel @Inject constructor(
         }
     }
 
+    /** Put an archived treatment back in circulation. Stays on the screen: the
+     *  user is looking at it, and the header has to redraw without the notice. */
+    fun unarchive() {
+        viewModelScope.launch {
+            runCatching { repo.setArchived(medicationId, false) }
+            refresh()
+        }
+    }
+
     /** Permanently delete the medication: tear down off-vault reminder state
      *  first (it reads the schedule ids), then delete the row + cascade. Only
      *  navigates away when the delete actually succeeds — otherwise a half-done
@@ -135,9 +290,16 @@ class MedicationDetailViewModel @Inject constructor(
             if (ok) onDeleted() else refresh()
         }
     }
+
+    private companion object {
+        const val WINDOW_MS = 30L * 24L * 60L * 60L * 1000L
+        const val HISTORY_LIMIT = 50L
+        const val HISTORY_ROWS = 60
+        /** How far a declared skip may sit from the occurrence it answered. */
+        const val SKIP_MATCH_MS = 12L * 60L * 60L * 1000L
+    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MedicationDetailScreen(
     onLogDose: () -> Unit,
@@ -149,114 +311,154 @@ fun MedicationDetailScreen(
     vm: MedicationDetailViewModel = hiltViewModel(),
 ) {
     val med by vm.medication.collectAsState()
-    val doses by vm.doses.collectAsState()
     val schedules by vm.schedulesState.collectAsState()
     val alias by vm.alias.collectAsState()
+    val history by vm.history.collectAsState()
+    val loading by vm.loading.collectAsState()
+
     var editingAlias by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
-    var doseToDelete by remember { mutableStateOf<DoseEvent?>(null) }
+    var doseToDelete by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(Unit) { vm.refresh() }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(med?.name ?: stringResource(R.string.med_detail_loading)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onEditMedication) {
-                        Icon(
-                            Icons.Filled.Edit,
-                            contentDescription = stringResource(R.string.action_edit),
-                        )
-                    }
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(
-                            Icons.Filled.MoreVert,
-                            contentDescription = stringResource(R.string.action_more),
-                        )
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.med_archive)) },
-                            leadingIcon = { Icon(Icons.Filled.Archive, contentDescription = null) },
-                            onClick = {
-                                menuOpen = false
-                                vm.archive(onArchived = onBack)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    stringResource(R.string.med_delete),
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Filled.DeleteOutline,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
-                                )
-                            },
-                            onClick = {
-                                menuOpen = false
-                                confirmDelete = true
-                            },
-                        )
-                    }
-                },
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = onLogDose) {
-                Icon(
-                    Icons.Default.Add,
+        containerColor = MaterialTheme.colorScheme.surface,
+        bottomBar = {
+            ActionBand {
+                EggFab(
+                    icon = Icons.Filled.Add,
                     contentDescription = stringResource(R.string.med_log_dose),
+                    onClick = onLogDose,
                 )
             }
         },
     ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(
+                start = EggDim.ScreenMargin,
+                end = EggDim.ScreenMargin,
+                top = 4.dp,
+                bottom = EggDim.BlockGap,
+            ),
+            verticalArrangement = Arrangement.spacedBy(EggDim.BlockGap),
         ) {
-            med?.let { MedHeader(it) }
-            HorizontalDivider()
-
-            AliasRow(alias = alias, onEdit = { editingAlias = true })
-            HorizontalDivider()
-
-            SchedulesSection(
-                schedules = schedules,
-                onAdd = onAddSchedule,
-                onEdit = onEditSchedule,
-                onToggle = vm::toggleSchedule,
-            )
-
-            HorizontalDivider()
-            Text(stringResource(R.string.med_history), style = MaterialTheme.typography.titleMedium)
-            when {
-                doses.isEmpty() -> Text(
-                    stringResource(R.string.med_history_empty),
-                    style = MaterialTheme.typography.bodyMedium,
+            item {
+                ScreenHeader(
+                    title = med?.name ?: stringResource(R.string.med_detail_loading),
+                    onBack = onBack,
+                    actions = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = onEditMedication,
+                                modifier = Modifier.size(EggDim.TouchTarget),
+                            ) {
+                                Icon(
+                                    Icons.Filled.Edit,
+                                    contentDescription = stringResource(R.string.action_edit),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            IconButton(
+                                onClick = { menuOpen = true },
+                                modifier = Modifier.size(EggDim.TouchTarget),
+                            ) {
+                                Icon(
+                                    Icons.Filled.MoreHoriz,
+                                    contentDescription = stringResource(R.string.action_more),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            OverflowMenu(
+                                expanded = menuOpen,
+                                archived = med?.archived == true,
+                                onDismiss = { menuOpen = false },
+                                onArchive = {
+                                    menuOpen = false
+                                    vm.archive(onArchived = onBack)
+                                },
+                                onUnarchive = {
+                                    menuOpen = false
+                                    vm.unarchive()
+                                },
+                                onDelete = {
+                                    menuOpen = false
+                                    confirmDelete = true
+                                },
+                            )
+                        }
+                    },
                 )
-                else -> LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    items(doses, key = { it.id }) { dose ->
-                        DoseRow(
-                            dose,
-                            onEdit = { onEditDose(dose.id) },
-                            onDelete = { doseToDelete = dose },
+            }
+
+            if (loading && med == null) {
+                item { SkeletonBlock(height = 150.dp) }
+                item { SkeletonBlock(height = 120.dp) }
+                item { SkeletonBlock(height = 188.dp) }
+            }
+
+            med?.let { m ->
+                item { IdentityCard(med = m, alias = alias, onEditAlias = { editingAlias = true }) }
+                if (m.archived) {
+                    item {
+                        EggCard(variant = CardVariant.Outlined) {
+                            Text(
+                                stringResource(R.string.meds_archived_notice),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                SectionTitle(
+                    text = stringResource(R.string.meds_schedules),
+                    action = stringResource(R.string.med_add),
+                    onAction = onAddSchedule,
+                )
+            }
+            if (schedules.isEmpty()) {
+                if (!loading) {
+                    item {
+                        EmptyState(
+                            message = stringResource(R.string.schedule_none),
+                            actionLabel = stringResource(R.string.schedule_add),
+                            onAction = onAddSchedule,
                         )
                     }
+                }
+            } else {
+                items(schedules, key = { it.id }) { schedule ->
+                    ScheduleCard(
+                        schedule = schedule,
+                        onClick = { onEditSchedule(schedule.id) },
+                        onToggle = { active -> vm.toggleSchedule(schedule.id, active) },
+                    )
+                }
+            }
+
+            item { SectionTitle(text = stringResource(R.string.med_history)) }
+            item {
+                if (history.isEmpty()) {
+                    if (!loading) {
+                        EmptyState(
+                            message = stringResource(R.string.med_history_empty),
+                            actionLabel = stringResource(R.string.med_log_dose),
+                            onAction = onLogDose,
+                        )
+                    }
+                } else {
+                    HistoryCard(
+                        entries = history,
+                        onEdit = onEditDose,
+                        onDelete = { doseToDelete = it },
+                    )
                 }
             }
         }
@@ -297,14 +499,14 @@ fun MedicationDetailScreen(
         )
     }
 
-    doseToDelete?.let { dose ->
+    doseToDelete?.let { id ->
         AlertDialog(
             onDismissRequest = { doseToDelete = null },
             title = { Text(stringResource(R.string.med_dose_delete_title)) },
             text = { Text(stringResource(R.string.med_dose_delete_message)) },
             confirmButton = {
                 TextButton(onClick = {
-                    vm.deleteDose(dose.id)
+                    vm.deleteDose(id)
                     doseToDelete = null
                 }) {
                     Text(
@@ -323,189 +525,398 @@ fun MedicationDetailScreen(
 }
 
 @Composable
-private fun AliasRow(alias: String?, onEdit: () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(stringResource(R.string.med_alias_section), style = MaterialTheme.typography.titleMedium)
-            Text(
-                alias?.takeIf { it.isNotBlank() } ?: stringResource(R.string.med_alias_none),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+private fun OverflowMenu(
+    expanded: Boolean,
+    archived: Boolean,
+    onDismiss: () -> Unit,
+    onArchive: () -> Unit,
+    onUnarchive: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        if (archived) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.meds_unarchive)) },
+                leadingIcon = { Icon(Icons.Filled.Unarchive, contentDescription = null) },
+                onClick = onUnarchive,
+            )
+        } else {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.med_archive)) },
+                leadingIcon = { Icon(Icons.Filled.Archive, contentDescription = null) },
+                onClick = onArchive,
             )
         }
-        androidx.compose.material3.TextButton(onClick = onEdit) {
-            Text(stringResource(R.string.med_alias_edit))
+        DropdownMenuItem(
+            text = {
+                Text(
+                    stringResource(R.string.med_delete),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            },
+            leadingIcon = {
+                Icon(
+                    Icons.Filled.DeleteOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            },
+            onClick = onDelete,
+        )
+    }
+}
+
+/**
+ * The identity card. Its tile deliberately uses the *strong* `primary` pair
+ * inside a `primaryContainer` card — the inversion is what makes it read as the
+ * subject of the screen rather than one more row.
+ */
+@Composable
+private fun IdentityCard(med: Medication, alias: String?, onEditAlias: () -> Unit) {
+    EggCard(variant = CardVariant.Primary) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val accent: Color? = med.color?.let { Color(it.toInt()) }
+            IconTile(
+                size = 52.dp,
+                shape = IdentityTileShape,
+                container = accent ?: MaterialTheme.colorScheme.primary,
+            ) {
+                Icon(
+                    MedicationCatalog.routeIcon(med.route),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    formatDoseWithUnit(med.defaultDose, med.defaultDoseUnit)
+                        ?.let { stringResource(R.string.meds_dose_per_intake_fmt, it) }
+                        ?: stringResource(R.string.meds_dose_unspecified),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    stringResource(MedicationCatalog.kindLabelRes(med.kind)) +
+                        MedicationCatalog.SEP +
+                        stringResource(MedicationCatalog.routeLabelRes(med.route)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                )
+            }
+        }
+
+        med.notes?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                modifier = Modifier.padding(top = 10.dp),
+            )
+        }
+
+        CardRule(modifier = Modifier.padding(top = 16.dp), alpha = 0.22f)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onEditAlias)
+                .padding(top = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.Notifications,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
+            )
+            Text(
+                stringResource(R.string.meds_alias_row),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                alias?.takeIf { it.isNotBlank() } ?: stringResource(R.string.med_alias_none),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** One schedule: its cadence, its next occurrence, its switch, its wording. */
+@Composable
+private fun ScheduleCard(
+    schedule: DoseSchedule,
+    onClick: () -> Unit,
+    onToggle: (Boolean) -> Unit,
+) {
+    EggCard(
+        variant = CardVariant.Low,
+        padding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
+        onClick = onClick,
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    cadenceText(schedule),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    stringResource(
+                        R.string.schedule_next_due_fmt,
+                        rememberDateTimeText(schedule.nextDueAtMs),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            val toggleLabel = stringResource(R.string.meds_schedule_toggle)
+            Switch(
+                checked = schedule.active,
+                onCheckedChange = onToggle,
+                modifier = Modifier.semantics { contentDescription = toggleLabel },
+            )
+        }
+
+        CardRule(modifier = Modifier.padding(top = 14.dp))
+        Row(
+            modifier = Modifier.padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.EditNote,
+                contentDescription = null,
+                modifier = Modifier.size(17.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                stringResource(R.string.meds_reminder_text),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                stringResource(
+                    R.string.meds_quoted_fmt,
+                    schedule.label?.takeIf { it.isNotBlank() }
+                        ?: stringResource(R.string.reminder_title),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+/** « Chaque jour à 08:00 » and its two siblings — the three kinds the core has. */
+@Composable
+private fun cadenceText(schedule: DoseSchedule): String = when (schedule.kind) {
+    "interval" -> stringResource(
+        R.string.schedule_interval_fmt,
+        (schedule.intervalMinutes?.toInt() ?: 0) / 60,
+    )
+    "daily" -> stringResource(
+        R.string.schedule_daily_fmt,
+        schedule.dailyHour?.toInt() ?: 0,
+        schedule.dailyMinute?.toInt() ?: 0,
+    )
+    "days_interval" -> stringResource(
+        R.string.schedule_days_interval_fmt,
+        schedule.intervalDays?.toInt() ?: 0,
+        schedule.dailyHour?.toInt() ?: 0,
+        schedule.dailyMinute?.toInt() ?: 0,
+    )
+    else -> schedule.kind
+}
+
+/**
+ * The history card. Its 6/18 padding is what lets each rule run edge to edge
+ * inside the card, so the lines read as one block rather than as five cards.
+ */
+@Composable
+private fun HistoryCard(
+    entries: List<MedicationDetailViewModel.HistoryEntry>,
+    onEdit: (Long) -> Unit,
+    onDelete: (Long) -> Unit,
+) {
+    EggCard(
+        variant = CardVariant.Low,
+        padding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
+    ) {
+        entries.forEachIndexed { index, entry ->
+            if (index > 0) CardRule(alpha = 0.14f)
+            HistoryRow(entry = entry, onEdit = onEdit, onDelete = onDelete)
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HistoryRow(
+    entry: MedicationDetailViewModel.HistoryEntry,
+    onEdit: (Long) -> Unit,
+    onDelete: (Long) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val (glyph, glyphTint) = when (entry.timing) {
+        MedicationDetailViewModel.Timing.OnTime -> Icons.Filled.CheckCircle to scheme.tertiary
+        MedicationDetailViewModel.Timing.Late -> Icons.Filled.CheckCircle to scheme.secondary
+        MedicationDetailViewModel.Timing.Missed -> Icons.Filled.Close to scheme.error
+        MedicationDetailViewModel.Timing.Skipped -> Icons.Filled.Close to scheme.error
+        MedicationDetailViewModel.Timing.Unlinked ->
+            Icons.Filled.CheckCircle to scheme.onSurfaceVariant
+    }
+    val pillLabel = when (entry.timing) {
+        MedicationDetailViewModel.Timing.Missed -> stringResource(R.string.meds_missed)
+        MedicationDetailViewModel.Timing.Skipped -> stringResource(R.string.meds_skipped)
+        MedicationDetailViewModel.Timing.Unlinked -> stringResource(R.string.meds_logged)
+        else -> deltaLabelText(
+            exactLabel(entry.deltaMin, MedicationCatalog.ON_TIME_TOLERANCE_MIN)
+        )
+    }
+    val pillContainer = when (entry.timing) {
+        MedicationDetailViewModel.Timing.Late -> scheme.secondaryContainer
+        MedicationDetailViewModel.Timing.Missed,
+        MedicationDetailViewModel.Timing.Skipped -> scheme.errorContainer
+        else -> scheme.surfaceContainerHighest
+    }
+    val pillContent = when (entry.timing) {
+        MedicationDetailViewModel.Timing.Late -> scheme.onSecondaryContainer
+        MedicationDetailViewModel.Timing.Missed,
+        MedicationDetailViewModel.Timing.Skipped -> scheme.onErrorContainer
+        else -> scheme.onSurfaceVariant
+    }
+
+    val detail = buildList {
+        formatDoseWithUnit(entry.dose, entry.doseUnit)?.let(::add)
+        entry.route?.let { add(stringResource(MedicationCatalog.routeLabelRes(it))) }
+        entry.injectionSite?.let {
+            add(stringResource(MedicationCatalog.injectionSiteLabelRes(it)))
+        }
+    }
+    val deleteLabel = stringResource(R.string.med_dose_delete)
+    val doseId = entry.doseId
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .let { base ->
+                if (doseId == null) {
+                    base
+                } else {
+                    base
+                        .semantics {
+                            customActions = listOf(
+                                CustomAccessibilityAction(deleteLabel) { onDelete(doseId); true },
+                            )
+                        }
+                        .combinedClickable(
+                            onClick = { onEdit(doseId) },
+                            onLongClick = { onDelete(doseId) },
+                        )
+                }
+            }
+            .padding(vertical = 13.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            glyph,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = glyphTint,
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                rememberDateTimeText(entry.atMs),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                if (detail.isEmpty()) {
+                    stringResource(R.string.meds_not_logged)
+                } else {
+                    detail.joinToString(MedicationCatalog.SEP)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        StatusPill(label = pillLabel, container = pillContainer, content = pillContent)
+    }
+}
+
 @Composable
 private fun AliasDialog(
     initial: String,
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
 ) {
-    var text by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(initial) }
-    androidx.compose.material3.AlertDialog(
+    var text by rememberSaveable { mutableStateOf(initial) }
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.med_alias_dialog_title)) },
         text = {
-            androidx.compose.material3.OutlinedTextField(
+            OutlinedTextField(
                 value = text,
                 onValueChange = { text = it.take(40) },
                 label = { Text(stringResource(R.string.med_field_notif_alias)) },
                 supportingText = { Text(stringResource(R.string.med_field_notif_alias_hint)) },
                 singleLine = true,
+                shape = EggShapes.Field,
                 modifier = Modifier.fillMaxWidth(),
             )
         },
         confirmButton = {
-            androidx.compose.material3.TextButton(onClick = { onSave(text.trim()) }) {
+            TextButton(onClick = { onSave(text.trim()) }) {
                 Text(stringResource(R.string.action_save))
             }
         },
         dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_cancel))
-            }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }
 
+/**
+ * « Aujourd'hui · 08:04 », « Hier · 21:47 », « Dimanche · 08:00 », then the
+ * plain date. A relative day is what the user actually remembers.
+ */
 @Composable
-private fun SchedulesSection(
-    schedules: List<DoseSchedule>,
-    onAdd: () -> Unit,
-    onEdit: (Long) -> Unit,
-    onToggle: (Long, Boolean) -> Unit,
-) {
-    val dateFmt = remember(java.util.Locale.getDefault()) {
-        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.schedule_list_title), style = MaterialTheme.typography.titleMedium)
-        if (schedules.isEmpty()) {
-            Text(stringResource(R.string.schedule_none), style = MaterialTheme.typography.bodyMedium)
-        } else {
-            schedules.forEach { s ->
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    val descriptor = when (s.kind) {
-                        "interval" -> stringResource(
-                            R.string.schedule_interval_fmt,
-                            (s.intervalMinutes?.toInt() ?: 0) / 60,
-                        )
-                        "daily" -> stringResource(
-                            R.string.schedule_daily_fmt,
-                            s.dailyHour?.toInt() ?: 0,
-                            s.dailyMinute?.toInt() ?: 0,
-                        )
-                        "days_interval" -> stringResource(
-                            R.string.schedule_days_interval_fmt,
-                            s.intervalDays?.toInt() ?: 0,
-                            s.dailyHour?.toInt() ?: 0,
-                            s.dailyMinute?.toInt() ?: 0,
-                        )
-                        else -> s.kind
-                    }
-                    Text(descriptor, style = MaterialTheme.typography.bodyMedium)
-                    s.label?.takeIf { it.isNotBlank() }?.let {
-                        Text("« $it »", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Text(
-                        stringResource(R.string.schedule_next_due_fmt, dateFmt.format(Date(s.nextDueAtMs))),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Row {
-                        androidx.compose.material3.TextButton(
-                            onClick = { onToggle(s.id, !s.active) },
-                        ) {
-                            Text(stringResource(if (s.active) R.string.schedule_pause else R.string.schedule_resume))
-                        }
-                        androidx.compose.material3.TextButton(onClick = { onEdit(s.id) }) {
-                            Text(stringResource(R.string.action_edit))
-                        }
-                    }
-                }
-            }
+private fun rememberDateTimeText(atMs: Long): String {
+    val context = LocalContext.current
+    val locale = Locale.getDefault()
+    return remember(atMs, locale) {
+        val zone = ZoneId.systemDefault()
+        val at = Instant.ofEpochMilli(atMs).atZone(zone)
+        val today = LocalDate.now(zone)
+        val days = java.time.temporal.ChronoUnit.DAYS.between(at.toLocalDate(), today)
+        val day = when {
+            days == 0L -> context.getString(R.string.today_section_today)
+            days == 1L -> context.getString(R.string.meds_yesterday)
+            days in 2..6 -> at.dayOfWeek.getDisplayName(TextStyle.FULL_STANDALONE, locale)
+                .replaceFirstChar { it.titlecase(locale) }
+            else -> DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+                .withLocale(locale)
+                .format(at)
         }
-        androidx.compose.material3.TextButton(onClick = onAdd) {
-            Text(stringResource(R.string.schedule_add))
-        }
+        val time = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+            .withLocale(locale)
+            .format(at)
+        day + MedicationCatalog.SEP + time
     }
 }
 
-@Composable
-private fun MedHeader(med: Medication) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        val kindLabel = stringResource(MedicationCatalog.kindLabelRes(med.kind))
-        val routeLabel = stringResource(MedicationCatalog.routeLabelRes(med.route))
-        Text("$kindLabel · $routeLabel", style = MaterialTheme.typography.bodyMedium)
-        if (med.defaultDose != null) {
-            Text(
-                stringResource(
-                    R.string.med_default_dose_fmt,
-                    formatDose(med.defaultDose!!),
-                    med.defaultDoseUnit.orEmpty()
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        med.notes?.takeIf { it.isNotBlank() }?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-
-@Composable
-private fun DoseRow(dose: DoseEvent, onEdit: () -> Unit, onDelete: () -> Unit) {
-    val dateFmt = remember(java.util.Locale.getDefault()) {
-        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-    }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(dateFmt.format(Date(dose.takenAtMs)), style = MaterialTheme.typography.bodyMedium)
-            val parts = buildList {
-                dose.dose?.let { add("${formatDose(it)} ${dose.doseUnit.orEmpty()}".trim()) }
-                dose.route?.let { add(stringResource(MedicationCatalog.routeLabelRes(it))) }
-                dose.injectionSite?.let { add(stringResource(MedicationCatalog.injectionSiteLabelRes(it))) }
-            }
-            if (parts.isNotEmpty()) {
-                Text(parts.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
-            }
-            dose.notes?.takeIf { it.isNotBlank() }?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        IconButton(onClick = onEdit) {
-            Icon(
-                Icons.Filled.Edit,
-                contentDescription = stringResource(R.string.med_dose_edit_title),
-            )
-        }
-        IconButton(onClick = onDelete) {
-            Icon(
-                Icons.Filled.DeleteOutline,
-                contentDescription = stringResource(R.string.med_dose_delete),
-                tint = MaterialTheme.colorScheme.error,
-            )
-        }
-    }
-}
-
-private fun formatDose(v: Double): String {
-    val s = v.toString()
-    return if (s.endsWith(".0")) s.dropLast(2) else s
-}
+/** The identity tile: 52 dp at radius 16 (§6.5), one notch above a list tile. */
+private val IdentityTileShape = RoundedCornerShape(16.dp)

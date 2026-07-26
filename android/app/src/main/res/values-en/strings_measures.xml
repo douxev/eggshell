@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  "Mesures" (§6.8) and "Importer une analyse" (§6.9), English.
+  Small-caps labels are uppercased in the string itself so a translation can
+  opt out — never through a text transform.
+-->
+<resources>
+
+    <!-- ==== Measurements =============================================== -->
+    <string name="measures_title">Measurements</string>
+    <string name="measures_import_action">Import a lab result</string>
+
+    <string name="measures_last_value_fmt">LATEST VALUE · %1$s</string>
+    <string name="measures_last_weight_fmt">LAST WEIGH-IN · %1$s</string>
+
+    <string name="measures_delta_up_fmt">↗ %1$s</string>
+    <string name="measures_delta_down_fmt">↘ %1$s</string>
+    <string name="measures_delta_flat_fmt">→ %1$s</string>
+    <string name="measures_delta_up_a11y_fmt">Up %1$s since the previous reading</string>
+    <string name="measures_delta_down_a11y_fmt">Down %1$s since the previous reading</string>
+    <string name="measures_delta_flat_a11y">Same as the previous reading</string>
+
+    <string name="measures_legend_doses">Logged doses</string>
+    <string name="measures_legend_change">Treatment change</string>
+    <string name="measures_chart_a11y_fmt">%1$s curve, from %2$s to %3$s. Latest value %4$s.</string>
+    <string name="measures_chart_one_point">One more reading and the curve appears.</string>
+
+    <string name="measures_readings">Readings</string>
+    <string name="measures_reading_manual">Typed in by hand</string>
+    <string name="measures_reading_sub_fmt">%1$s · %2$s</string>
+    <string name="measures_reading_original_fmt">%1$s %2$s</string>
+    <string name="measures_reading_edit">Edit this reading</string>
+    <string name="measures_reading_a11y_fmt">%1$s, %2$s %3$s</string>
+
+    <string name="measures_add">Add</string>
+    <string name="measures_add_measurement">Add a reading</string>
+    <string name="measures_add_weight">Log a weight</string>
+
+    <string name="measures_empty_hormones">Your lab results don’t have a curve yet. Add a result, or import your lab’s PDF straight away.</string>
+    <string name="measures_empty_hormones_action">Import a lab result</string>
+    <string name="measures_empty_weight">Log your weight now and then — the curve draws itself.</string>
+    <string name="measures_empty_weight_action">Log a weight</string>
+
+    <!-- ==== New reading (manual entry) ================================= -->
+    <string name="measures_new_title">New reading</string>
+    <string name="measures_new_hint">Copy what your sheet says: the value is kept exactly as you type it.</string>
+
+    <!-- ==== Import a lab result — the 4 steps ========================== -->
+    <string name="ocr_title">Import a lab result</string>
+    <string name="ocr_offline">Offline</string>
+    <string name="ocr_progress_a11y_fmt">Step %1$d of 4</string>
+
+    <string name="ocr_step1_caption">1 / 4 · PICK YOUR FILE</string>
+    <string name="ocr_step2_caption">2 / 4 · READING</string>
+    <string name="ocr_step3_caption">3 / 4 · CHECK WHAT WE READ</string>
+    <string name="ocr_step4_caption">4 / 4 · SAVED</string>
+
+    <string name="ocr_step1_title">Your results stay here</string>
+    <string name="ocr_step1_body">Pick the PDF your lab sent you, or a photo of the sheet. Everything is read on your phone, with no connection.</string>
+    <string name="ocr_step1_hint">We recognise estradiol, testosterone, progesterone, LH, FSH, prolactin, SHBG, haemoglobin, haematocrit and blood pressure.</string>
+    <string name="ocr_pick">Pick a file</string>
+
+    <string name="ocr_step2_title">Reading your document…</string>
+    <string name="ocr_step2_body">This all happens on your phone. A photo sometimes takes a few seconds longer than a PDF.</string>
+
+    <string name="ocr_date_label">Collection date</string>
+    <string name="ocr_date_edit">Change</string>
+    <string name="ocr_date_a11y_fmt">Collection date: %1$s. Change.</string>
+    <string name="ocr_uncertain_fmt">Unsure of this reading · “%1$s”</string>
+    <string name="ocr_keep_fmt">Keep %1$s</string>
+    <string name="ocr_privacy">The PDF was read on this device. Nothing is sent anywhere, and the original file isn’t kept.</string>
+    <string name="ocr_save_none">Nothing to save</string>
+
+    <string name="ocr_step4_title">All saved</string>
+    <string name="ocr_step4_note">The original file wasn’t kept, and nothing left your phone.</string>
+    <string name="ocr_step4_done">See my measurements</string>
+
+    <!-- Two distinct errors: locked PDF, or an unreadable document. -->
+    <string name="ocr_locked_title">This PDF is locked</string>
+    <string name="ocr_locked_body">Plenty of labs lock their PDFs. Type the password they gave you: it’s used once, and it’s never stored.</string>
+    <string name="ocr_locked_label">PDF password</string>
+    <string name="ocr_locked_wrong">That password didn’t work. Try again.</string>
+    <string name="ocr_locked_unlock">Unlock</string>
+
+    <string name="ocr_failed_title">I can’t read this document</string>
+    <string name="ocr_failed_body">The file may be too blurry, or its layout too unusual. Try a sharper photo, or type the values in yourself.</string>
+    <string name="ocr_failed_none_title">Nothing recognised</string>
+    <string name="ocr_failed_none_body">The document opens fine, but I didn’t recognise anything in it. Try another page, or type the values in yourself.</string>
+    <string name="ocr_retry">Pick another file</string>
+    <string name="ocr_manual">Type it in by hand</string>
+
+    <!-- The save itself failed: stay on the preview, values intact. -->
+    <string name="ocr_save_failed_title">That didn’t go through</string>
+    <string name="ocr_save_failed_body">Nothing is lost: what we read is still here. Try saving again.</string>
+
+    <!-- Provenance written on the reading when the lab wasn’t recognised. -->
+    <string name="ocr_lab_fallback">Imported PDF</string>
+
+    <plurals name="ocr_detected">
+        <item quantity="one">%d value found</item>
+        <item quantity="other">%d values found</item>
+    </plurals>
+    <plurals name="ocr_save">
+        <item quantity="one">Save %d value</item>
+        <item quantity="other">Save %d values</item>
+    </plurals>
+    <plurals name="ocr_step4_body">
+        <item quantity="one">%d value joined your measurements.</item>
+        <item quantity="other">%d values joined your measurements.</item>
+    </plurals>
+    <plurals name="ocr_save_failed_partial">
+        <item quantity="one">%d value had already joined your measurements: it is unticked so it can’t be saved twice.</item>
+        <item quantity="other">%d values had already joined your measurements: they are unticked so they can’t be saved twice.</item>
+    </plurals>
+
+</resources>

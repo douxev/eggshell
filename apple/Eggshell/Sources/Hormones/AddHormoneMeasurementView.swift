@@ -1,11 +1,13 @@
 import SwiftUI
 import TransitionCore
 
-// PUSHED screen — log a new hormone measurement. Hormone is chosen via
-// ChoiceChips (HormoneCatalog.kinds / kindLabel); the unit list is also the
-// shared catalog (HormoneCatalog.units) but pre-filters down to the units that
-// make clinical sense for the selected hormone. Save builds a
-// NewHormoneMeasurement and dismisses. Mirrors AddHormoneMeasurementScreen.kt.
+// PUSHED screen — « Nouveau relevé » (§6.8, the FAB of Mesures). Mirrors
+// AddHormoneMeasurementScreen.kt.
+//
+// The value is stored exactly as it is typed: the unit chips pick what the sheet
+// says, and any conversion happens at display time only (Réglages → Apparence &
+// langue owns the display unit). Nothing here rounds or normalises a reading a
+// doctor may read back.
 
 @MainActor
 final class AddHormoneMeasurementViewModel: ObservableObject {
@@ -31,15 +33,15 @@ struct AddHormoneMeasurementView: View {
     @StateObject private var vm = AddHormoneMeasurementViewModel()
 
     @State private var hormone: String = HormoneCatalog.kinds.first ?? "estradiol"
-    @State private var valueText: String = ""
+    @State private var valueText = ""
     @State private var unit: String = HormoneCatalog.defaultUnit(HormoneCatalog.kinds.first ?? "estradiol")
         ?? HormoneCatalog.units.first ?? "pg/mL"
-    @State private var date: Date = Date()
-    @State private var labName: String = ""
-    @State private var notes: String = ""
+    @State private var date = Date()
+    @State private var labName = ""
+    @State private var notes = ""
 
-    // Clinically meaningful units per hormone, drawn from the shared catalog.
-    // "other" falls back to the full HormoneCatalog.units list.
+    /// Clinically meaningful units per analyte, drawn from the shared catalog.
+    /// "other" falls back to the full `HormoneCatalog.units` list.
     private func units(for hormone: String) -> [String] {
         switch hormone {
         case "estradiol":    return ["pg/mL", "pmol/L"]
@@ -48,6 +50,9 @@ struct AddHormoneMeasurementView: View {
         case "lh", "fsh":    return ["mIU/mL"]
         case "prolactin":    return ["ng/mL"]
         case "shbg":         return ["nmol/L"]
+        case "bp_systolic", "bp_diastolic": return ["mmHg"]
+        case "hemoglobin":   return ["g/dL"]
+        case "hematocrit":   return ["%"]
         default:             return HormoneCatalog.units
         }
     }
@@ -57,36 +62,45 @@ struct AddHormoneMeasurementView: View {
     }
 
     private var canSave: Bool {
-        guard let v = parsedValue, v > 0 else { return false }
+        guard let value = parsedValue, value > 0 else { return false }
         return !unit.isEmpty && !vm.status.isSubmitting
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.l) {
-                hormoneCard
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Recopie ce que dit ta feuille : la valeur est gardée exactement comme tu la saisis.")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                analyteCard
                 valueCard
                 dateCard
                 detailsCard
-                if let e = vm.status.errorText { ErrorBanner(message: e) }
-                saveButton
+                if let message = vm.status.errorText { ErrorCardView(message) }
+                Color.clear.frame(height: Spacing.m)
             }
-            .padding(Spacing.l)
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.top, Spacing.m)
         }
-        .navigationTitle("Nouvelle mesure")
+        .measuresScreen("Nouveau relevé")
+        .eggActionBar {
+            ActionBarButton("Enregistrer", systemImage: "checkmark", enabled: canSave) { save() }
+        }
+        .sensoryFeedback(.success, trigger: vm.status == .done)
     }
 
-    private var hormoneCard: some View {
-        SectionCard {
-            Text("Hormone").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: Spacing.s)],
-                      alignment: .leading, spacing: Spacing.s) {
-                ForEach(HormoneCatalog.kinds, id: \.self) { id in
-                    ChoiceChip(label: HormoneCatalog.kindLabel(id), selected: hormone == id) {
-                        hormone = id
-                        let opts = units(for: id)
-                        if !opts.contains(unit) {
-                            unit = HormoneCatalog.defaultUnit(id) ?? opts.first ?? unit
+    private var analyteCard: some View {
+        EggCard(variant: .low) {
+            MicroLabel("ANALYSE")
+            ChipFlowLayout(spacing: 7, lineSpacing: 4) {
+                ForEach(HormoneCatalog.kinds, id: \.self) { kind in
+                    AnalyteChip(HormoneCatalog.kindLabel(kind), selected: hormone == kind) {
+                        hormone = kind
+                        let options = units(for: kind)
+                        if !options.contains(unit) {
+                            unit = HormoneCatalog.defaultUnit(kind) ?? options.first ?? unit
                         }
                     }
                 }
@@ -95,68 +109,57 @@ struct AddHormoneMeasurementView: View {
     }
 
     private var valueCard: some View {
-        SectionCard {
-            Text("Valeur").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
+        EggCard(variant: .low) {
+            MicroLabel("VALEUR")
             TextField("0", text: $valueText)
-                .font(.eggBody)
                 .keyboardType(.decimalPad)
-                .textFieldStyle(.roundedBorder)
-            Text("Unité").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), spacing: Spacing.s)],
-                      alignment: .leading, spacing: Spacing.s) {
-                ForEach(units(for: hormone), id: \.self) { u in
-                    ChoiceChip(label: u, selected: unit == u) { unit = u }
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(palette.onSurface)
+            MicroLabel("UNITÉ")
+            ChipFlowLayout(spacing: 7, lineSpacing: 4) {
+                ForEach(units(for: hormone), id: \.self) { option in
+                    AnalyteChip(option, selected: unit == option) { unit = option }
                 }
             }
         }
     }
 
     private var dateCard: some View {
-        SectionCard {
-            DatePicker("Date", selection: $date, displayedComponents: [.date])
-                .font(.eggBody)
-                .tint(palette.primary)
+        EggCard(variant: .low) {
+            DatePicker(selection: $date, displayedComponents: [.date]) {
+                Text("Date du prélèvement").font(.eggBody).foregroundStyle(palette.onSurface)
+            }
+            .tint(palette.primary)
         }
     }
 
     private var detailsCard: some View {
-        SectionCard {
-            Text("Laboratoire").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            TextField("Nom du laboratoire (facultatif)", text: $labName)
+        EggCard(variant: .low) {
+            MicroLabel("LABORATOIRE")
+            TextField("Facultatif", text: $labName)
                 .font(.eggBody)
                 .textFieldStyle(.roundedBorder)
-            Text("Notes").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            TextField("Notes (facultatif)", text: $notes, axis: .vertical)
+            MicroLabel("NOTES")
+            TextField("Facultatif", text: $notes, axis: .vertical)
                 .font(.eggBody)
                 .lineLimit(3, reservesSpace: true)
                 .textFieldStyle(.roundedBorder)
         }
     }
 
-    private var saveButton: some View {
-        Button {
-            guard let value = parsedValue, let session = app.session else { return }
-            let trimmedLab = labName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-            let measurement = NewHormoneMeasurement(
-                atMs: Int64(date.timeIntervalSince1970 * 1000),
-                hormone: hormone,
-                value: value,
-                unit: unit,
-                labName: trimmedLab.isEmpty ? nil : trimmedLab,
-                notes: trimmedNotes.isEmpty ? nil : trimmedNotes)
-            Task {
-                if await vm.save(measurement, session: session) { dismiss() }
-            }
-        } label: {
-            if vm.status.isSubmitting {
-                ProgressView().tint(palette.onPrimary).frame(maxWidth: .infinity)
-            } else {
-                Text("Enregistrer").font(.eggHeadline).frame(maxWidth: .infinity)
-            }
+    private func save() {
+        guard let value = parsedValue, let session = app.session else { return }
+        let trimmedLab = labName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let measurement = NewHormoneMeasurement(
+            atMs: Int64(date.timeIntervalSince1970 * 1000),
+            hormone: hormone,
+            value: value,
+            unit: unit,
+            labName: trimmedLab.isEmpty ? nil : trimmedLab,
+            notes: trimmedNotes.isEmpty ? nil : trimmedNotes)
+        Task {
+            if await vm.save(measurement, session: session) { dismiss() }
         }
-        .glassProminentButton()
-        .tint(palette.primary)
-        .disabled(!canSave)
     }
 }

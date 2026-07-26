@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home (the only root screen), module launcher and quick log. Handoff §6.1 / §6.3. -->
+<resources>
+    <string name="home_settings">Settings</string>
+
+    <string name="home_next_dose">NEXT DOSE · %1$s</string>
+    <string name="home_dose_ring_cd">%1$d of %2$d doses taken today</string>
+    <string name="home_mark_taken">Mark as taken</string>
+    <string name="home_snooze">Snooze</string>
+    <string name="home_schedule_dose">Schedule a dose</string>
+    <string name="home_all_taken">All taken ✓</string>
+    <string name="home_no_medication">You have no treatment yet. Add one and your doses will show up here.</string>
+    <string name="home_no_medication_action">Add a treatment</string>
+    <string name="home_no_schedule">Nothing scheduled for today.</string>
+    <string name="home_reminder_more">+%1$d reminders</string>
+    <string name="home_reminder_more_one">+1 reminder</string>
+    <string name="home_reminder_next">Then %1$s, %2$s</string>
+    <string name="home_reminder_at">at %1$s</string>
+    <string name="home_reminder_tomorrow">tomorrow</string>
+    <string name="home_reminder_in_days">in %1$d days</string>
+
+    <string name="home_mood_question">HOW ARE YOU FEELING?</string>
+    <string name="mood_face_1">Rough</string>
+    <string name="mood_face_2">Meh</string>
+    <string name="mood_face_3">Okay</string>
+    <string name="mood_face_4">Good</string>
+    <string name="mood_face_5">Great</string>
+    <string name="home_mood_detail">Log in detail — sliders, note, effects</string>
+
+    <string name="home_section_title">Your tracking</string>
+    <string name="home_section_modules">Modules</string>
+    <string name="family_treatment">Treatment</string>
+    <string name="family_feeling">Feelings</string>
+    <string name="family_evolution">Progress</string>
+
+    <string name="module_meds">Meds</string>
+    <string name="module_appointments">Visits</string>
+    <string name="module_journal">Journal</string>
+    <string name="module_bleeding">Periods</string>
+    <string name="module_labs">Labs</string>
+    <string name="module_weight">Weight</string>
+    <string name="module_photos">Photos</string>
+    <string name="module_voice">Voice</string>
+
+    <string name="home_badge_pending_cd">%1$s, %2$d to do</string>
+    <string name="home_badge_news_cd">%1$s, new</string>
+    <string name="home_badge_overflow">9+</string>
+
+    <string name="home_fab_note">Log</string>
+
+    <string name="quicklog_subtitle">One gesture, from any screen.</string>
+    <string name="quicklog_footer">Saved on your device, encrypted.</string>
+</resources>

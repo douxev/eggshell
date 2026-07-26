@@ -5,13 +5,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -20,7 +24,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,6 +51,10 @@ import com.douxev.eggshell.R
 import com.douxev.eggshell.data.AppointmentRepository
 import com.douxev.eggshell.ui.common.DateTimePickerField
 import com.douxev.eggshell.ui.common.clickToDismissKeyboard
+import com.douxev.eggshell.ui.components.ActionBand
+import com.douxev.eggshell.ui.components.EggTopBar
+import com.douxev.eggshell.ui.theme.EggDim
+import com.douxev.eggshell.ui.theme.EggShapes
 import uniffi.transition.Appointment
 import uniffi.transition.NewAppointment
 
@@ -119,9 +127,9 @@ fun AddAppointmentScreen(
     val loaded by vm.loaded.collectAsState()
     val isEditing = vm.editingId > 0L
 
-    if (status == AddAppointmentViewModel.Status.Done) {
-        onDone()
-        return
+    // Leaving is a navigation effect, not something to do while composing.
+    LaunchedEffect(status) {
+        if (status == AddAppointmentViewModel.Status.Done) onDone()
     }
 
     var atMs by remember { mutableStateOf(System.currentTimeMillis() + ONE_DAY_MS) }
@@ -137,6 +145,7 @@ fun AddAppointmentScreen(
     // appointment time, so their choice isn't overwritten when they move the RDV.
     var reminderEdited by remember { mutableStateOf(false) }
     var seeded by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     LaunchedEffect(loaded) {
         if (seeded) return@LaunchedEffect
@@ -160,26 +169,17 @@ fun AddAppointmentScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        stringResource(
-                            if (isEditing) R.string.appointment_edit_title else R.string.appointment_add_title
-                        )
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onDone) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back),
-                        )
-                    }
-                },
+            EggTopBar(
+                title = stringResource(
+                    if (isEditing) R.string.appointment_edit_title else R.string.appointment_add_title
+                ),
+                onBack = onDone,
+                backContentDescription = stringResource(R.string.action_back),
                 actions = {
                     if (isEditing) {
-                        IconButton(onClick = vm::delete) {
+                        IconButton(onClick = { confirmDelete = true }) {
                             Icon(
                                 Icons.Filled.Delete,
                                 contentDescription = stringResource(R.string.action_delete),
@@ -190,14 +190,53 @@ fun AddAppointmentScreen(
                 },
             )
         },
+        bottomBar = {
+            ActionBand(alignment = Alignment.Center) {
+                Button(
+                    onClick = {
+                        vm.submit(
+                            NewAppointment(
+                                atMs = atMs,
+                                place = place.ifBlank { null },
+                                professionalName = proName.ifBlank { null },
+                                professionalRole = proRole.ifBlank { null },
+                                notes = notes.ifBlank { null },
+                                todo = todo.ifBlank { null },
+                                reminderAtMs = if (reminderOn) reminderAtMs else null,
+                            )
+                        )
+                    },
+                    // In edit mode, block Save until the record has actually
+                    // loaded: an unseeded save would blank every field.
+                    enabled = status != AddAppointmentViewModel.Status.Submitting &&
+                        (!isEditing || loaded != null),
+                    shape = EggShapes.Pill,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                ) {
+                    Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Text(
+                        stringResource(R.string.appointment_save),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
+        },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .clickToDismissKeyboard()
-                .padding(horizontal = 24.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = EggDim.ScreenMargin)
+                .padding(bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             DateTimePickerField(
@@ -216,6 +255,7 @@ fun AddAppointmentScreen(
                 onValueChange = { place = it },
                 label = { Text(stringResource(R.string.appointment_field_place)) },
                 singleLine = true,
+                shape = EggShapes.Field,
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
@@ -223,6 +263,7 @@ fun AddAppointmentScreen(
                 onValueChange = { proName = it },
                 label = { Text(stringResource(R.string.appointment_field_pro_name)) },
                 singleLine = true,
+                shape = EggShapes.Field,
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
@@ -230,6 +271,7 @@ fun AddAppointmentScreen(
                 onValueChange = { proRole = it },
                 label = { Text(stringResource(R.string.appointment_field_pro_role)) },
                 singleLine = true,
+                shape = EggShapes.Field,
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
@@ -237,12 +279,14 @@ fun AddAppointmentScreen(
                 onValueChange = { todo = it },
                 label = { Text(stringResource(R.string.appointment_field_todo)) },
                 supportingText = { Text(stringResource(R.string.appointment_field_todo_hint)) },
+                shape = EggShapes.Field,
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
                 label = { Text(stringResource(R.string.appointment_field_notes)) },
+                shape = EggShapes.Field,
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -276,27 +320,39 @@ fun AddAppointmentScreen(
                 )
             }
 
-            Button(
-                onClick = {
-                    vm.submit(
-                        NewAppointment(
-                            atMs = atMs,
-                            place = place.ifBlank { null },
-                            professionalName = proName.ifBlank { null },
-                            professionalRole = proRole.ifBlank { null },
-                            notes = notes.ifBlank { null },
-                            todo = todo.ifBlank { null },
-                            reminderAtMs = if (reminderOn) reminderAtMs else null,
-                        )
-                    )
-                },
-                enabled = status != AddAppointmentViewModel.Status.Submitting,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.appointment_save)) }
-
             if (status == AddAppointmentViewModel.Status.Error) {
-                Text(stringResource(R.string.appointment_error), color = MaterialTheme.colorScheme.error)
+                Text(
+                    stringResource(R.string.appointment_error),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
         }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.rdv_delete_title)) },
+            text = { Text(stringResource(R.string.rdv_delete_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDelete = false
+                        vm.delete()
+                    },
+                ) {
+                    Text(
+                        stringResource(R.string.action_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 }

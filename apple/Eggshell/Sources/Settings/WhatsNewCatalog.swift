@@ -21,6 +21,18 @@ enum WhatsNewCatalog {
     /// Releases, newest first.
     static let releases: [Release] = [
         Release(
+            version: 14,
+            title: "Quoi de neuf",
+            highlights: [
+                "Un seul accueil — plus de barre d'onglets : tes huit modules tiennent sur l'accueil, et le retour y ramène toujours.",
+                "Cocher une dose sans naviguer — la prochaine prise et ton humeur du jour se notent depuis l'accueil, en un geste.",
+                "Régularité lisible — un graphique montre l'écart de chaque prise à l'heure prévue, sans jamais inventer de chiffre.",
+                "Réglages en trois portes — Modules, Sécurité, Apparence & langue. Les rappels remontent d'un cran.",
+                "Le rapport médecin part avec toi — il se prépare depuis Rendez-vous, avec les périodes et les sections que tu choisis.",
+                "Analyses importées plus finement — la lecture d'un PDF retient aussi le laboratoire, pour que ton médecin sache d'où vient la valeur.",
+            ]
+        ),
+        Release(
             version: 13,
             title: "Quoi de neuf",
             highlights: [

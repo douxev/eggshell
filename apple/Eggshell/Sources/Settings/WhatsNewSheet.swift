@@ -1,10 +1,10 @@
 import SwiftUI
 
-// ===========================================================================
-// Feuille « Quoi de neuf » — presented via .sheet from SettingsHubView (and
-// auto-presented on first launch of a new version). Shows the catalog releases
-// newest-first with a "Compris" button to dismiss.
-// ===========================================================================
+// « Quoi de neuf » — a sheet, presented from Réglages and once automatically on
+// the first launch of a new version.
+//
+// It is a sheet and not a screen on purpose: reading it is never a step you have
+// to complete, and « Compris » closes it for good.
 
 struct WhatsNewSheet: View {
     @Environment(\.palette) private var palette
@@ -17,49 +17,47 @@ struct WhatsNewSheet: View {
                     ForEach(WhatsNewCatalog.releases) { release in
                         releaseSection(release)
                     }
+                    Color.clear.frame(height: Spacing.s)
                 }
-                .padding(Spacing.l)
+                .padding(.horizontal, Metrics.screenMargin)
+                .padding(.top, Spacing.s)
             }
             .background(palette.surface.ignoresSafeArea())
             .navigationTitle("Quoi de neuf")
-            .safeAreaInset(edge: .bottom) {
-                Button {
-                    dismiss()
-                } label: {
-                    Text("Compris")
-                        .font(.eggCallout)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Spacing.s)
-                }
-                .glassProminentButton()
-                .padding(Spacing.l)
-                .background(palette.surface.opacity(0.95))
+            .navigationBarTitleDisplayMode(.inline)
+            .eggActionBar {
+                ActionBarButton("Compris") { dismiss() }
             }
         }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
     }
 
     private func releaseSection(_ release: WhatsNewCatalog.Release) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.m) {
-            Text(release.title)
-                .font(.eggTitle)
-                .foregroundStyle(palette.onSurface)
-
-            SectionCard {
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            SectionTitleView(release.title, prominent: true)
+            ListGroup {
                 ForEach(Array(release.highlights.enumerated()), id: \.offset) { index, highlight in
-                    if index > 0 {
-                        Divider().overlay(palette.outlineVariant)
-                    }
                     HStack(alignment: .top, spacing: Spacing.m) {
                         Image(systemName: "sparkles")
-                            .font(.eggCallout)
+                            .font(.system(size: 17))
                             .foregroundStyle(palette.primary)
                             .frame(width: 24)
                         Text(highlight)
                             .font(.eggBody)
-                            .foregroundStyle(palette.onSurface.opacity(0.85))
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .foregroundStyle(palette.onSurface)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
                     }
-                    .padding(.vertical, Spacing.xs)
+                    .padding(.horizontal, Metrics.screenMargin)
+                    .padding(.vertical, Spacing.m)
+
+                    if index != release.highlights.count - 1 {
+                        Rectangle()
+                            .fill(palette.outlineVariant)
+                            .frame(height: 1)
+                            .padding(.leading, Metrics.screenMargin + 24 + Spacing.m)
+                    }
                 }
             }
         }

@@ -14,7 +14,10 @@ final class FeaturesStore: ObservableObject {
     @Published var voice: Bool       { didSet { d.set(voice, forKey: "voice") } }
     /// Bleeding/cycle tracking — opt-in, mirrors android feature_bleeding default-off.
     @Published var bleeding: Bool    { didSet { d.set(bleeding, forKey: "bleeding") } }
-    /// Appointments / notes ("RDV") — opt-in, mirrors android feature_appointments default-off.
+    /// Appointments ("RDV") — on by default since the refonte: the doctor
+    /// report is reached from « Préparer ma consultation » on this screen and
+    /// nowhere else, so leaving it off would strand a fresh install with no path
+    /// to the PDF export. Mirrors android feature_appointments.
     @Published var appointments: Bool { didSet { d.set(appointments, forKey: "appointments") } }
 
     private static func read(_ d: UserDefaults, _ k: String, _ def: Bool) -> Bool {
@@ -31,7 +34,7 @@ final class FeaturesStore: ObservableObject {
         photos      = Self.read(d, "photos", false)
         voice       = Self.read(d, "voice", false)
         bleeding    = Self.read(d, "bleeding", false)
-        appointments = Self.read(d, "appointments", false)
+        appointments = Self.read(d, "appointments", true)
     }
 }
 

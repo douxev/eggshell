@@ -31,9 +31,44 @@ struct ParsedMeasurement {
     let value: Double
     let unit: String
     let atMs: Int64?
+    /// The exact substring the number was read from, kept verbatim so the
+    /// preview can quote what the document actually said.
+    let raw: String
+    /// True when the raw token mixed letters into the number and we had to
+    /// repair it to parse. The value is a guess: the preview shows `raw` in
+    /// `error` and starts with the row switched off.
+    let doubtful: Bool
+
+    init(
+        hormone: String,
+        value: Double,
+        unit: String,
+        atMs: Int64?,
+        raw: String = "",
+        doubtful: Bool = false
+    ) {
+        self.hormone = hormone
+        self.value = value
+        self.unit = unit
+        self.atMs = atMs
+        self.raw = raw
+        self.doubtful = doubtful
+    }
 }
 
 enum LabResultParser {
+
+    /// Everything one OCR pass managed to pull out of a document.
+    struct ParseResult {
+        let values: [ParsedMeasurement]
+        /// Best-guess date of the draw. Nil when none was recognised; callers
+        /// default to "now" and say so.
+        let dateMs: Int64?
+        /// Laboratory named on the letterhead, when we recognise one. Feeds the
+        /// reading's provenance so the doctor report can tell an import from a
+        /// value typed in by hand. Nil when nothing was recognised.
+        let labName: String?
+    }
 
     // MARK: - Hormone aliases
 
@@ -79,12 +114,31 @@ enum LabResultParser {
     /// Pseudo-kind for the paired blood-pressure reading.
     private static let bpKind = "bp"
 
-    /// A number (decimal point or comma) followed by an allowed unit token.
-    private static let valueUnitRegex: NSRegularExpression? = compile(
-        "(\\d{1,5}[.,]?\\d{0,3})\\s*" +
+    /// The unit tokens a reading may legitimately carry, as a regex alternation.
+    private static let unitAlternation =
         "(pg/mL|pg/ml|pmol/L|pmol/l|ng/dL|ng/dl|nmol/L|nmol/l|ng/mL|ng/ml|" +
         "mIU/mL|mIU/ml|miu/ml|µIU/mL|µIU/ml|uIU/mL|uIU/ml|UI/L|ui/l|IU/L|iu/l|" +
         "g/dL|g/dl|g/100\\s*mL|g/100\\s*ml|%)"
+
+    /// A number (decimal point or comma) followed by an allowed unit token.
+    ///
+    /// The lookbehind refuses a number that begins in the middle of a possibly
+    /// misread one. Without it « 1O,2 ng/mL » yields a perfectly clean-looking
+    /// 2 and « I2,5 mIU/mL » a clean 2,5 — a fabricated value, silently stored,
+    /// in a document a doctor will read. Refusing them here sends the line to
+    /// the doubtful pass below, where the user gets to see the raw string.
+    private static let valueUnitRegex: NSRegularExpression? = compile(
+        "(?<![\\d.,OoIiLlSsB])(\\d{1,5}[.,]?\\d{0,3})\\s*" + unitAlternation
+    )
+
+    /// Same shape, but tolerant of the glyphs OCR keeps confusing with digits
+    /// (O→0, l/I→1, S→5, B→8). Only tried once the strict pass has come up
+    /// empty, and anything it finds is flagged doubtful.
+    ///
+    /// The leading lookbehind refuses a token glued to a word, which is what
+    /// stops the tail of « Œstradiol » from being read as a number.
+    private static let sloppyValueUnitRegex: NSRegularExpression? = compile(
+        "(?<![\\p{L}\\d.,])([\\dOoIiLlSsB]{1,5}[.,]?[\\dOoIiLlSsB]{0,3})\\s*" + unitAlternation
     )
 
     /// "128 / 82", "12,8/8,2 cmHg" — the systolic/diastolic pair. The
@@ -122,12 +176,12 @@ enum LabResultParser {
 
     // MARK: - Public API
 
-    static func parse(_ text: String) -> [ParsedMeasurement] {
+    static func parse(_ text: String) -> ParseResult {
         let lines = text
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        if lines.isEmpty { return [] }
+        if lines.isEmpty { return ParseResult(values: [], dateMs: nil, labName: nil) }
 
         let date = extractDate(text)
         // Dedup by hormone, preserve insertion order.
@@ -146,9 +200,13 @@ enum LabResultParser {
                 if pair == nil, i + 2 < lines.count { pair = matchBp(lines[i + 2]) }
                 if let (sys, dia) = pair {
                     order.append("bp_systolic")
-                    byHormone["bp_systolic"] = ParsedMeasurement(hormone: "bp_systolic", value: sys, unit: "mmHg", atMs: date)
+                    byHormone["bp_systolic"] = ParsedMeasurement(
+                        hormone: "bp_systolic", value: sys, unit: "mmHg", atMs: date,
+                        raw: trimNumber(sys))
                     order.append("bp_diastolic")
-                    byHormone["bp_diastolic"] = ParsedMeasurement(hormone: "bp_diastolic", value: dia, unit: "mmHg", atMs: date)
+                    byHormone["bp_diastolic"] = ParsedMeasurement(
+                        hormone: "bp_diastolic", value: dia, unit: "mmHg", atMs: date,
+                        raw: trimNumber(dia))
                 }
                 continue
             }
@@ -159,12 +217,64 @@ enum LabResultParser {
             var candidate = matchValue(line, kind: hormone)
             if candidate == nil, i + 1 < lines.count { candidate = matchValue(lines[i + 1], kind: hormone) }
             if candidate == nil, i + 2 < lines.count { candidate = matchValue(lines[i + 2], kind: hormone) }
-            if let (value, unit) = candidate {
+            if let hit = candidate {
                 order.append(hormone)
-                byHormone[hormone] = ParsedMeasurement(hormone: hormone, value: value, unit: unit, atMs: date)
+                byHormone[hormone] = ParsedMeasurement(
+                    hormone: hormone,
+                    value: hit.value,
+                    unit: hit.unit,
+                    atMs: date,
+                    raw: hit.raw,
+                    doubtful: hit.doubtful)
             }
         }
-        return order.compactMap { byHormone[$0] }
+        return ParseResult(
+            values: order.compactMap { byHormone[$0] },
+            dateMs: date,
+            labName: detectLabName(lines))
+    }
+
+    // MARK: - Laboratory on the letterhead
+
+    /// Lab chains common enough on French reports to be worth naming exactly.
+    /// Anything else falls back to the letterhead's « Laboratoire … » line.
+    private static let labChains = [
+        "Biogroup", "Cerballiance", "Synlab", "Eurofins", "Unilabs", "Bioclinic",
+        "Labazur", "Inovie", "Dyomedea", "Biopath", "Oriade", "Novescia",
+        "Labosud", "Laborizon", "Bioesterel", "Biomnis", "Labcorp",
+        "Quest Diagnostics",
+    ]
+
+    /// « Laboratoire de biologie médicale Saint-Roch », « LABORATOIRE DUPONT »…
+    private static let labLineRegex: NSRegularExpression? = compile(
+        "(laboratoire(?:\\s+de\\s+biologie(?:\\s+m[ée]dicale)?)?[^,;|(]{0,40})"
+    )
+
+    /// Reads the laboratory off the letterhead. Only the top of the document is
+    /// scanned: further down, « laboratoire » shows up in footnotes and in
+    /// reference-range disclaimers, which name nothing useful.
+    static func detectLabName(_ lines: [String]) -> String? {
+        let head = lines.prefix(20)
+        for line in head {
+            if let chain = labChains.first(where: {
+                line.range(of: $0, options: .caseInsensitive) != nil
+            }) {
+                return chain
+            }
+        }
+        guard let rx = labLineRegex else { return nil }
+        for line in head {
+            let ns = line as NSString
+            let range = NSRange(location: 0, length: ns.length)
+            guard let m = rx.firstMatch(in: line, options: [], range: range) else { continue }
+            let hit = ns.substring(with: m.range(at: 1))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "-–:."))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            // A bare "Laboratoire" with nothing behind it names nobody.
+            if hit.count > 14 { return String(hit.prefix(48)) }
+        }
+        return nil
     }
 
     // MARK: - Date extraction
@@ -257,18 +367,67 @@ enum LabResultParser {
         "hematocrit": ["%"],
     ]
 
-    private static func matchValue(_ line: String, kind: String) -> (Double, String)? {
-        guard let rx = valueUnitRegex else { return nil }
+    /// One reading pulled off a line, with what the document literally showed.
+    private struct ValueHit {
+        let value: Double
+        let unit: String
+        let raw: String
+        let doubtful: Bool
+    }
+
+    private static func matchValue(_ line: String, kind: String) -> ValueHit? {
         let allowed = allowedUnits[kind] ?? hormoneUnits
         let ns = line as NSString
         let range = NSRange(location: 0, length: ns.length)
-        for m in rx.matches(in: line, options: [], range: range) {
-            let rawNum = ns.substring(with: m.range(at: 1)).replacingOccurrences(of: ",", with: ".")
-            guard let value = Double(rawNum) else { continue }
-            let unit = normalizeUnit(ns.substring(with: m.range(at: 2)))
-            if allowed.contains(unit) { return (value, unit) }
+
+        if let rx = valueUnitRegex {
+            for m in rx.matches(in: line, options: [], range: range) {
+                let token = ns.substring(with: m.range(at: 1))
+                guard let value = Double(token.replacingOccurrences(of: ",", with: ".")) else { continue }
+                let unit = normalizeUnit(ns.substring(with: m.range(at: 2)))
+                if allowed.contains(unit) {
+                    return ValueHit(value: value, unit: unit, raw: token, doubtful: false)
+                }
+            }
+        }
+
+        // Nothing clean here. Retry tolerating the classic OCR confusions, and
+        // hand the result back marked doubtful: we would rather show the user
+        // « 1O,2 » and let them decide than silently store a fabricated 10,2.
+        if let rx = sloppyValueUnitRegex {
+            for m in rx.matches(in: line, options: [], range: range) {
+                let token = ns.substring(with: m.range(at: 1))
+                // "ol", "Il", "SS" — a scrap of a word, not a misread number.
+                if !token.contains(where: { $0.isNumber }) { continue }
+                let repaired = repairDigits(token).replacingOccurrences(of: ",", with: ".")
+                guard let value = Double(repaired) else { continue }
+                let unit = normalizeUnit(ns.substring(with: m.range(at: 2)))
+                if allowed.contains(unit) {
+                    return ValueHit(value: value, unit: unit, raw: token, doubtful: true)
+                }
+            }
         }
         return nil
+    }
+
+    /// Undo the glyph confusions OCR makes inside a number. Keep the character
+    /// set in step with `sloppyValueUnitRegex`.
+    private static func repairDigits(_ token: String) -> String {
+        String(token.map { (c: Character) -> Character in
+            switch c {
+            case "O", "o": return "0"
+            case "I", "i", "L", "l": return "1"
+            case "S", "s": return "5"
+            case "B": return "8"
+            default: return c
+            }
+        })
+    }
+
+    /// "128.0" → "128", for the raw string we quote back at the user.
+    private static func trimNumber(_ v: Double) -> String {
+        let s = String(v)
+        return s.hasSuffix(".0") ? String(s.dropLast(2)) : s
     }
 
     /// Systolic/diastolic pair. A unit-bearing pair always wins over a bare

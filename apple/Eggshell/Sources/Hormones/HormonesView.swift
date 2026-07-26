@@ -1,25 +1,28 @@
 import SwiftUI
 import TransitionCore
-import Charts
 
 // ===========================================================================
-// TAB ROOT — hormone tracking. Mirrors HormonesScreen.kt.
+// PUSHED screen — « Mesures » (§6.8). Mirrors HormonesScreen.kt.
 //
-// Two modes (when weight tracking is enabled): "Hormones" and "Poids".
-//  • Hormones: hormone-selector chips, an evolution chart + a "latest" card,
-//    and a tappable history list. Display values are converted to the user's
-//    preferred unit via HormoneUnitStore.effectiveUnit(for:) +
-//    convertHormoneValue(...) (HormoneCatalog.convertWeight for weight).
-//  • Poids: a single implicit "weight" kind, quick-add via an inline sheet.
+// One screen, two families behind a segmented selector: the analytes of a lab
+// sheet, and weight. They share the same shell — a curve card and a readings
+// list — because they are read the same way: what is the last value, where is
+// it going, and what did the sheet actually say.
 //
-// The Rust core has no `updateHormoneMeasurement`, so editing a row =
-// deleteHormoneMeasurement(id) then addHormoneMeasurement(new), driven from
-// an edit sheet.
+// The curve speaks the one graphic vocabulary of §5.1: the measured value in
+// `primary` with its gradient area, a logged intake in `tertiary`, a treatment
+// change as a dashed `secondary` vertical, the grid in `chartGrid`. The legend
+// is carried by the axis gradations — there is no separate row under the plot.
 //
-// Toolbar / links: gear → settings (via ScreenHeader); a row button →
-// Route.importLab and Route.hormoneUnits; FAB → Route.addHormone (or the
-// weight quick-add sheet in Poids mode).
+// The Rust core has no `updateHormoneMeasurement`, so editing a row is
+// delete + re-add, driven from the sheet at the bottom of this file.
 // ===========================================================================
+
+/// Which family the screen opens on. Accueil has a tile for each.
+enum MeasuresSegment: Int, Hashable {
+    case hormones = 0
+    case weight = 1
+}
 
 /// A measurement paired with its display-time conversion to the preferred unit.
 struct DisplayMeasurement: Identifiable {
@@ -30,11 +33,11 @@ struct DisplayMeasurement: Identifiable {
 }
 
 /// A dose taken inside the charted window — drawn as a dot on the interpolated
-/// curve so intakes and hormone levels correlate visually. Mirrors android
-/// HormonesViewModel.DoseMarker.
+/// curve so intakes and levels correlate visually. Always `tertiary`: §5.1
+/// gives that role to "dose, medication" in every chart of the app, which is
+/// why the medication's own colour is not used here.
 struct DoseMarker {
     let atMs: Int64
-    let colorArgb: Int64?
 }
 
 @MainActor
@@ -50,12 +53,20 @@ final class HormonesViewModel: ObservableObject {
     // Weight mode
     @Published var weightMeasurements: [DisplayMeasurement] = []  // ascending by atMs
 
-    /// Doses taken inside the charted window (selected hormone only), one
+    /// Doses taken inside the charted window (selected analyte only), one
     /// marker per med per day — daily treatments would otherwise stack dozens
     /// of dots on one spot. Empty in weight mode.
     @Published var doseMarkers: [DoseMarker] = []
 
-    /// Unit-resolution closures supplied by the view (the store is @MainActor
+    /// Instants at which a treatment changed, drawn as dashed verticals so a
+    /// jump in the curve can be read against the change that caused it.
+    @Published var treatmentChanges: [Int64] = []
+
+    /// Bumped on every successful write, so the screen can fire one haptic and
+    /// one snackbar without inspecting what changed.
+    @Published var savedTick = 0
+
+    /// Unit-resolution closure supplied by the view (the store is @MainActor
     /// and lives in the environment). `effective` → effectiveUnit(for:).
     private var effective: (String) -> String? = { _ in nil }
 
@@ -63,8 +74,12 @@ final class HormonesViewModel: ObservableObject {
         self.effective = effective
     }
 
-    func load(_ session: VaultService) async {
-        loading = true
+    /// `showSkeleton` is false for the silent refresh that runs when the stack
+    /// comes back to this screen: the content is already on screen and must not
+    /// blink back into skeletons.
+    func load(_ session: VaultService, showSkeleton: Bool = true) async {
+        if showSkeleton { loading = true }
+        error = nil
         do {
             let all = try await session.distinctHormones()
             hormones = all.filter { $0 != HormoneCatalog.weight }
@@ -78,8 +93,9 @@ final class HormonesViewModel: ObservableObject {
                 measurements = []
             }
             let rawWeight = try await session.listHormoneMeasurements(hormone: HormoneCatalog.weight)
-            weightMeasurements = convert(rawWeight.sorted { $0.atMs < $1.atMs }, hormone: HormoneCatalog.weight)
-            await loadDoseMarkers(session)
+            weightMeasurements = convert(
+                rawWeight.sorted { $0.atMs < $1.atMs }, hormone: HormoneCatalog.weight)
+            await loadOverlays(session)
         } catch {
             self.error = describe(error)
         }
@@ -91,25 +107,23 @@ final class HormonesViewModel: ObservableObject {
         do {
             let raw = try await session.listHormoneMeasurements(hormone: hormone)
             measurements = convert(raw.sorted { $0.atMs < $1.atMs }, hormone: hormone)
-            await loadDoseMarkers(session)
+            await loadOverlays(session)
         } catch {
             self.error = describe(error)
         }
     }
 
-    /// (Re)load the dose markers for the currently charted hormone window.
-    /// Mirrors android HormonesViewModel.loadDoseMarkers: status "taken" only,
-    /// deduped per med per day, colored by the med's stored ARGB.
-    private func loadDoseMarkers(_ session: VaultService) async {
+    /// (Re)load the two overlays of the charted window: the logged intakes and
+    /// the treatment changes.
+    private func loadOverlays(_ session: VaultService) async {
         guard measurements.count >= 2,
               let fromMs = measurements.map(\.raw.atMs).min(),
               let toMs = measurements.map(\.raw.atMs).max() else {
             doseMarkers = []
+            treatmentChanges = []
             return
         }
         do {
-            let meds = try await session.listMedications(includeArchived: true)
-            let colorById: [Int64: Int64?] = Dictionary(uniqueKeysWithValues: meds.map { ($0.id, $0.color) })
             // Bucket by *local* calendar day — UTC buckets would split a
             // 23:00 + 01:30 same-night pair into two markers in UTC+2.
             let cal = Calendar.current
@@ -120,28 +134,41 @@ final class HormonesViewModel: ObservableObject {
                 let day = cal.startOfDay(for: Date(timeIntervalSince1970: Double(e.takenAtMs) / 1000))
                 let key = "\(e.medicationId)-\(day.timeIntervalSince1970)"
                 if seen.insert(key).inserted {
-                    markers.append(DoseMarker(atMs: e.takenAtMs, colorArgb: colorById[e.medicationId] ?? nil))
+                    markers.append(DoseMarker(atMs: e.takenAtMs))
                 }
             }
             doseMarkers = markers
         } catch {
             doseMarkers = []
         }
+        do {
+            let changes = try await session.listTreatmentChanges(fromMs: fromMs, toMs: toMs)
+            treatmentChanges = Array(Set(changes.map(\.atMs))).sorted()
+        } catch {
+            treatmentChanges = []
+        }
     }
 
     func deleteMeasurement(_ id: Int64, session: VaultService) async {
         do {
             try await session.deleteHormoneMeasurement(id)
-            await load(session)
+            savedTick += 1
+            await load(session, showSkeleton: false)
         } catch {
             self.error = describe(error)
         }
     }
 
-    /// Edit = delete + re-add (the core lacks an update). The hormone kind,
-    /// lab name and notes carry over from the original record.
-    func updateMeasurement(original: HormoneMeasurement, value: Double, unit: String, atMs: Int64,
-                           session: VaultService) async {
+    /// Edit = delete + re-add (the core lacks an update). The analyte, the lab
+    /// name and the notes carry over from the original record — in particular
+    /// the provenance, which is what tells an import from a manual entry.
+    func updateMeasurement(
+        original: HormoneMeasurement,
+        value: Double,
+        unit: String,
+        atMs: Int64,
+        session: VaultService
+    ) async {
         do {
             try await session.deleteHormoneMeasurement(original.id)
             _ = try await session.addHormoneMeasurement(NewHormoneMeasurement(
@@ -151,22 +178,24 @@ final class HormonesViewModel: ObservableObject {
                 unit: unit,
                 labName: original.labName,
                 notes: original.notes))
-            await load(session)
+            savedTick += 1
+            await load(session, showSkeleton: false)
         } catch {
             self.error = describe(error)
         }
     }
 
-    func addWeight(value: Double, unit: String, session: VaultService) async {
+    func addWeight(value: Double, unit: String, atMs: Int64, session: VaultService) async {
         do {
             _ = try await session.addHormoneMeasurement(NewHormoneMeasurement(
-                atMs: Time.nowMs(),
+                atMs: atMs,
                 hormone: HormoneCatalog.weight,
                 value: value,
                 unit: unit,
                 labName: nil,
                 notes: nil))
-            await load(session)
+            savedTick += 1
+            await load(session, showSkeleton: false)
         } catch {
             self.error = describe(error)
         }
@@ -174,14 +203,19 @@ final class HormonesViewModel: ObservableObject {
 
     // Apply the preferred-unit conversion to each raw measurement.
     private func convert(_ raw: [HormoneMeasurement], hormone: String) -> [DisplayMeasurement] {
-        let target = effective(hormone)
+        // Weight defaults to kg; kg ↔ lb is a local helper because the Rust
+        // core's convertHormoneValue does not know about weight.
+        let target = hormone == HormoneCatalog.weight
+            ? (effective(hormone) ?? "kg")
+            : effective(hormone)
         return raw.map { m in
             let converted: Double?
             if let t = target, !t.isEmpty, t != m.unit {
                 if hormone == HormoneCatalog.weight {
                     converted = HormoneCatalog.convertWeight(m.value, from: m.unit, to: t)
                 } else {
-                    converted = convertHormoneValue(value: m.value, fromUnit: m.unit, toUnit: t, hormone: hormone)
+                    converted = convertHormoneValue(
+                        value: m.value, fromUnit: m.unit, toUnit: t, hormone: hormone)
                 }
             } else {
                 converted = nil
@@ -202,324 +236,544 @@ struct HormonesView: View {
     @Environment(\.palette) private var palette
     @StateObject private var vm = HormonesViewModel()
 
-    @State private var weightMode = false
-    @State private var showWeightDialog = false
+    @State private var segment: Int
+    @State private var showWeightSheet = false
     @State private var editing: DisplayMeasurement?
+    @State private var toast: String?
+
+    /// `Route` opens this screen with no argument for « Analyses »; the
+    /// « Poids » tile wants the other segment, so the parameter carries a
+    /// default and the existing call site keeps working unchanged.
+    init(initialTab: MeasuresSegment = .hormones) {
+        _segment = State(initialValue: initialTab.rawValue)
+    }
+
+    private var weightMode: Bool { segment == MeasuresSegment.weight.rawValue }
 
     private var active: [DisplayMeasurement] {
         weightMode ? vm.weightMeasurements : vm.measurements
     }
 
     var body: some View {
-        TabScaffold(title: "Courbes") {
-            if features.weight {
-                HStack(spacing: Spacing.s) {
-                    ChoiceChip(label: "Hormones", selected: !weightMode) { weightMode = false }
-                    ChoiceChip(label: "Poids", selected: weightMode) { weightMode = true }
+        ScrollView {
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                if features.weight {
+                    SegmentedSelector(
+                        options: ["Hormones", "Poids"],
+                        selection: $segment,
+                        accessibilityLabel: "Famille de mesures")
                 }
-            }
-
-            if vm.loading {
-                ProgressView().tint(palette.primary).frame(maxWidth: .infinity).padding()
-            } else if weightMode {
-                weightSection
-            } else {
-                hormoneSection
-            }
-
-            if let e = vm.error { ErrorBanner(message: e) }
-        }
-        .overlay(alignment: .bottomTrailing) {
-            Button {
-                if weightMode {
-                    showWeightDialog = true
+                if let message = vm.error { ErrorCardView(message) }
+                if vm.loading {
+                    SkeletonBlock(height: 40, cornerRadius: Radius.pill)
+                    SkeletonBlock(height: 214, cornerRadius: Radius.card)
+                    SkeletonBlock(height: 132, cornerRadius: Radius.card)
+                } else if weightMode {
+                    weightSection
                 } else {
-                    router.push(.addHormone)
+                    hormoneSection
                 }
-            } label: {
-                Image(systemName: "plus").font(.title2.weight(.semibold)).frame(width: 60, height: 60)
+                Color.clear.frame(height: Spacing.m)
             }
-            .glassProminentButton().tint(palette.primary)
-            .clipShape(Circle())
-            .padding(Spacing.xl)
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.top, Spacing.s)
         }
-        .sheet(isPresented: $showWeightDialog) {
+        .measuresScreen("Mesures")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { router.push(.importLab) } label: {
+                    Image(systemName: "doc.text.viewfinder")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(palette.primary)
+                }
+                .accessibilityLabel("Importer une analyse")
+            }
+        }
+        .eggActionBar {
+            ActionBarButton(
+                weightMode ? "Noter un poids" : "Ajouter un relevé",
+                systemImage: "plus"
+            ) {
+                if weightMode { showWeightSheet = true } else { router.push(.addHormone) }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let toast {
+                SnackbarView(message: toast)
+                    .padding(.bottom, Metrics.actionBarHeight + Spacing.m)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .sheet(isPresented: $showWeightSheet) {
             MeasurementSheet(
-                title: "Ajouter un poids",
+                title: "Noter un poids",
+                hint: "Une pesée de temps en temps suffit : la courbe se dessine toute seule.",
                 initialValue: nil,
                 initialUnit: "kg",
                 unitOptions: HormoneCatalog.weightUnits,
                 initialDate: Date(),
                 showDelete: false,
-                onSave: { value, unit, _ in
-                    if let s = app.session { Task { await vm.addWeight(value: value, unit: unit, session: s) } }
+                onSave: { value, unit, date in
+                    guard let session = app.session else { return }
+                    Task {
+                        await vm.addWeight(
+                            value: value,
+                            unit: unit,
+                            atMs: Int64(date.timeIntervalSince1970 * 1000),
+                            session: session)
+                    }
                 },
                 onDelete: nil)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(Radius.sheet)
         }
         .sheet(item: $editing) { entry in
             MeasurementSheet(
-                title: entry.raw.hormone == HormoneCatalog.weight ? "Modifier le poids" : "Modifier la mesure",
+                title: entry.raw.hormone == HormoneCatalog.weight
+                    ? "Modifier cette pesée"
+                    : "Modifier ce relevé",
+                hint: "Tu peux corriger la valeur, l’unité ou la date. Rien d’autre ne bouge.",
                 initialValue: entry.raw.value,
                 initialUnit: entry.raw.unit,
-                unitOptions: entry.raw.hormone == HormoneCatalog.weight ? HormoneCatalog.weightUnits : HormoneCatalog.units,
-                initialDate: Date(timeIntervalSince1970: Double(entry.raw.atMs) / 1000.0),
+                unitOptions: entry.raw.hormone == HormoneCatalog.weight
+                    ? HormoneCatalog.weightUnits
+                    : HormoneCatalog.units,
+                initialDate: Date(timeIntervalSince1970: Double(entry.raw.atMs) / 1000),
                 showDelete: true,
                 onSave: { value, unit, date in
-                    if let s = app.session {
-                        Task { await vm.updateMeasurement(original: entry.raw, value: value, unit: unit,
-                                                          atMs: Int64(date.timeIntervalSince1970 * 1000), session: s) }
+                    guard let session = app.session else { return }
+                    Task {
+                        await vm.updateMeasurement(
+                            original: entry.raw,
+                            value: value,
+                            unit: unit,
+                            atMs: Int64(date.timeIntervalSince1970 * 1000),
+                            session: session)
                     }
                 },
                 onDelete: {
-                    if let s = app.session { Task { await vm.deleteMeasurement(entry.raw.id, session: s) } }
+                    guard let session = app.session else { return }
+                    Task { await vm.deleteMeasurement(entry.raw.id, session: session) }
                 })
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(Radius.sheet)
+        }
+        .sensoryFeedback(.success, trigger: vm.savedTick)
+        .onChange(of: vm.savedTick) { _, _ in flash("Enregistré ✓") }
+        // Turning weight tracking off while sitting on the Poids segment must
+        // not strand the user on a hidden family.
+        .onChange(of: features.weight) { _, enabled in
+            if !enabled { segment = MeasuresSegment.hormones.rawValue }
         }
         .task {
             vm.configure(effective: { hormoneUnits.effectiveUnit(for: $0) })
-            if let s = app.session { await vm.load(s) }
+            if let session = app.session { await vm.load(session) }
         }
-    }
-
-    // MARK: - Hormones mode
-
-    private var hormoneSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.m) {
-            if !vm.hormones.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Spacing.s) {
-                        ForEach(vm.hormones, id: \.self) { h in
-                            ChoiceChip(label: HormoneCatalog.kindLabel(h), selected: vm.selectedHormone == h) {
-                                if let s = app.session { Task { await vm.selectHormone(h, session: s) } }
-                            }
-                        }
-                    }
-                }
-            }
-
-            importRow
-            unitsRow
-
-            if active.isEmpty {
-                EmptyStateCard(text: "Aucune mesure hormonale", systemImage: "drop")
-            } else {
-                latestCard(weight: false)
-                evolutionCard
-                historyCard
+        // Coming back from « Ajouter » or from the OCR import must show the
+        // value that was just written.
+        .onChange(of: router.path.count) { _, _ in
+            if let session = app.session {
+                Task { await vm.load(session, showSkeleton: false) }
             }
         }
     }
 
-    // MARK: - Weight mode
-
-    private var weightSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.m) {
-            if active.isEmpty {
-                EmptyStateCard(text: "Aucune mesure de poids", systemImage: "scalemass")
-            } else {
-                latestCard(weight: true)
-                evolutionCard
-                historyCard
-            }
+    private func flash(_ message: String) {
+        withAnimation(.easeOut(duration: 0.2)) { toast = message }
+        Task {
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            // Guard on the message so a stale timer cannot swallow a newer
+            // confirmation.
+            withAnimation(.easeIn(duration: 0.2)) { if toast == message { toast = nil } }
         }
     }
 
-    // MARK: - Shared cards
-
-    private var importRow: some View {
-        Button {
-            router.push(.importLab)
-        } label: {
-            HStack {
-                Image(systemName: "doc.text.viewfinder").foregroundStyle(palette.primary)
-                Text("Importer un résultat de labo").font(.eggCallout).foregroundStyle(palette.onSurface)
-                Spacer()
-                Image(systemName: "chevron.right").font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.4))
-            }
-            .padding(Spacing.l)
-            .frame(maxWidth: .infinity)
-            .glassCard(cornerRadius: Corner.large)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var unitsRow: some View {
-        Button {
-            router.push(.hormoneUnits)
-        } label: {
-            HStack {
-                Image(systemName: "ruler").foregroundStyle(palette.primary)
-                Text("Unités d'affichage").font(.eggCallout).foregroundStyle(palette.onSurface)
-                Spacer()
-                Image(systemName: "chevron.right").font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.4))
-            }
-            .padding(Spacing.l)
-            .frame(maxWidth: .infinity)
-            .glassCard(cornerRadius: Corner.large)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func latestCard(weight: Bool) -> some View {
-        let items = active
-        let latest = items.last
-        let prev = items.count >= 2 ? items[items.count - 2] : nil
-        return SectionCard {
-            Text(weight ? "Dernière pesée" : "Dernière mesure")
-                .font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            if let latest {
-                HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
-                    Text(formatValue(latest.displayValue)).font(.eggDisplay).foregroundStyle(palette.onSurface)
-                    Text(latest.displayUnit).font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.6))
-                    Spacer()
-                    if let prev {
-                        Pill(text: deltaText(latest: latest, prev: prev))
-                    }
-                }
-                Text(dateLabel(latest.raw.atMs)).font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
-            }
-        }
-    }
+    // MARK: - Hormones
 
     @ViewBuilder
-    private var evolutionCard: some View {
+    private var hormoneSection: some View {
+        if !vm.hormones.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 7) {
+                    ForEach(vm.hormones, id: \.self) { kind in
+                        AnalyteChip(
+                            HormoneCatalog.kindLabel(kind),
+                            selected: vm.selectedHormone == kind
+                        ) {
+                            guard let session = app.session else { return }
+                            Task { await vm.selectHormone(kind, session: session) }
+                        }
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+        }
+
+        if active.isEmpty {
+            EmptyStateView(
+                "Tes analyses n’ont pas encore de courbe. Ajoute un résultat, ou importe "
+                    + "directement le PDF de ton labo.",
+                systemImage: "chart.xyaxis.line",
+                actionLabel: "Importer une analyse") {
+                    router.push(.importLab)
+                }
+        } else {
+            curveCard(weight: false)
+            SectionTitleView("Relevés", prominent: true)
+            readingsCard
+        }
+    }
+
+    // MARK: - Poids
+
+    @ViewBuilder
+    private var weightSection: some View {
+        if active.isEmpty {
+            EmptyStateView(
+                "Note ton poids de temps en temps : la courbe se dessine toute seule.",
+                systemImage: "scalemass",
+                actionLabel: "Noter un poids") {
+                    showWeightSheet = true
+                }
+        } else {
+            curveCard(weight: true)
+            SectionTitleView("Relevés", prominent: true)
+            readingsCard
+        }
+    }
+
+    // MARK: - The curve card
+
+    @ViewBuilder
+    private func curveCard(weight: Bool) -> some View {
         let items = active
-        if items.count >= 2, let tMin = items.first?.raw.atMs, let tMax = items.last?.raw.atMs {
-            // Doses taken in the window, drawn ON the (linearly interpolated)
-            // curve — the visual link between intakes and hormone evolution.
-            let markers = (weightMode ? [] : vm.doseMarkers)
-                .filter { $0.atMs >= tMin && $0.atMs <= tMax }
-            SectionCard {
-                Text("Évolution").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-                Chart {
-                    ForEach(items) { m in
-                        LineMark(
-                            x: .value("Date", Date(timeIntervalSince1970: Double(m.raw.atMs) / 1000.0)),
-                            y: .value("Valeur", m.displayValue))
-                        AreaMark(
-                            x: .value("Date", Date(timeIntervalSince1970: Double(m.raw.atMs) / 1000.0)),
-                            y: .value("Valeur", m.displayValue))
-                        .foregroundStyle(palette.primary.opacity(0.18))
-                    }
-                    .foregroundStyle(palette.primary)
-                    // Linear, like Android: X positions follow the actual draw
-                    // dates and the dose dots land exactly on the segments.
-                    .interpolationMethod(.linear)
-
-                    ForEach(Array(markers.enumerated()), id: \.offset) { _, marker in
-                        PointMark(
-                            x: .value("Date", Date(timeIntervalSince1970: Double(marker.atMs) / 1000.0)),
-                            y: .value("Valeur", interpolatedValue(items, atMs: marker.atMs)))
-                        .symbolSize(30)
-                        .foregroundStyle(
-                            (marker.colorArgb.map { MedColor.color(fromArgb: $0) } ?? palette.secondary)
-                                .opacity(0.9))
-                    }
-                }
-                // Date labels under the axis: first, middle (only when the
-                // window spans more than 2 days) and last measurement dates.
-                .chartXAxis {
-                    AxisMarks(values: xAxisLabelDates(tMin: tMin, tMax: tMax)) { value in
-                        AxisValueLabel {
-                            if let d = value.as(Date.self) {
-                                Text(shortDateLabel(d))
-                            }
+        if let latest = items.last {
+            let previous = items.count >= 2 ? items[items.count - 2] : nil
+            EggCard(variant: .low, paddingH: 18, paddingV: 18, cornerRadius: 24, spacing: 0) {
+                HStack(alignment: .bottom, spacing: Spacing.s) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        MicroLabel(
+                            (weight ? "DERNIÈRE PESÉE · " : "DERNIÈRE VALEUR · ")
+                                + MeasureFormat.upper(MeasureFormat.dayMonth(latest.raw.atMs)))
+                        HStack(alignment: .lastTextBaseline, spacing: 6) {
+                            Text(MeasureFormat.value(latest.displayValue))
+                                .font(.system(size: 34, weight: .semibold))
+                                .foregroundStyle(palette.onSurface)
+                            Text(latest.displayUnit)
+                                .font(EggFont.titleS)
+                                .foregroundStyle(palette.onSurfaceVariant)
                         }
                     }
+                    Spacer(minLength: Spacing.s)
+                    if let previous {
+                        MeasureDeltaPill(delta: latest.displayValue - previous.displayValue)
+                    }
                 }
-                .frame(height: 180)
+
+                if items.count >= 2 {
+                    let doses = weight ? [] : vm.doseMarkers.map(\.atMs)
+                    let changes = weight ? [] : vm.treatmentChanges
+                    MeasureChart(
+                        points: items.map { MeasurePoint(atMs: $0.raw.atMs, value: $0.displayValue) },
+                        doseMarkers: doses,
+                        treatmentChanges: changes,
+                        accessibilityText: chartDescription(items, weight: weight))
+                        .padding(.top, 12)
+                    axisLegend(items: items, doses: doses, changes: changes)
+                } else {
+                    Text("Encore un relevé et la courbe se dessine.")
+                        .font(EggFont.bodyS)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                        .padding(.top, 10)
+                }
             }
         }
     }
 
-    /// First / middle / last dates of the charted window, « d MMM » labelled.
-    private func xAxisLabelDates(tMin: Int64, tMax: Int64) -> [Date] {
-        var ts: [Int64] = [tMin]
-        if tMax - tMin > 2 * 86_400_000 { ts.append(tMin + (tMax - tMin) / 2) }
-        if tMax != tMin { ts.append(tMax) }
-        return ts.map { Date(timeIntervalSince1970: Double($0) / 1000.0) }
-    }
-
-    private func shortDateLabel(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "fr")
-        f.dateFormat = "d MMM"
-        return f.string(from: date)
-    }
-
-    /// Linear interpolation of the curve's display value at time t. Mirrors
-    /// android AreaChart.curveValueAt.
-    private func interpolatedValue(_ items: [DisplayMeasurement], atMs t: Int64) -> Double {
-        guard let last = items.last else { return 0 }
-        let i = items.lastIndex(where: { $0.raw.atMs <= t }) ?? 0
-        if i >= items.count - 1 { return last.displayValue }
-        let t0 = items[i].raw.atMs
-        let v0 = items[i].displayValue
-        let t1 = items[i + 1].raw.atMs
-        let v1 = items[i + 1].displayValue
-        if t1 == t0 { return v0 }
-        let f = Double(t - t0) / Double(t1 - t0)
-        return v0 + (v1 - v0) * f
-    }
-
-    private var historyCard: some View {
-        SectionCard {
-            Text("Historique").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            ForEach(active.reversed()) { m in
-                Button {
-                    editing = m
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(dateLabel(m.raw.atMs)).font(.eggCallout).foregroundStyle(palette.onSurface)
-                            if m.displayUnit != m.raw.unit {
-                                // Show the original entry too so the conversion is auditable.
-                                Text("\(formatValue(m.raw.value)) \(m.raw.unit)")
-                                    .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.5))
-                            }
-                        }
-                        Spacer()
-                        Text("\(formatValue(m.displayValue)) \(m.displayUnit)")
-                            .font(.eggCallout).foregroundStyle(palette.onSurface.opacity(0.8))
-                    }
-                    .padding(.vertical, Spacing.xs)
+    /// The bottom line of the chart. It carries **both** the X-axis bounds and
+    /// the key to the two overlays: §5.1 puts the legend on the gradations, not
+    /// in a row of its own. Each key spells its series out, so nothing is told
+    /// by hue alone.
+    private func axisLegend(items: [DisplayMeasurement], doses: [Int64], changes: [Int64]) -> some View {
+        HStack(spacing: 10) {
+            MicroLabel(MeasureFormat.upper(MeasureFormat.monthYear(items[0].raw.atMs)))
+            HStack(spacing: 10) {
+                if !doses.isEmpty {
+                    MeasureAxisKey(label: "Prise notée", color: palette.tertiary, dashed: false)
                 }
-                .buttonStyle(.plain)
+                if !changes.isEmpty {
+                    MeasureAxisKey(label: "Changement de dose", color: palette.secondary, dashed: true)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            MicroLabel(
+                MeasureFormat.upper(MeasureFormat.monthYear(items[items.count - 1].raw.atMs)))
+        }
+        .padding(.top, 4)
+    }
+
+    private func chartDescription(_ items: [DisplayMeasurement], weight: Bool) -> String {
+        let kind = weight
+            ? "poids"
+            : HormoneCatalog.kindLabel(vm.selectedHormone ?? HormoneCatalog.weight)
+        guard let first = items.first, let last = items.last else { return kind }
+        return "Courbe de \(kind), de \(MeasureFormat.monthYear(first.raw.atMs)) "
+            + "à \(MeasureFormat.monthYear(last.raw.atMs)). "
+            + "Dernière valeur \(MeasureFormat.value(last.displayValue)) \(last.displayUnit)."
+    }
+
+    // MARK: - The readings list
+
+    private var readingsCard: some View {
+        EggCard(variant: .low, paddingH: 18, paddingV: 6, spacing: 0) {
+            let items = active.reversed().map { $0 }
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, measurement in
+                readingRow(measurement)
+                if index < items.count - 1 { CardRule() }
             }
         }
     }
 
-    // MARK: - Helpers
-
-    private func deltaText(latest: DisplayMeasurement, prev: DisplayMeasurement) -> String {
-        let d = latest.displayValue - prev.displayValue
-        let sign = d >= 0 ? "+" : "−"
-        return "\(sign)\(formatValue(abs(d))) \(latest.displayUnit)"
-    }
-
-    private func formatValue(_ v: Double) -> String {
-        if v == v.rounded() { return String(format: "%.0f", v) }
-        return String(format: "%.2f", v)
-    }
-
-    private func dateLabel(_ ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: Double(ms) / 1000.0)
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "fr")
-        f.dateStyle = .medium
-        f.timeStyle = .none
-        return f.string(from: date)
+    private func readingRow(_ m: DisplayMeasurement) -> some View {
+        let date = MeasureFormat.fullDate(m.raw.atMs)
+        let value = MeasureFormat.value(m.displayValue)
+        // The subtitle carries the provenance, and the original unit whenever
+        // the display unit differs — so the conversion can always be audited
+        // against what the sheet said.
+        let origin = m.raw.labName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty ?? "Saisi à la main"
+        let subtitle = m.displayUnit != m.raw.unit
+            ? "\(origin) · \(MeasureFormat.value(m.raw.value)) \(m.raw.unit)"
+            : origin
+        return Button {
+            editing = m
+        } label: {
+            HStack(spacing: Spacing.m) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(date)
+                        .font(.eggCallout)
+                        .foregroundStyle(palette.onSurface)
+                    Text(subtitle)
+                        .font(EggFont.bodyS)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                }
+                Spacer(minLength: Spacing.s)
+                Text(value)
+                    .font(EggFont.titleS)
+                    .foregroundStyle(palette.onSurface)
+                Text(m.displayUnit)
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+            }
+            .padding(.vertical, 13)
+            .frame(minHeight: Metrics.touchTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(date), \(value) \(m.displayUnit). \(subtitle)")
+        .accessibilityHint("Modifier ce relevé")
     }
 }
 
 // ===========================================================================
-// Shared value+unit+date sheet, used both for the weight quick-add and for
-// editing an existing measurement (which under the hood is delete + re-add).
+// Chart pieces
+// ===========================================================================
+
+/// One plotted reading, already converted to the display unit.
+struct MeasurePoint {
+    let atMs: Int64
+    let value: Double
+}
+
+/// The delta pill of §6.8. A rise is the one direction the handoff colours in
+/// `successContainer`; a fall stays neutral, because whether a level going down
+/// is good news depends entirely on the analyte, and eggshell does not judge.
+/// The arrow is written as text: `trending_up` is missing from the icon set the
+/// design system ships.
+struct MeasureDeltaPill: View {
+    @Environment(\.palette) private var palette
+    let delta: Double
+
+    var body: some View {
+        let rising = delta > 0
+        let flat = delta == 0
+        let magnitude = MeasureFormat.delta(abs(delta))
+        let glyph = flat ? "→" : (rising ? "↗" : "↘")
+        let spoken = flat
+            ? "Identique au relevé précédent"
+            : (rising
+                ? "En hausse de \(magnitude) depuis le relevé précédent"
+                : "En baisse de \(magnitude) depuis le relevé précédent")
+        HStack(spacing: 4) {
+            Text(glyph).font(.system(size: 13, weight: .bold))
+            Text(magnitude).font(EggFont.micro)
+        }
+        .foregroundStyle(rising ? palette.onSuccessContainer : palette.onSurfaceVariant)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(rising ? palette.successContainer : palette.surfaceContainerHigh, in: Capsule())
+        .accessibilityElement()
+        .accessibilityLabel(spoken)
+    }
+}
+
+/// One axis gradation: the mark, then the word.
+struct MeasureAxisKey: View {
+    let label: String
+    let color: Color
+    let dashed: Bool
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if dashed {
+                Rectangle().fill(color).frame(width: 14, height: 2)
+            } else {
+                Circle().fill(color).frame(width: 7, height: 7)
+            }
+            MicroLabel(label, color: color)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Time-proportional area chart (§5.1). X follows the real dates, so a
+/// six-month gap looks like one. Dose markers ride the interpolated curve in
+/// `tertiary`; each treatment change is a dashed `secondary` vertical; the last
+/// point is filled, bigger, and haloed.
+struct MeasureChart: View {
+    @Environment(\.palette) private var palette
+
+    let points: [MeasurePoint]
+    var doseMarkers: [Int64] = []
+    var treatmentChanges: [Int64] = []
+    var height: CGFloat = 132
+    var accessibilityText: String = ""
+
+    var body: some View {
+        Canvas { context, size in
+            draw(in: context, size: size)
+        }
+        .frame(height: height)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement()
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private func draw(in context: GraphicsContext, size: CGSize) {
+        guard points.count >= 2 else { return }
+        let values = points.map(\.value)
+        let minValue = values.min() ?? 0
+        let maxValue = values.max() ?? 1
+        let span = (maxValue - minValue) > 0 ? (maxValue - minValue) : 1
+        let tMin = points[0].atMs
+        let tMax = points[points.count - 1].atMs
+        let tSpan = (tMax - tMin) > 0 ? (tMax - tMin) : 1
+
+        let padTop: CGFloat = 12
+        let padSide: CGFloat = 10
+        let baseline = size.height - 8
+        let plotWidth = max(1, size.width - 2 * padSide)
+
+        func xFor(_ t: Int64) -> CGFloat {
+            padSide + plotWidth * CGFloat(Double(t - tMin) / Double(tSpan))
+        }
+        func yFor(_ v: Double) -> CGFloat {
+            padTop + (baseline - padTop) * CGFloat(1 - (v - minValue) / span)
+        }
+
+        // Three gradations, evenly spread over the plot.
+        for i in 1...3 {
+            let y = padTop + (baseline - padTop) * CGFloat(i) / 4
+            var line = Path()
+            line.move(to: CGPoint(x: 0, y: y))
+            line.addLine(to: CGPoint(x: size.width, y: y))
+            context.stroke(line, with: .color(palette.chartGrid), lineWidth: 1)
+        }
+
+        var curve = Path()
+        var area = Path()
+        for (i, point) in points.enumerated() {
+            let x = xFor(point.atMs)
+            let y = yFor(point.value)
+            if i == 0 {
+                curve.move(to: CGPoint(x: x, y: y))
+                area.move(to: CGPoint(x: x, y: baseline))
+                area.addLine(to: CGPoint(x: x, y: y))
+            } else {
+                curve.addLine(to: CGPoint(x: x, y: y))
+                area.addLine(to: CGPoint(x: x, y: y))
+            }
+        }
+        area.addLine(to: CGPoint(x: xFor(tMax), y: baseline))
+        area.closeSubpath()
+
+        context.fill(
+            area,
+            with: .linearGradient(
+                Gradient(colors: [palette.primary.opacity(0.34), palette.primary.opacity(0)]),
+                startPoint: CGPoint(x: 0, y: padTop),
+                endPoint: CGPoint(x: 0, y: baseline)))
+        context.stroke(
+            curve,
+            with: .color(palette.primary),
+            style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+
+        // Treatment changes: a dashed vertical the eye can line up with the
+        // bend of the curve.
+        let dashed = StrokeStyle(lineWidth: 1.5, dash: [4, 4])
+        for at in treatmentChanges where at >= tMin && at <= tMax {
+            var line = Path()
+            line.move(to: CGPoint(x: xFor(at), y: max(0, padTop - 4)))
+            line.addLine(to: CGPoint(x: xFor(at), y: baseline))
+            context.stroke(line, with: .color(palette.secondary.opacity(0.8)), style: dashed)
+        }
+
+        // Linear interpolation of the curve's value at time t, so a marker
+        // lands exactly on the segment it belongs to.
+        func curveValue(at t: Int64) -> Double {
+            var i = points.lastIndex(where: { $0.atMs <= t }) ?? 0
+            if i < 0 { i = 0 }
+            if i >= points.count - 1 { return points[points.count - 1].value }
+            let p0 = points[i]
+            let p1 = points[i + 1]
+            if p1.atMs == p0.atMs { return p0.value }
+            let f = Double(t - p0.atMs) / Double(p1.atMs - p0.atMs)
+            return p0.value + (p1.value - p0.value) * f
+        }
+        for at in doseMarkers where at >= tMin && at <= tMax {
+            let center = CGPoint(x: xFor(at), y: yFor(curveValue(at: at)))
+            context.fill(circle(center: center, radius: 3.4), with: .color(palette.tertiary))
+        }
+
+        // The end point is filled and slightly bigger, with a halo.
+        let end = CGPoint(x: xFor(tMax), y: yFor(values[values.count - 1]))
+        context.fill(circle(center: end, radius: 9), with: .color(palette.primary.opacity(0.22)))
+        context.fill(circle(center: end, radius: 5), with: .color(palette.primary))
+    }
+
+    private func circle(center: CGPoint, radius: CGFloat) -> Path {
+        Path(ellipseIn: CGRect(
+            x: center.x - radius,
+            y: center.y - radius,
+            width: radius * 2,
+            height: radius * 2))
+    }
+}
+
+// ===========================================================================
+// Shared value + unit + date sheet, used both for the weight quick-add and for
+// editing an existing reading (which under the hood is delete + re-add).
+// Behaviour unchanged from before the refonte — restyled only (D6).
 // ===========================================================================
 private struct MeasurementSheet: View {
     @Environment(\.palette) private var palette
     @Environment(\.dismiss) private var dismiss
 
     let title: String
+    let hint: String
     let initialValue: Double?
     let initialUnit: String
     let unitOptions: [String]
@@ -528,84 +782,94 @@ private struct MeasurementSheet: View {
     let onSave: (Double, String, Date) -> Void
     let onDelete: (() -> Void)?
 
-    @State private var text: String = ""
-    @State private var unit: String = ""
-    @State private var date: Date = Date()
-    @State private var showDeleteConfirm = false
+    @State private var text = ""
+    @State private var unit = ""
+    @State private var date = Date()
+    @State private var confirmDelete = false
     @State private var started = false
 
     private var parsed: Double? { Double(text.replacingOccurrences(of: ",", with: ".")) }
     private var canSave: Bool { (parsed ?? 0) > 0 && !unit.isEmpty }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.l) {
-                Text(title).font(.eggTitle).foregroundStyle(palette.onSurface)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                    Text(hint)
+                        .font(EggFont.bodyS)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                SectionCard {
-                    Text("Valeur").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-                    TextField("0", text: $text)
-                        .keyboardType(.decimalPad)
-                        .font(.eggBody)
-                        .textFieldStyle(.roundedBorder)
-                    Text("Unité").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), spacing: Spacing.s)],
-                              alignment: .leading, spacing: Spacing.s) {
-                        ForEach(unitOptions, id: \.self) { u in
-                            ChoiceChip(label: u, selected: unit == u) { unit = u }
+                    EggCard(variant: .low) {
+                        MicroLabel("VALEUR")
+                        TextField("0", text: $text)
+                            .keyboardType(.decimalPad)
+                            .font(.system(size: 28, weight: .semibold))
+                            .foregroundStyle(palette.onSurface)
+                        MicroLabel("UNITÉ")
+                        ChipFlowLayout(spacing: 7, lineSpacing: 4) {
+                            ForEach(unitOptions, id: \.self) { option in
+                                AnalyteChip(option, selected: unit == option) { unit = option }
+                            }
                         }
                     }
-                }
 
-                SectionCard {
-                    DatePicker("Date", selection: $date, displayedComponents: [.date])
-                        .font(.eggBody)
+                    EggCard(variant: .low) {
+                        DatePicker(selection: $date, displayedComponents: [.date]) {
+                            Text("Date").font(.eggBody).foregroundStyle(palette.onSurface)
+                        }
                         .tint(palette.primary)
-                }
-
-                HStack {
-                    Button("Annuler") { dismiss() }
-                        .glassButton().tint(palette.secondary)
-                    Spacer()
-                    Button("Enregistrer") {
-                        if let v = parsed { onSave(v, unit, date) }
-                        dismiss()
                     }
-                    .glassProminentButton().tint(palette.primary)
-                    .disabled(!canSave)
-                }
 
-                if showDelete, onDelete != nil {
-                    Button {
-                        showDeleteConfirm = true
-                    } label: {
-                        Label("Supprimer", systemImage: "trash").font(.eggCallout).frame(maxWidth: .infinity)
+                    if showDelete, onDelete != nil {
+                        Button(role: .destructive) { confirmDelete = true } label: {
+                            Label("Supprimer ce relevé", systemImage: "trash")
+                                .font(EggFont.label)
+                                .frame(maxWidth: .infinity, minHeight: Metrics.touchTarget)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(palette.error)
                     }
-                    .glassButton().tint(palette.error)
+                    Color.clear.frame(height: Spacing.m)
+                }
+                .padding(.horizontal, Metrics.screenMargin)
+                .padding(.top, Spacing.m)
+            }
+            .background(palette.surface.ignoresSafeArea())
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Annuler") { dismiss() }.foregroundStyle(palette.primary)
                 }
             }
-            .padding(Spacing.xl)
-        }
-        .confirmationDialog("Supprimer cette mesure ?",
-                            isPresented: $showDeleteConfirm,
-                            titleVisibility: .visible) {
-            Button("Supprimer", role: .destructive) {
-                onDelete?()
-                dismiss()
+            .eggActionBar {
+                ActionBarButton("Enregistrer", systemImage: "checkmark", enabled: canSave) {
+                    if let value = parsed { onSave(value, unit, date) }
+                    dismiss()
+                }
             }
-            Button("Annuler", role: .cancel) {}
-        }
-        .onAppear {
-            guard !started else { return }
-            started = true
-            if let v = initialValue { text = formatInitial(v) }
-            unit = unitOptions.contains(initialUnit) ? initialUnit : (unitOptions.first ?? initialUnit)
-            date = initialDate
+            .alert("Supprimer ce relevé ?", isPresented: $confirmDelete) {
+                Button("Supprimer", role: .destructive) {
+                    onDelete?()
+                    dismiss()
+                }
+                Button("Annuler", role: .cancel) {}
+            } message: {
+                Text("Il disparaîtra de la courbe et de la liste. C’est sans retour.")
+            }
+            .onAppear {
+                guard !started else { return }
+                started = true
+                if let value = initialValue { text = MeasureFormat.value(value) }
+                unit = unitOptions.contains(initialUnit) ? initialUnit : (unitOptions.first ?? initialUnit)
+                date = initialDate
+            }
         }
     }
+}
 
-    private func formatInitial(_ v: Double) -> String {
-        if v == v.rounded() { return String(format: "%.0f", v) }
-        return String(v)
-    }
+private extension String {
+    /// A blank lab name is the same as none: both mean « saisi à la main ».
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

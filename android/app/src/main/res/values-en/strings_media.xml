@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Photos and Voice — ergonomic redesign, handoff §6.10 and §6.11.
+  Small-caps labels are uppercased in the string itself, never through a text
+  transform: a translation has to be able to opt out.
+  Screen titles reuse module_photos / module_voice from the launcher.
+-->
+<resources>
+
+    <!-- ================= Photos (§6.10) ================= -->
+    <string name="media_photos_section">Your photos</string>
+    <string name="media_photos_add">Add a photo</string>
+
+    <!-- Compare mode: the two thumbnail captions -->
+    <string name="media_photos_before">BEFORE · %1$s</string>
+    <string name="media_photos_now">NOW · %1$s</string>
+
+    <!-- Span card between the two compared shots -->
+    <plurals name="media_photos_span_months">
+        <item quantity="one">%d month</item>
+        <item quantity="other">%d months</item>
+    </plurals>
+    <plurals name="media_photos_span_days">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
+    <plurals name="media_photos_span_sub">
+        <item quantity="one">between these two photos · %d shot in total</item>
+        <item quantity="other">between these two photos · %d shots in total</item>
+    </plurals>
+
+    <string name="media_photos_privacy">Your photos live in the encrypted vault, never in your phone gallery. Screenshots are blocked on this screen.</string>
+
+    <string name="media_photos_empty">No shot yet. Add the first one: it goes straight to the vault, never to your gallery.</string>
+    <string name="media_photos_compare_empty">Two shots are needed to see a path. Add a second one and the comparison shows up here.</string>
+
+    <string name="media_photos_open">Open the photo from %1$s</string>
+    <string name="media_photos_photo">Photo from %1$s</string>
+    <string name="media_photos_viewer_close">Close</string>
+
+    <string name="media_photos_delete_title">Delete this photo?</string>
+    <string name="media_photos_delete_body">It will be wiped from the vault, and there is no undo.</string>
+    <string name="media_photos_deleted">Photo deleted</string>
+    <string name="media_photos_save_failed">Could not write to the phone gallery. The photo stays in the vault.</string>
+
+    <!-- ================= Voice (§6.11) ================= -->
+    <string name="media_voice_pitch_label">AVERAGE PITCH · %1$s</string>
+    <string name="media_voice_hz">Hz</string>
+    <string name="media_voice_pitch">%1$d Hz</string>
+    <string name="media_voice_pitch_unknown">—</string>
+    <string name="media_voice_pitch_unknown_cd">Pitch not detected</string>
+
+    <!-- Delta pill: the glyph and the words carry the meaning, never colour alone -->
+    <string name="media_voice_delta_glyph_up">↗</string>
+    <string name="media_voice_delta_glyph_down">↘</string>
+    <string name="media_voice_delta_glyph_flat">→</string>
+    <string name="media_voice_delta_up">+%1$d Hz</string>
+    <string name="media_voice_delta_down">−%1$d Hz</string>
+    <string name="media_voice_delta_flat">0 Hz</string>
+    <string name="media_voice_delta_up_cd">%1$d Hz higher than your first clip</string>
+    <string name="media_voice_delta_down_cd">%1$d Hz lower than your first clip</string>
+    <string name="media_voice_delta_flat_cd">Same pitch as your first clip</string>
+
+    <plurals name="media_voice_clips_unit">
+        <item quantity="one">recording</item>
+        <item quantity="other">recordings</item>
+    </plurals>
+    <string name="media_voice_trend_hint">One more recording and the curve starts.</string>
+    <string name="media_voice_sparkline_cd">Your voice pitch across %1$d recordings, from %2$d to %3$d Hz</string>
+
+    <!-- Recorder: Idle → Recording → Processing -->
+    <string name="media_voice_record_title">Record 30 seconds</string>
+    <string name="media_voice_record_sub">Quiet room, same paragraph, phone 30 cm away — that is what makes the curve comparable.</string>
+    <string name="media_voice_recording_title">Recording · %1$s</string>
+    <string name="media_voice_recording_sub">Take your time, read to the end. Tap again when you are done.</string>
+    <string name="media_voice_processing_title">One moment, tucking this away</string>
+    <string name="media_voice_processing_sub">The pitch gets measured, then the audio is encrypted. A few seconds, no more.</string>
+
+    <string name="media_voice_section_clips">Your recordings</string>
+    <string name="media_voice_empty">No clip yet. Record yourself once: that will be your starting point.</string>
+    <string name="media_voice_empty_action">Record now</string>
+
+    <string name="media_voice_delete_title">Delete this clip?</string>
+    <string name="media_voice_delete_body">It will be wiped from the vault, and there is no undo.</string>
+    <string name="media_voice_deleted">Clip deleted</string>
+
+    <string name="media_voice_mic_denied">Without mic access there is nothing to record. You can allow it in your phone settings.</string>
+    <string name="media_voice_error">The recording stopped short. Check that nothing else is using the mic, then start again.</string>
+    <string name="media_voice_error_retry">Start again</string>
+
+</resources>

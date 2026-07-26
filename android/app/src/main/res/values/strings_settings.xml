@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Réglages — les trois portes, la section Rappels, et les écrans qu’elles ouvrent.
+  Zone « Réglages » du contrat de refonte : aucune de ces clés ne vit dans strings.xml.
+-->
+<resources>
+
+    <!-- ============ Le hub ============ -->
+    <string name="set_hub_title">Réglages</string>
+
+    <string name="set_door_modules">Modules</string>
+    <string name="set_door_modules_sub_fmt">%1$d activés sur 8 · ce que l’app suit pour toi</string>
+    <string name="set_door_security">Sécurité</string>
+    <!-- verrouillage · leurre · sauvegarde -->
+    <string name="set_door_security_sub_fmt">%1$s · %2$s · %3$s</string>
+    <string name="set_door_security_decoy_on">leurre actif</string>
+    <string name="set_door_security_decoy_off">pas de leurre</string>
+    <string name="set_door_security_backup">sauvegarde</string>
+    <string name="set_door_security_no_mode">verrouillage</string>
+    <string name="set_door_appearance">Apparence &amp; langue</string>
+    <!-- thème · langue · unité -->
+    <string name="set_door_appearance_sub_fmt">%1$s · %2$s · %3$s</string>
+
+    <!-- ============ Section Rappels ============ -->
+    <string name="set_section_reminders">Rappels</string>
+    <string name="set_notif_title">Contenu des notifications</string>
+    <string name="set_notif_sub">Ce qui s’affiche sur l’écran verrouillé</string>
+    <string name="set_notif_chip_generic">Générique</string>
+    <string name="set_notif_chip_name">Nom</string>
+    <string name="set_notif_chip_alias">Alias</string>
+    <string name="set_notif_preview_label">Aperçu de l’écran verrouillé</string>
+    <string name="set_notif_preview_generic">« C’est l’heure » — aucun nom affiché.</string>
+    <string name="set_notif_preview_name">« Estradiol — c’est l’heure » — le vrai nom s’affiche.</string>
+    <string name="set_notif_preview_alias">« Vitamine D — c’est l’heure » — ton alias, jamais le vrai nom.</string>
+    <string name="set_open_reminders_sub">Ajoute, modifie ou supprime tes rappels</string>
+    <string name="set_action_add">Ajouter</string>
+    <string name="set_reminders_intro">Tout ce que l’app peut te notifier, au même endroit. Le contenu affiché se règle depuis Réglages.</string>
+
+    <!-- ============ Soutien + pied de page ============ -->
+    <string name="set_support_title">Soutenir eggshell</string>
+    <string name="set_support_sub">Gratuit, sans pub, sans compte.</string>
+    <string name="set_footer_resources">Ressources</string>
+    <string name="set_footer_separator">·</string>
+    <string name="set_footer_version_fmt">Version %1$s</string>
+
+    <!-- ============ Porte 1 — Modules ============ -->
+    <string name="set_modules_hint">Désactiver un module retire seulement sa tuile de l’accueil. Rien n’est effacé : tout revient dès que tu le réactives.</string>
+    <string name="set_module_meds">Médics</string>
+    <string name="set_module_meds_sub">Tes traitements, tes prises, la rotation des sites d’injection.</string>
+    <string name="set_module_appointments">Rendez-vous</string>
+    <string name="set_module_appointments_sub">Tes consultations, les personnes qui te suivent, ce que tu veux leur demander.</string>
+    <string name="set_module_journal">Journal</string>
+    <string name="set_module_journal_sub">Ton humeur, tes indicateurs, les effets que tu ressens.</string>
+    <string name="set_module_bleeding">Règles</string>
+    <string name="set_module_bleeding_sub">Tes saignements et leurs symptômes, jour par jour.</string>
+    <string name="set_module_labs">Analyses</string>
+    <string name="set_module_labs_sub">Tes taux hormonaux dans le temps, saisis ou importés.</string>
+    <string name="set_module_weight">Poids</string>
+    <string name="set_module_weight_sub">Ta courbe de poids, à côté du reste.</string>
+    <string name="set_module_photos">Photos</string>
+    <string name="set_module_photos_sub">Ta timeline datée, chiffrée sur l’appareil.</string>
+    <string name="set_module_voice">Voix</string>
+    <string name="set_module_voice_sub">Tes extraits audio datés, pour entendre l’évolution.</string>
+
+    <!-- ============ Porte 2 — Sécurité ============ -->
+    <string name="set_sec_intro">Tout reste sur ton téléphone. Ces réglages décident de ce qu’il faut pour ouvrir le coffre — et de ce qu’un regard de côté peut en voir.</string>
+    <string name="set_sec_section_lock">Mode de verrouillage</string>
+    <string name="set_sec_current_mode_fmt">Actuel : %1$s</string>
+    <string name="set_sec_section_pins">Code d’accès et PIN de leurre</string>
+    <string name="set_sec_section_masking">Icône et nom de l’app</string>
+    <string name="set_sec_masking_hint">Ce que ton écran d’accueil affiche. Le changement prend effet tout de suite.</string>
+    <string name="set_sec_alias_default">eggshell</string>
+    <string name="set_sec_section_screenshots">Captures d’écran</string>
+    <string name="set_sec_section_backup">Sauvegarde chiffrée</string>
+    <string name="set_sec_export_title">Exporter</string>
+    <string name="set_sec_import_title">Restaurer</string>
+    <string name="set_sec_import_warning">L’app se ferme juste après la restauration : rouvre-la pour retrouver tes données.</string>
+    <string name="set_sec_backup_warning">Cette phrase secrète est la seule clé du fichier. Personne ne peut te la redonner.</string>
+
+    <!-- ============ Porte 3 — Apparence &amp; langue ============ -->
+    <string name="set_look_section_theme">Thème</string>
+    <string name="set_look_section_language">Langue</string>
+    <string name="set_look_language_hint">L’app redémarre son affichage pour appliquer la langue.</string>
+    <string name="set_look_units_row">Unités d’affichage des analyses</string>
+    <string name="set_look_units_sub_fmt">Actuellement %1$s</string>
+    <string name="set_look_units_sub_none">pg/mL, nmol/L, ng/dL…</string>
+    <string name="set_look_theme_selected">Thème actif</string>
+
+    <!-- ============ Quoi de neuf ============ -->
+    <string name="set_wn_title">Quoi de neuf</string>
+    <string name="set_wn_1_title">Un seul accueil</string>
+    <string name="set_wn_1_sub">Plus de barre d’onglets : tes huit modules tiennent sur l’accueil, et le retour y ramène toujours.</string>
+    <string name="set_wn_2_title">Cocher une dose sans naviguer</string>
+    <string name="set_wn_2_sub">La prochaine prise et ton humeur du jour se notent depuis l’accueil, en un geste.</string>
+    <string name="set_wn_3_title">Régularité lisible</string>
+    <string name="set_wn_3_sub">Un graphique montre l’écart de chaque prise à l’heure prévue, sans jamais inventer de chiffre.</string>
+    <string name="set_wn_4_title">Réglages en trois portes</string>
+    <string name="set_wn_4_sub">Modules, Sécurité, Apparence &amp; langue. Les rappels remontent d’un cran.</string>
+    <string name="set_wn_5_title">Le rapport médecin part avec toi</string>
+    <string name="set_wn_5_sub">Il se prépare depuis Rendez-vous, avec les périodes et les sections que tu choisis.</string>
+    <string name="set_wn_6_title">Analyses importées plus finement</string>
+    <string name="set_wn_6_sub">La lecture d’un PDF retient aussi le laboratoire, pour que ton médecin sache d’où vient la valeur.</string>
+
+    <!-- ============ Ressources ============ -->
+    <string name="set_resources_intro">Des sites, des lignes d’écoute et des associations. Le lien s’ouvre dans ton navigateur — rien ne passe par eggshell.</string>
+
+    <string name="set_res_fransgenre">Plateforme communautaire francophone : témoignages, base de connaissances, listes de soignant·es trans-friendly, forum d’entraide.</string>
+    <string name="set_res_administrans">Guide collaboratif des démarches administratives trans en France : changement de prénom, de mention de sexe, papiers, mutuelle.</string>
+    <string name="set_res_wikitrans">Encyclopédie collaborative francophone sur les questions trans : protocoles, démarches administratives, ressources locales.</string>
+    <string name="set_res_transat_dir_title">Transat (annuaire)</string>
+    <string name="set_res_transat_dir">Annuaire de médecins, endocrinologues et soignant·es trans-friendly partout en France.</string>
+    <string name="set_res_sos_title">SOS homophobie · ligne d’écoute</string>
+    <string name="set_res_sos">Soutien anonyme et gratuit en cas d’agression, de discrimination ou de détresse. 01 48 06 42 41.</string>
+    <string name="set_res_ecoute_title">S* Écoute</string>
+    <string name="set_res_ecoute">Ligne d’écoute 24 h/24 si tu traverses une période très dure : 01 45 39 40 00.</string>
+    <string name="set_res_outrans">Association d’auto-support trans à Paris. Permanences, groupes de parole.</string>
+    <string name="set_res_chrysalide">Auto-support pour les personnes trans, intersexes, en questionnement et leurs proches.</string>
+    <string name="set_res_acceptess">Association communautaire de défense des droits des personnes trans, en particulier migrantes et travailleuses du sexe.</string>
+    <string name="set_res_divergenre">Discord — asso Amiens / Somme.</string>
+    <string name="set_res_transat_marseille">Discord — asso Marseille / Bouches-du-Rhône.</string>
+    <string name="set_res_transcomte">Discord — collectif Franche-Comté.</string>
+    <string name="set_res_attoo">Discord — asso Toulouse.</string>
+    <string name="set_res_cia">Discord — asso intersexe.</string>
+    <string name="set_res_transmission_var">Discord — asso Toulon / Var.</string>
+    <string name="set_res_iskis">Discord — asso LGBTI+ Rennes / Ille-et-Vilaine.</string>
+    <string name="set_res_mag">Discord — asso jeunes LGBTI+ Paris.</string>
+    <string name="set_res_rouen">Discord — serveur Rouen / Normandie.</string>
+    <string name="set_res_meuf_toulouse">Discord — serveur transfem Toulouse.</string>
+    <string name="set_res_revolte">Discord — serveur Nancy / Metz / Grand Est.</string>
+    <string name="set_res_astr">Discord — serveur transfem Suisse.</string>
+
+</resources>

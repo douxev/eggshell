@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Zone « Ressenti » : journal, calendrier, règles, corrélations, résumé,
+  indicateurs personnalisables. Refonte ergonomique — handoff §6.2, §6.7, §5.1.
+  Les libellés en petites capitales sont écrits en majuscules dans la chaîne,
+  jamais via une transformation : une traduction doit pouvoir en décider.
+-->
+<resources>
+    <!-- Écran Ressenti -->
+    <string name="feel_title">Ressenti</string>
+    <string name="feel_seg_journal">Journal</string>
+    <string name="feel_seg_bleeding">Règles</string>
+    <string name="feel_seg_correlations">Corrélations</string>
+    <string name="feel_summary_subtitle">Ce qui a bougé, en une carte</string>
+    <string name="feel_fab_journal">Noter mon ressenti</string>
+    <string name="feel_fab_bleeding">Noter des règles</string>
+    <string name="feel_empty_journal">Rien de noté pour l’instant. Deux curseurs et un mot, et la courbe commence à se dessiner.</string>
+    <string name="feel_empty_bleeding_action">Noter des règles</string>
+
+    <!-- Calendrier -->
+    <string name="feel_calendar_legend_mood">Humeur</string>
+    <string name="feel_cd_today">aujourd’hui</string>
+    <string name="feel_cd_selected">jour sélectionné</string>
+    <string name="feel_cd_mood_fmt">humeur %1$s sur 10</string>
+    <string name="feel_cd_doses_fmt">%1$d prise(s) notée(s)</string>
+    <string name="feel_cd_bleeding">règles</string>
+
+    <!-- Historique -->
+    <string name="feel_entry_today_fmt">AUJOURD’HUI · %1$s</string>
+    <string name="feel_entry_yesterday_fmt">HIER · %1$s</string>
+    <string name="feel_entry_date_fmt">%1$s · %2$s</string>
+
+    <!-- Journal complet (§6.2) -->
+    <string name="feel_full_title">Ton ressenti</string>
+    <string name="feel_date_today_fmt">Aujourd’hui · %1$s</string>
+    <string name="feel_date_other_fmt">%1$s · %2$s</string>
+    <string name="feel_value_fmt">%1$d/%2$d</string>
+    <string name="feel_slider_cd_fmt">%1$s, %2$d sur %3$d</string>
+    <string name="feel_no_sliders">Tu as masqué tous les indicateurs. Rouvre-en un pour noter ton ressenti.</string>
+    <string name="feel_note_label">NOTE LIBRE</string>
+    <string name="feel_note_ghost">Un mot sur ta journée…</string>
+    <string name="feel_effects_label">EFFETS RESSENTIS</string>
+    <string name="feel_effect_add">Ajouter</string>
+    <string name="feel_effect_add_title">Ajouter un effet</string>
+    <string name="feel_effect_hint">Fatigue, tension, nausée…</string>
+    <string name="feel_delete_title">Supprimer cette entrée ?</string>
+    <string name="feel_delete_body">Elle disparaîtra de ton journal et des graphiques. C’est définitif.</string>
+
+    <!-- Règles -->
+    <string name="feel_bleeding_note_label">NOTE</string>
+    <string name="feel_bleeding_note_ghost">Ce que tu veux te rappeler de ce jour…</string>
+    <string name="feel_bleeding_kind_label">TYPE</string>
+    <string name="feel_bleeding_symptoms_label">SYMPTÔMES</string>
+    <string name="feel_bleeding_delete_title">Supprimer ce jour ?</string>
+    <string name="feel_bleeding_delete_body">Il disparaîtra du calendrier et de l’historique. C’est définitif.</string>
+
+    <!-- Corrélations (§5.1) -->
+    <string name="feel_corr_axis_mood">humeur</string>
+    <string name="feel_corr_axis_doses">prises notées</string>
+    <string name="feel_corr_axis_late">en retard</string>
+    <string name="feel_corr_axis_missed_fmt">oubliées · %1$d</string>
+    <string name="feel_corr_axis_bleeding">règles</string>
+    <string name="feel_corr_axis_changes_fmt">changements de traitement · %1$d</string>
+    <string name="feel_corr_empty_action">Noter mon ressenti</string>
+
+    <!-- Indicateurs -->
+    <string name="feel_metric_hidden">Masqué</string>
+    <string name="feel_metric_domain_journal">Ces curseurs apparaissent dans ton journal.</string>
+    <string name="feel_metric_domain_bleeding">Ces curseurs apparaissent quand tu notes des règles.</string>
+</resources>

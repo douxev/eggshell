@@ -7,91 +7,151 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.douxev.eggshell.R
+import com.douxev.eggshell.ui.theme.EggColors
 import uniffi.transition.MetricDefinition
 
 /**
- * One configurable 0..N slider gated by a switch. Generalised from the original
- * journal gauge so it can render any [MetricDefinition] — built-in or custom —
- * for both the journal and the bleeding tracker.
+ * The configurable indicators of the refonte (§6.2): one row per slider, the
+ * name on the left, the value `n/10` on the right **in the row's accent**, and
+ * the two emojis framing the track.
+ *
+ * There is no per-entry on/off switch any more: hiding, reordering and creating
+ * an indicator all happen once, in the metric editor. What the form shows is
+ * what the entry records.
+ */
+
+/**
+ * §6.2 accent map. Built-ins own a fixed hue so the same indicator keeps the
+ * same colour in the sliders, in `MoodBars` and in the charts; a user-created
+ * slider borrows the same four hues in catalog order rather than inventing one,
+ * which would drift away from the palette.
  */
 @Composable
-fun GaugeRow(
-    label: String,
-    enabled: Boolean,
+fun metricAccent(def: MetricDefinition, index: Int): Color = when (def.metricKey) {
+    "mood" -> MaterialTheme.colorScheme.primary
+    "dysphoria" -> MaterialTheme.colorScheme.error
+    "euphoria" -> MaterialTheme.colorScheme.tertiary
+    "libido" -> MaterialTheme.colorScheme.secondary
+    "energy" -> EggColors.success
+    // Bleeding built-ins: the flow is the "measured value", pain and cramps read
+    // as the discomfort axis.
+    "flow" -> MaterialTheme.colorScheme.error
+    "pain" -> MaterialTheme.colorScheme.secondary
+    "cramps" -> MaterialTheme.colorScheme.tertiary
+    else -> when (index % 4) {
+        0 -> MaterialTheme.colorScheme.primary
+        1 -> MaterialTheme.colorScheme.error
+        2 -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.secondary
+    }
+}
+
+/**
+ * One indicator row. [value] is in the definition's own domain (0..10 for every
+ * indicator the app creates), and the slider steps by one unit so the keyboard
+ * and TalkBack land on whole numbers.
+ */
+@Composable
+fun MetricSliderRow(
+    def: MetricDefinition,
     value: Float,
-    onEnabledChange: (Boolean) -> Unit,
+    accent: Color,
     onValueChange: (Float) -> Unit,
-    leftEmoji: String?,
-    rightEmoji: String?,
-    valueRange: ClosedFloatingPointRange<Float> = 0f..10f,
-    steps: Int = 9,
+    modifier: Modifier = Modifier,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-            Switch(checked = enabled, onCheckedChange = onEnabledChange)
+    val min = def.minValue.toInt()
+    val max = def.maxValue.toInt()
+    val label = metricLabel(def)
+    val (lowEmoji, highEmoji) = metricEmojis(def)
+    val shown = value.toInt().coerceIn(min, max)
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                stringResource(R.string.feel_value_fmt, shown, max),
+                style = MaterialTheme.typography.labelLarge,
+                color = accent,
+            )
         }
-        if (enabled) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                if (!leftEmoji.isNullOrBlank()) {
-                    Text(leftEmoji, style = MaterialTheme.typography.bodyMedium)
-                }
-                Slider(
-                    value = value,
-                    onValueChange = onValueChange,
-                    valueRange = valueRange,
-                    steps = steps,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 8.dp)
-                        .semantics { stateDescription = value.toInt().toString() },
-                )
-                if (!rightEmoji.isNullOrBlank()) {
-                    Text(rightEmoji, style = MaterialTheme.typography.bodyMedium)
-                }
-            }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (!lowEmoji.isNullOrBlank()) Text(lowEmoji, fontSize = 17.sp)
+            val cd = stringResource(R.string.feel_slider_cd_fmt, label, shown, max)
+            Slider(
+                value = value,
+                onValueChange = onValueChange,
+                valueRange = min.toFloat()..max.toFloat(),
+                steps = (max - min - 1).coerceAtLeast(0),
+                colors = SliderDefaults.colors(
+                    thumbColor = accent,
+                    activeTrackColor = accent,
+                    activeTickColor = Color.Transparent,
+                    inactiveTickColor = Color.Transparent,
+                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics { contentDescription = cd },
+            )
+            if (!highEmoji.isNullOrBlank()) Text(highEmoji, fontSize = 17.sp)
         }
     }
 }
 
 /**
- * Render a column of [GaugeRow]s, one per [definition], reading/writing the
- * `enabled` and `value` snapshot maps keyed by definition id. The owning screen
- * seeds those maps (from stored values when editing) and reads them back on
- * save, so this composable stays stateless.
+ * The stack of indicator rows, reading and writing the `values` snapshot map
+ * keyed by definition id. The owning screen seeds the map (from the stored
+ * values when editing) and reads it back on save, so this stays stateless.
  */
 @Composable
-fun MetricSlidersColumn(
+fun MetricSliderStack(
     definitions: List<MetricDefinition>,
-    enabled: SnapshotStateMap<Long, Boolean>,
     values: SnapshotStateMap<Long, Float>,
+    modifier: Modifier = Modifier,
 ) {
-    definitions.forEach { def ->
-        val min = def.minValue.toInt()
-        val max = def.maxValue.toInt()
-        val (le, re) = metricEmojis(def)
-        GaugeRow(
-            label = metricLabel(def),
-            enabled = enabled[def.id] ?: false,
-            value = values[def.id] ?: ((min + max) / 2f),
-            onEnabledChange = { enabled[def.id] = it },
-            onValueChange = { values[def.id] = it },
-            leftEmoji = le,
-            rightEmoji = re,
-            valueRange = min.toFloat()..max.toFloat(),
-            steps = (max - min - 1).coerceAtLeast(0),
-        )
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        definitions.forEachIndexed { index, def ->
+            val min = def.minValue.toInt()
+            val max = def.maxValue.toInt()
+            MetricSliderRow(
+                def = def,
+                value = values[def.id] ?: ((min + max) / 2f),
+                accent = metricAccent(def, index),
+                onValueChange = { values[def.id] = it },
+            )
+        }
     }
 }
 

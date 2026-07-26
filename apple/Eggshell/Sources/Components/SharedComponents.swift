@@ -80,7 +80,7 @@ struct MetricSlidersView: View {
                     HStack {
                         Text(MetricCatalog.displayLabel(def)).font(.eggLabel).foregroundStyle(palette.onSurface)
                         Spacer()
-                        Text("\(v)").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
+                        Text("\(v)").font(.eggLabel).foregroundStyle(palette.onSurfaceVariant)
                     }
                     HStack(spacing: Spacing.s) {
                         if let le, !le.isEmpty { Text(le) }

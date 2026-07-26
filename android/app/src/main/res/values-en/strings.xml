@@ -6,7 +6,6 @@
     <string name="hello_name_label">Your first name</string>
     <string name="hello_button">Greet from Rust</string>
 
-    <string name="action_start">Get started</string>
     <string name="action_back">Back</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_create">Create vault</string>
@@ -15,18 +14,8 @@
     <string name="action_ok">OK</string>
     <string name="datetime_pick_time">Time</string>
 
-    <string name="onboarding_title">Initial setup</string>
-    <string name="onboarding_welcome_title">Welcome</string>
-    <string name="onboarding_welcome_body">All your data stays on your phone, encrypted locally. Nothing is sent to a server. You\'re about to pick how the app should be locked.</string>
     <string name="onboarding_pick_mode_title">Security mode</string>
     <string name="onboarding_pick_mode_body">You can change this later from the settings.</string>
-    <string name="onboarding_scenario_title">What\'s your situation?</string>
-    <string name="onboarding_scenario_body">We\'ll tailor the setup. You can change everything later in settings.</string>
-    <string name="onboarding_scenario_safe_title">Normal use</string>
-    <string name="onboarding_scenario_safe_body">Relatively safe area. The app opens fast; your data stays encrypted on the phone.</string>
-    <string name="onboarding_scenario_atrisk_title">I need to be protected</string>
-    <string name="onboarding_scenario_atrisk_body">You live where this is risky or criminalised. We\'ll set up strong protection, one step at a time.</string>
-    <string name="onboarding_advanced">Configure manually (advanced)</string>
     <string name="onboarding_guided_decoy_title">Decoy mode</string>
     <string name="onboarding_guided_decoy_body">Two 4-digit codes. Your access code opens the app; the decoy PIN opens a working notes app, with no trace of your real data. Useful if you\'re forced to unlock.</string>
     <string name="onboarding_guided_decoy_set">Enable decoy</string>
@@ -35,53 +24,24 @@
     <string name="onboarding_guided_icon_title">Discreet icon</string>
     <string name="onboarding_guided_icon_body">The app can show up under a different icon and name on your phone.</string>
     <string name="onboarding_guided_icon_keep">Keep the current icon</string>
-    <string name="onboarding_scenario_biometric_title">Biometrics</string>
-    <string name="onboarding_scenario_biometric_body">Open with your fingerprint or face. The key stays protected by the phone\'s secure module.</string>
-    <string name="onboarding_features_title">What do you want to track?</string>
-    <string name="onboarding_features_body">Enable only what you need. You can change this anytime in settings.</string>
-    <string name="onboarding_cfg_med_title">A first medication</string>
-    <string name="onboarding_cfg_med_body">Add a treatment if you like. You can add more later.</string>
-    <string name="onboarding_cfg_med_remind">Remind me daily</string>
-    <string name="onboarding_cfg_med_add">Add</string>
-    <string name="onboarding_cfg_labs_title">Lab reminder</string>
-    <string name="onboarding_cfg_labs_body">A recurring reminder to get your hormone panel done.</string>
-    <string name="onboarding_cfg_photos_title">Photo reminder</string>
-    <string name="onboarding_cfg_photos_body">A recurring reminder for your progress photo.</string>
-    <string name="onboarding_cfg_voice_title">Voice reminder</string>
-    <string name="onboarding_cfg_voice_body">A recurring reminder to record your voice.</string>
-    <string name="onboarding_cfg_reminder_activate">Enable reminder</string>
-    <string name="onboarding_cfg_theme_title">Pick your theme</string>
-    <string name="onboarding_cfg_theme_body">Tap a theme to try it live.</string>
     <string name="onboarding_cfg_backup_title">Keep your passphrase</string>
     <string name="onboarding_cfg_backup_body">Your data is encrypted with your passphrase. If you forget it, no one — not even us — can recover it. Write it down somewhere safe.</string>
     <string name="onboarding_cfg_backup_hint">You can create an encrypted backup from Settings → Backup anytime.</string>
-    <string name="onboarding_cfg_backup_ack">I\'ve saved my passphrase</string>
-    <string name="onboarding_cfg_export_title">Export for your doctor</string>
-    <string name="onboarding_cfg_export_body">Once you have data, you can generate a clear PDF report (treatments, charts, journal) to show your endocrinologist — from Settings → PDF export.</string>
-    <string name="onboarding_cfg_recap_title">All set ✓</string>
-    <string name="onboarding_cfg_recap_body">You\'re ready to go. Every setting stays editable in Settings.</string>
-    <string name="onboarding_cfg_recap_finish">Let\'s go</string>
     <string name="action_continue">Continue</string>
-    <string name="action_later">Later</string>
     <string name="security_mode_encryption_note">Your data is always encrypted on your device. The mode you pick only changes how you unlock the app day-to-day.</string>
     <string name="onboarding_creating">Creating encrypted vault…</string>
     <string name="onboarding_error_prefix">Error: %1$s</string>
 
     <string name="mode_keystore_only_title">No code</string>
-    <string name="mode_keystore_only_body">The phone stores the key in its secure module. No password to type, the app opens instantly. Whoever unlocks your phone can open the app.</string>
     <string name="mode_keystore_biometric_title">Biometric</string>
-    <string name="mode_keystore_biometric_body">You confirm with your fingerprint or face each time. The key stays protected by the phone\'s secure module. Good balance of security and ergonomics.</string>
     <string name="mode_keystore_passphrase_title">Password</string>
-    <string name="mode_keystore_passphrase_body">Two-factor: you need both the password AND the phone (the key is protected by the secure module). Recommended if you worry about physical access to the device.</string>
     <string name="mode_paranoid_title">Paranoid mode</string>
-    <string name="mode_paranoid_body">Password only, no help from the secure module. No key is persisted: the password re-derives the key on every cold start. Maximum friction, maximum protection (resists an attacker who compromised the secure enclave).</string>
 
     <!-- One-line "is this for me?" pitch shown under each mode. -->
     <string name="mode_keystore_only_for">Pick this if your phone is a trusted device.</string>
     <string name="mode_keystore_biometric_for">Pick this if you want to unlock with fingerprint or face.</string>
     <string name="mode_keystore_passphrase_for">Pick this if you need extra security on the device itself.</string>
     <string name="mode_paranoid_for">Pick this if you live somewhere your device could be seized.</string>
-    <string name="mode_for_label">Pick this if&#8230;</string>
 
     <string name="passphrase_step_title_passphrase">Choose a password</string>
     <string name="passphrase_step_title_paranoid">Password (paranoid mode)</string>
@@ -91,12 +51,9 @@
     <string name="passphrase_too_short">Too short (%1$d characters minimum).</string>
     <string name="passphrase_mismatch">Passwords don\'t match.</string>
 
-    <string name="unlock_title">Unlock</string>
     <string name="unlock_in_progress">Unlocking…</string>
     <string name="unlock_not_initialized">Vault not initialized.</string>
     <string name="unlock_error_prefix">Failed: %1$s</string>
-    <string name="unlock_prompt_pin">Enter your code</string>
-    <string name="unlock_prompt_auto">Unlocking…</string>
     <string name="unlock_prompt_biometric">Tap the button to confirm with your fingerprint or face.</string>
     <string name="unlock_action_biometric">Unlock</string>
     <string name="password_show">Show password</string>
@@ -121,13 +78,9 @@
     <string name="med_field_dose_unit">Unit</string>
     <string name="med_field_dose">Dose</string>
     <string name="med_field_notes">Notes (optional)</string>
-    <string name="med_field_color">Color (optional)</string>
-    <string name="med_color_none">None</string>
     <string name="med_field_notif_alias">Notification alias (optional)</string>
     <string name="med_field_notif_alias_hint">Name shown in reminders if you pick \"Alias\" in Settings → Reminders. E.g. \"Vitamins\".</string>
-    <string name="med_alias_section">Notification alias</string>
     <string name="med_alias_none">Not set</string>
-    <string name="med_alias_edit">Edit alias</string>
     <string name="med_alias_dialog_title">Notification alias</string>
     <string name="med_field_notes_optional">Notes (optional)</string>
     <string name="med_create">Create</string>
@@ -136,7 +89,6 @@
     <string name="med_log_dose">Log a dose</string>
     <string name="med_history">History</string>
     <string name="med_history_empty">No doses recorded for this medication.</string>
-    <string name="med_default_dose_fmt">Usual dose: %1$s %2$s</string>
     <string name="med_dose_delete">Delete this dose</string>
     <string name="med_dose_delete_title">Delete this dose?</string>
     <string name="med_dose_delete_message">This dose will be removed from the history. This can\'t be undone.</string>
@@ -155,7 +107,6 @@
     <string name="med_dose_time_label">Time of each intake</string>
     <string name="med_dose_range_count_fmt">%1$d intakes will be logged.</string>
     <string name="med_save_dose">Save</string>
-    <string name="med_injection_site">Injection site</string>
     <string name="med_injection_suggested">Suggested: %1$s</string>
 
     <string name="kind_estrogen">Estrogen</string>
@@ -194,12 +145,9 @@
     <string name="quicklog_lab">Lab</string>
     <string name="quicklog_photo">Photo</string>
     <string name="quicklog_voice">Voice</string>
-    <string name="quicklog_fab">Log</string>
 
     <string name="reminder_title">Time for a dose</string>
     <string name="reminder_body">A dose is due. Open the app to see which one.</string>
-    <string name="reminder_channel_name">Reminders</string>
-    <string name="reminder_channel_description">Scheduled notifications.</string>
     <string name="reminder_channel_default_name">Reminders (quiet)</string>
     <string name="reminder_channel_default_description">Silent notification in the status bar.</string>
     <string name="reminder_channel_priority_name">Priority reminders</string>
@@ -214,10 +162,8 @@
     <string name="reminder_locked_toast">Unlock the app to log this dose.</string>
     <string name="reminder_queued_toast">Dose recorded — it\'ll be added to your stats on next unlock.</string>
     <string name="reminder_body_named">Time for your dose.</string>
-    <string name="unlock_throttled_fmt">Too many failures — wait %1$d s before trying again.</string>
     <string name="settings_decoy_pin_warning">The decoy PIN protects you from casual snooping (partner glancing, quick checkpoint). In Keystore-only / biometric modes it doesn\'t replace a passphrase: someone with root + Keystore access can open the vault without the PIN. For stronger protection, use Paranoid mode (passphrase required at every cold start).</string>
 
-    <string name="schedule_list_title">Reminders</string>
     <string name="schedule_add">Add reminder</string>
     <string name="schedule_add_title">New reminder</string>
     <string name="schedule_edit_title">Edit reminder</string>
@@ -238,129 +184,44 @@
     <string name="schedule_interval_fmt">Every %1$d h</string>
     <string name="schedule_daily_fmt">Daily at %1$02d:%2$02d</string>
     <string name="schedule_days_interval_fmt">Every %1$d days at %2$02d:%3$02d</string>
-    <string name="schedule_pause">Pause</string>
-    <string name="schedule_resume">Resume</string>
 
-    <string name="permission_post_notifications_rationale">Allow notifications to receive your reminders.</string>
     <string name="permission_exact_alarm_rationale">For minute-accurate reminders, allow exact alarms in system settings.</string>
     <string name="action_open_settings">Open settings</string>
 
-    <string name="nav_today">Home</string>
-    <string name="nav_medications">Meds</string>
-    <string name="nav_journal">Journal</string>
-    <string name="nav_hormones">Curves</string>
-    <string name="nav_photos">Photos</string>
-    <string name="nav_voice">Voice</string>
-    <string name="nav_settings">Settings</string>
 
-    <string name="today_greeting">Hello</string>
-    <string name="today_local_pill">LOCAL</string>
     <string name="today_section_today">Today</string>
-    <string name="today_section_feel">How you feel</string>
-    <string name="today_section_reminders">Reminders</string>
-    <string name="today_next_dose_label">Next dose</string>
-    <string name="today_ring_label">DOSES</string>
-    <string name="today_mark_taken">Mark as taken</string>
-    <string name="today_all_taken">All taken ✓</string>
-    <string name="today_no_schedule_title">No dose scheduled</string>
-    <string name="today_no_schedule_sub">Set up a reminder to track your doses here.</string>
-    <string name="today_setup_schedule">Schedule a dose</string>
-    <string name="today_feel_title">How are you?</string>
-    <string name="today_feel_sub">Slide 4 gauges · 10 seconds</string>
-    <string name="today_feel_trend_label">Mood · 14 days</string>
-    <string name="today_feel_trend_rising">Rising</string>
-    <string name="today_reminder_lab_title">Blood test</string>
-    <string name="today_reminder_lab_sub">Estradiol + testosterone</string>
-    <string name="today_reminder_lab_when">soon</string>
-    <string name="today_reminder_injection_title">Weekly injection</string>
-    <string name="today_reminder_injection_sub">Suggested site from rotation</string>
-    <string name="today_reminder_injection_when">Mon.</string>
-    <string name="today_reminders_empty">No reminder yet. Set them up from Settings → Reminders.</string>
 
-    <string name="journal_title">Journal</string>
-    <string name="journal_new">New entry</string>
-    <string name="journal_empty">No entry yet.</string>
-    <string name="journal_add_title">How are you?</string>
     <string name="journal_save">Save</string>
     <string name="journal_saved">Entry saved ✨</string>
     <string name="journal_saved_view">View journal</string>
     <string name="journal_error">Something went wrong.</string>
-    <string name="journal_field_text">Free note (optional)</string>
-    <string name="journal_field_side_effects">Side effects</string>
-    <string name="journal_field_side_effects_hint">Comma-separated.</string>
-    <string name="journal_side_effects_prefix">Effects: %1$s</string>
     <string name="gauge_mood">Mood</string>
     <string name="gauge_dysphoria">Dysphoria</string>
     <string name="gauge_euphoria">Euphoria</string>
     <string name="gauge_libido">Libido</string>
     <string name="gauge_energy">Energy</string>
     <string name="journal_history">History</string>
-    <string name="journal_edit_title">Edit entry</string>
     <string name="journal_empty_for_date">No entry on that day.</string>
     <string name="journal_prev_month">Previous month</string>
     <string name="journal_next_month">Next month</string>
 
-    <string name="hormones_title">Curves</string>
     <string name="hormones_tab_hormones">Hormones</string>
     <string name="hormones_tab_weight">Weight</string>
     <string name="weight_kind">Weight</string>
     <string name="weight_add_title">New weigh-in</string>
     <string name="weight_save">Save</string>
-    <string name="weight_unit_kg">kg</string>
-    <string name="weight_unit_lb">lb</string>
-    <string name="weight_empty">Log a weight to see the curve over time.</string>
-    <string name="weight_add_fab">Log a weight</string>
-    <string name="weight_last_measure_fmt">last weigh-in · %1$s</string>
     <string name="weight_value_label">Weight</string>
 
     <!-- ===== OCR lab-result import ===== -->
-    <string name="import_lab_entry">Import a PDF or photo</string>
-    <string name="import_lab_title">Import a result</string>
-    <string name="import_lab_intro_title">Import your lab report (PDF or photo)</string>
-    <string name="import_lab_intro_sub">Everything is analysed locally on your phone. The file never leaves it.</string>
-    <string name="import_lab_supported_hint">Recognises: estradiol, testosterone, progesterone, LH, FSH, prolactin, SHBG.</string>
-    <string name="import_lab_pick">Pick a file</string>
-    <string name="import_lab_processing">Reading the document…</string>
-    <string name="import_lab_review_title">Detected values</string>
-    <string name="import_lab_review_sub">Uncheck anything that looks wrong.</string>
-    <string name="import_lab_date_label">COLLECTION DATE</string>
-    <string name="import_lab_date_auto">Detected automatically in the document.</string>
-    <string name="import_lab_date_manual">Manually entered date.</string>
-    <string name="import_lab_date_change">Change</string>
-    <string name="import_lab_no_match">No value could be extracted. Try a clearer photo, or enter manually.</string>
-    <string name="import_lab_retry">Try again</string>
-    <string name="import_lab_save_fmt">Save (%1$d)</string>
-    <string name="import_lab_done_title">Imported</string>
-    <string name="import_lab_done_fmt">%1$d value(s) added.</string>
-    <string name="import_lab_close">Close</string>
-    <string name="import_lab_error_title">Reading failed</string>
-    <string name="import_lab_password_title">Password-protected PDF</string>
-    <string name="import_lab_password_sub">Many labs lock their PDFs. Enter the password the lab gave you to unlock it. It is never saved.</string>
-    <string name="import_lab_password_label">PDF password</string>
-    <string name="import_lab_password_wrong">Wrong password. Try again.</string>
-    <string name="import_lab_unlock">Unlock</string>
-    <string name="hormones_new">Add result</string>
-    <string name="hormones_empty">Enter your lab results to see the trend.</string>
-    <string name="hormones_add_title">New result</string>
     <string name="hormones_field_hormone">Hormone</string>
     <string name="hormones_field_value">Value</string>
     <string name="hormones_field_unit">Unit</string>
     <string name="hormones_field_lab">Lab (optional)</string>
-    <string name="hormones_field_at">Date (epoch ms)</string>
     <string name="hormones_save">Save</string>
-    <string name="hormones_unit_pgml">pg/mL</string>
-    <string name="hormones_unit_pmoll">pmol/L</string>
-    <string name="hormones_unit_ngdl">ng/dL</string>
-    <string name="hormones_unit_nmoll">nmol/L</string>
-    <string name="hormones_unit_miuml">mIU/mL</string>
-    <string name="hormones_unit_other">Other</string>
-    <string name="hormones_history">History</string>
     <string name="hormones_edit_title">Edit measurement</string>
     <string name="hormones_date_pick_fmt">Date: %1$s</string>
     <string name="hormones_delete_confirm">This measurement will be permanently deleted.</string>
     <string name="weight_edit_title">Edit weigh-in</string>
-    <string name="hormones_last_measure_fmt">last measure · %1$s</string>
-    <string name="hormones_vs_previous">vs prev.</string>
 
     <string name="hormone_estradiol">Estradiol</string>
     <string name="hormone_progesterone">Progesterone</string>
@@ -375,32 +236,16 @@
     <string name="hormone_hematocrit">Hematocrit</string>
     <string name="hormone_other">Other</string>
 
-    <string name="photos_title">Progress photos</string>
-    <string name="photos_add">Add</string>
-    <string name="photos_empty">No photos yet. Tap "Add" to pick from your gallery — it will be encrypted locally.</string>
-    <string name="photos_locked">An encrypted photo</string>
 
-    <string name="settings_title">Settings</string>
-    <string name="settings_section_language">Language</string>
     <string name="settings_language_system">System</string>
     <string name="settings_language_fr">Français</string>
     <string name="settings_language_en">English</string>
 
-    <string name="settings_section_privacy">Privacy</string>
     <string name="settings_block_screenshots">Block screenshots</string>
     <string name="settings_block_screenshots_sub">Prevents screenshots, screen recording and the preview thumbnail in the recents drawer.</string>
-    <string name="settings_section_security">Security mode</string>
-    <string name="settings_current_mode_fmt">Current: %1$s</string>
     <string name="settings_change_mode_to">Switch to: %1$s</string>
     <string name="settings_current_passphrase">Current password</string>
     <string name="settings_new_passphrase">New password</string>
-    <string name="settings_decoy_requires_passphrase">The decoy PIN requires a password mode (Keystore + passphrase or Paranoid).</string>
-    <string name="settings_switch_to_passphrase">Switch to passphrase mode</string>
-    <string name="settings_section_masking">App masking</string>
-    <string name="settings_section_backup">Backup</string>
-    <string name="settings_current_icon">Active icon</string>
-    <string name="settings_pick_icon">Pick icon / name</string>
-    <string name="settings_decoy_pin">Access PIN + Decoy PIN (optional)</string>
     <string name="settings_decoy_pin_hint">When you unlock, a 4-digit keypad replaces the passphrase prompt. The "access PIN" opens the real passphrase entry; the "decoy PIN" opens a working notes app. Both must differ.</string>
     <string name="settings_access_pin_label">Access PIN (4 digits)</string>
     <string name="settings_access_pin_hint">Leads to the real passphrase.</string>
@@ -410,18 +255,8 @@
     <string name="settings_clear_decoy_pin">Disable PIN keypad</string>
 
     <!-- ===== Configure reminders ===== -->
-    <string name="settings_section_reminders">Reminders</string>
-    <string name="settings_reminders_hint">Pick which reminders are active (injection, patch/gel, pill, lab test) and turn on the priority notification when needed.</string>
     <string name="settings_open_reminders">Configure reminders</string>
     <string name="reminders_title">Configure reminders</string>
-    <string name="reminders_section_notif_content">Notification content</string>
-    <string name="reminders_notif_content_hint">What your medication reminders show. The lock screen always shows a neutral version.</string>
-    <string name="reminders_notif_mode_generic">Generic</string>
-    <string name="reminders_notif_mode_generic_desc">\"Time for a dose\" — no name.</string>
-    <string name="reminders_notif_mode_name">Medication name</string>
-    <string name="reminders_notif_mode_name_desc">Shows the real name (off the lock screen).</string>
-    <string name="reminders_notif_mode_alias">Alias</string>
-    <string name="reminders_notif_mode_alias_desc">Shows the alias set on each medication.</string>
     <string name="reminders_section_meds">Medications</string>
     <string name="reminders_section_meds_hint">Reminders set from each medication. Turn on priority for the ones that mustn\'t be missed.</string>
     <string name="reminders_section_labs">Lab tests</string>
@@ -471,41 +306,20 @@
     <string name="reminders_appointment_generic">Appointment</string>
 
     <!-- ===== Settings hub ===== -->
-    <string name="more_title">Settings</string>
-    <string name="more_row_reminders">Reminders &amp; notifications</string>
-    <string name="more_row_reminders_sub">Meds, labs, photo, voice, journal, appointments</string>
-    <string name="more_row_advanced">Advanced settings</string>
-    <string name="more_row_advanced_sub">Security, masking, backup, language</string>
-    <string name="more_row_pdf">PDF export</string>
-    <string name="more_row_pdf_sub">Clean report for your doctor</string>
-    <string name="more_row_units">Lab units</string>
-    <string name="more_row_units_sub">Display pg/mL, nmol/L, etc.</string>
-    <string name="more_row_theme">Theme</string>
-    <string name="more_row_theme_sub">Lavender, Catppuccin, Gruvbox, Dracula…</string>
-    <string name="more_row_resources">Important resources</string>
-    <string name="more_row_resources_sub">Useful sites and associations.</string>
-    <string name="more_row_features">Features</string>
-    <string name="more_row_features_sub">Show or hide journal, curves, weight, photos, voice.</string>
-    <string name="more_row_donate">Support Eggshell</string>
-    <string name="more_row_donate_sub">If the app helps you, a PayPal tip always makes my day 💛</string>
 
     <!-- ===== Resources screen ===== -->
     <string name="resources_title">Important resources</string>
-    <string name="resources_hint">Sites, helplines and associations. Links open in your browser.</string>
     <string name="resources_open_external">Open link</string>
     <string name="resources_tab_general">General</string>
     <string name="resources_tab_associations">Associations</string>
 
     <!-- ===== Theme picker ===== -->
-    <string name="theme_picker_title">Theme</string>
     <string name="theme_picker_hint">Pick a palette. The switch applies immediately.</string>
 
     <!-- ===== What's new sheet ===== -->
     <string name="whats_new_version_fmt">Version %1$s</string>
     <string name="whats_new_got_it">Got it</string>
     <!-- ===== Features (per-view toggles) ===== -->
-    <string name="features_title">Features</string>
-    <string name="features_hint">Pick what appears in the bottom bar. Only Today stays visible no matter what.</string>
     <string name="feature_medications_title">Meds</string>
     <string name="feature_medications_sub">Medication catalogue, doses, injection-site rotation.</string>
     <string name="feature_journal_title">Journal</string>
@@ -526,25 +340,6 @@
     <string name="hormones_units_default">Default</string>
 
     <!-- ===== PDF export ===== -->
-    <string name="pdf_title">Doctor PDF export</string>
-    <string name="pdf_intro_title">A clean, synthetic report</string>
-    <string name="pdf_intro_sub">To share with a clinician. Generated locally — nothing is sent online.</string>
-    <string name="pdf_section_period">Period</string>
-    <string name="pdf_period_1m">1 month</string>
-    <string name="pdf_period_3m">3 months</string>
-    <string name="pdf_period_6m">6 months</string>
-    <string name="pdf_period_all">All</string>
-    <string name="pdf_section_include">Include</string>
-    <string name="pdf_inc_meds">Medication &amp; adherence</string>
-    <string name="pdf_inc_meds_sub">Active treatments, doses, routes</string>
-    <string name="pdf_inc_hormones">Hormone curves</string>
-    <string name="pdf_inc_hormones_sub">Estradiol, testosterone, etc.</string>
-    <string name="pdf_inc_journal">Feelings journal</string>
-    <string name="pdf_inc_journal_sub">Mood, dysphoria, energy</string>
-    <string name="pdf_inc_labs">Lab reminders</string>
-    <string name="pdf_inc_labs_sub">Upcoming panels and cadence</string>
-    <string name="pdf_generate">Generate &amp; share</string>
-    <string name="pdf_generating">Generating…</string>
 
     <!-- ===== Photo lightbox ===== -->
     <string name="photos_share">Share</string>
@@ -557,43 +352,19 @@
     <!-- ===== Photos tabs ===== -->
     <string name="photos_tab_gallery">Gallery</string>
     <string name="photos_tab_compare">Compare</string>
-    <string name="photos_compare_not_enough">At least two photos are required to compare.</string>
-    <string name="photos_compare_before">Before</string>
-    <string name="photos_compare_after">Now</string>
-    <string name="photos_compare_span_fmt">%1$d months of change</string>
-    <string name="photos_compare_span_sub">Slide to compare any two dates</string>
 
     <!-- ===== Voice ===== -->
-    <string name="voice_title">Voice tracking</string>
     <string name="voice_clips_count_label">RECORDED CLIPS</string>
-    <string name="voice_clips_unit">recordings</string>
-    <string name="voice_clips_hint">Read the same paragraph each time to compare.</string>
-    <string name="voice_clips_count_fmt">%1$d clip(s) total</string>
-    <string name="voice_pitch_label">AVERAGE PITCH (F0)</string>
-    <string name="voice_pitch_delta_up">+%1$d Hz since the start</string>
-    <string name="voice_pitch_delta_down">-%1$d Hz since the start</string>
-    <string name="voice_pitch_delta_flat">Flat since the start</string>
-    <string name="voice_section_clips">Clips</string>
-    <string name="voice_empty">No clip yet. Tap the mic to record yourself.</string>
     <string name="voice_record">Start recording</string>
     <string name="voice_stop">Stop</string>
     <string name="voice_play">Play</string>
-    <string name="voice_record_hint">Record a clip</string>
-    <string name="voice_record_sub">In a quiet room · read the same paragraph each time · ~30 cm from the mic.</string>
     <string name="voice_pitch_disclaimer">Locally estimated · sensitive to background noise. To track change reliably, keep conditions identical (place, distance, text).</string>
-    <string name="voice_recording_fmt">Recording… %1$s</string>
-    <string name="voice_processing_title">Analysing voice…</string>
-    <string name="voice_processing_sub">Takes a few seconds (encryption + pitch estimation).</string>
     <string name="action_delete">Delete</string>
-    <string name="unlock_prompt_passphrase">Password</string>
     <string name="settings_export">Export vault</string>
     <string name="settings_export_hint">Generates an encrypted .transition.enc file you can save anywhere.</string>
     <string name="settings_import">Import vault</string>
     <string name="settings_import_hint">Restores a previously exported .transition.enc file.</string>
-    <string name="settings_export_done">Export complete.</string>
-    <string name="settings_import_done">Import complete. The app will restart.</string>
 
-    <string name="decoy_title">Notes</string>
 
     <string name="alias_notes">Notes</string>
     <string name="alias_calculator">Calculator</string>
@@ -603,18 +374,15 @@
     <string name="widget_label">Eggshell · next reminder</string>
     <string name="widget_description">Shows the next scheduled reminder.</string>
     <string name="widget_eyebrow">EGGSHELL · NEXT</string>
-    <string name="widget_default_title">All quiet</string>
     <string name="widget_default_subtitle">No reminder scheduled.</string>
     <string name="widget_action_open">Open</string>
     <string name="widget_action_journal">Note</string>
     <string name="widget_med_title">Scheduled dose</string>
-    <string name="widget_in_label">in</string>
     <string name="widget_tomorrow">tomorrow</string>
     <string name="widget_now">now</string>
     <string name="widget_in_days_fmt">%1$dd</string>
 
     <!-- Bleeding / cycle tracking (feature 4) -->
-    <string name="nav_bleeding">Menstruation</string>
     <string name="feature_bleeding_title">Menstruation</string>
     <string name="feature_bleeding_sub">Track periods, spotting and symptoms to relate dose changes to their effect. Off by default.</string>
     <string name="bleeding_title">Menstruation</string>
@@ -625,11 +393,9 @@
     <string name="bleeding_save">Save</string>
     <string name="bleeding_error">Could not save.</string>
     <string name="bleeding_load_error">Could not load the entry.</string>
-    <string name="bleeding_kind_label">Type</string>
     <string name="bleeding_kind_bleed">Period</string>
     <string name="bleeding_kind_spotting">Spotting</string>
     <string name="bleeding_kind_unspecified">Unspecified</string>
-    <string name="bleeding_field_note">Note</string>
     <string name="bleeding_gauge_flow">Flow</string>
     <string name="bleeding_gauge_pain">Pain</string>
     <string name="bleeding_gauge_cramps">Cramps</string>
@@ -663,22 +429,14 @@
     <string name="reminder_action_snooze">Remind me later</string>
     <string name="reminder_snoozed_toast">Reminder rescheduled in 30 min</string>
     <string name="med_edit_title">Edit medication</string>
-    <string name="correlation_open">Dose / mood correlation</string>
     <string name="correlation_title">Correlation</string>
     <string name="correlation_hint">See mood, doses, missed doses and treatment changes on one shared time axis.</string>
     <string name="correlation_window_days">%1$dd</string>
     <string name="correlation_not_enough_data">Not enough data yet to show a trend.</string>
-    <string name="correlation_legend_mood">Mood</string>
-    <string name="correlation_legend_taken">Doses taken</string>
-    <string name="correlation_legend_skipped">Missed / skipped</string>
-    <string name="correlation_legend_change">Treatment change</string>
-    <string name="correlation_legend_bleeding">Menstruation</string>
     <string name="correlation_summary">Over %1$d days: %2$d taken, %3$d missed/skipped, average mood %4$s/10, %5$d treatment changes.</string>
     <string name="correlation_disclaimer">These charts are descriptive: a coincidence in time does not imply a cause.</string>
 
     <!-- Today: summary entry card -->
-    <string name="today_summary_title">Your summary</string>
-    <string name="today_summary_sub">Compare this period with the last</string>
 
     <!-- Auto-summary -->
     <string name="summary_title">Your summary</string>
@@ -703,10 +461,7 @@
     <string name="summary_headline_steady">You\'re holding steady. Take care of yourself 💛</string>
 
     <!-- Appointments / notes -->
-    <string name="nav_appointments">Visits</string>
     <string name="appointments_title">Appointments</string>
-    <string name="appointments_hint">Note your appointments, the professionals, and what to do.</string>
-    <string name="appointments_empty">No appointments yet. Add your next one with the + button.</string>
     <string name="appointment_add_title">New appointment</string>
     <string name="appointment_edit_title">Edit appointment</string>
     <string name="appointment_field_datetime">Appointment date &amp; time</string>

@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Settings — the three doors, the Reminders section, and the screens they open.
+  Same keys as res/values/strings_settings.xml, never in strings.xml.
+-->
+<resources>
+
+    <!-- ============ The hub ============ -->
+    <string name="set_hub_title">Settings</string>
+
+    <string name="set_door_modules">Modules</string>
+    <string name="set_door_modules_sub_fmt">%1$d of 8 on · what the app tracks for you</string>
+    <string name="set_door_security">Security</string>
+    <string name="set_door_security_sub_fmt">%1$s · %2$s · %3$s</string>
+    <string name="set_door_security_decoy_on">decoy on</string>
+    <string name="set_door_security_decoy_off">no decoy</string>
+    <string name="set_door_security_backup">backup</string>
+    <string name="set_door_security_no_mode">lock</string>
+    <string name="set_door_appearance">Appearance &amp; language</string>
+    <string name="set_door_appearance_sub_fmt">%1$s · %2$s · %3$s</string>
+
+    <!-- ============ Reminders section ============ -->
+    <string name="set_section_reminders">Reminders</string>
+    <string name="set_notif_title">Notification content</string>
+    <string name="set_notif_sub">What shows up on your lock screen</string>
+    <string name="set_notif_chip_generic">Generic</string>
+    <string name="set_notif_chip_name">Name</string>
+    <string name="set_notif_chip_alias">Alias</string>
+    <string name="set_notif_preview_label">Lock-screen preview</string>
+    <string name="set_notif_preview_generic">“It’s time” — no name shown.</string>
+    <string name="set_notif_preview_name">“Estradiol — it’s time” — the real name is shown.</string>
+    <string name="set_notif_preview_alias">“Vitamin D — it’s time” — your alias, never the real name.</string>
+    <string name="set_open_reminders_sub">Add, edit or delete your reminders</string>
+    <string name="set_action_add">Add</string>
+    <string name="set_reminders_intro">Everything the app may notify you about, in one place. What they show is set in Settings.</string>
+
+    <!-- ============ Support + footer ============ -->
+    <string name="set_support_title">Support eggshell</string>
+    <string name="set_support_sub">Free, no ads, no account.</string>
+    <string name="set_footer_resources">Resources</string>
+    <string name="set_footer_separator">·</string>
+    <string name="set_footer_version_fmt">Version %1$s</string>
+
+    <!-- ============ Door 1 — Modules ============ -->
+    <string name="set_modules_hint">Turning a module off only removes its tile from home. Nothing is deleted: it all comes back the moment you turn it on again.</string>
+    <string name="set_module_meds">Meds</string>
+    <string name="set_module_meds_sub">Your treatments, your doses, injection-site rotation.</string>
+    <string name="set_module_appointments">Appointments</string>
+    <string name="set_module_appointments_sub">Your visits, the people who follow you, what you want to ask them.</string>
+    <string name="set_module_journal">Journal</string>
+    <string name="set_module_journal_sub">Your mood, your indicators, the effects you feel.</string>
+    <string name="set_module_bleeding">Periods</string>
+    <string name="set_module_bleeding_sub">Your bleeding and its symptoms, day by day.</string>
+    <string name="set_module_labs">Lab results</string>
+    <string name="set_module_labs_sub">Your hormone levels over time, typed in or imported.</string>
+    <string name="set_module_weight">Weight</string>
+    <string name="set_module_weight_sub">Your weight curve, next to everything else.</string>
+    <string name="set_module_photos">Photos</string>
+    <string name="set_module_photos_sub">Your dated timeline, encrypted on the device.</string>
+    <string name="set_module_voice">Voice</string>
+    <string name="set_module_voice_sub">Your dated audio clips, to hear the change.</string>
+
+    <!-- ============ Door 2 — Security ============ -->
+    <string name="set_sec_intro">Everything stays on your phone. These settings decide what it takes to open the vault — and what a glance over your shoulder can see.</string>
+    <string name="set_sec_section_lock">Lock mode</string>
+    <string name="set_sec_current_mode_fmt">Current: %1$s</string>
+    <string name="set_sec_section_pins">Access code and decoy PIN</string>
+    <string name="set_sec_section_masking">App icon and name</string>
+    <string name="set_sec_masking_hint">What your home screen shows. The change takes effect right away.</string>
+    <string name="set_sec_alias_default">eggshell</string>
+    <string name="set_sec_section_screenshots">Screenshots</string>
+    <string name="set_sec_section_backup">Encrypted backup</string>
+    <string name="set_sec_export_title">Export</string>
+    <string name="set_sec_import_title">Restore</string>
+    <string name="set_sec_import_warning">The app closes right after restoring: open it again to find your data.</string>
+    <string name="set_sec_backup_warning">This passphrase is the only key to the file. Nobody can give it back to you.</string>
+
+    <!-- ============ Door 3 — Appearance &amp; language ============ -->
+    <string name="set_look_section_theme">Theme</string>
+    <string name="set_look_section_language">Language</string>
+    <string name="set_look_language_hint">The app redraws itself to apply the language.</string>
+    <string name="set_look_units_row">Lab display units</string>
+    <string name="set_look_units_sub_fmt">Currently %1$s</string>
+    <string name="set_look_units_sub_none">pg/mL, nmol/L, ng/dL…</string>
+    <string name="set_look_theme_selected">Active theme</string>
+
+    <!-- ============ What’s new ============ -->
+    <string name="set_wn_title">What’s new</string>
+    <string name="set_wn_1_title">A single home</string>
+    <string name="set_wn_1_sub">No more tab bar: your eight modules fit on home, and back always brings you there.</string>
+    <string name="set_wn_2_title">Tick a dose without navigating</string>
+    <string name="set_wn_2_sub">The next dose and today’s mood are logged from home, in one gesture.</string>
+    <string name="set_wn_3_title">Readable regularity</string>
+    <string name="set_wn_3_sub">A chart shows how far each dose landed from its planned time, and never invents a number.</string>
+    <string name="set_wn_4_title">Settings in three doors</string>
+    <string name="set_wn_4_sub">Modules, Security, Appearance &amp; language. Reminders move up a level.</string>
+    <string name="set_wn_5_title">The doctor report travels with you</string>
+    <string name="set_wn_5_sub">You prepare it from Appointments, with the periods and sections you choose.</string>
+    <string name="set_wn_6_title">Finer lab imports</string>
+    <string name="set_wn_6_sub">Reading a PDF now keeps the lab name too, so your doctor knows where a value came from.</string>
+
+    <!-- ============ Resources ============ -->
+    <string name="set_resources_intro">Websites, helplines and associations. The link opens in your browser — nothing goes through eggshell.</string>
+
+    <string name="set_res_fransgenre">French-speaking community platform: personal accounts, a knowledge base, lists of trans-friendly practitioners, a mutual-aid forum.</string>
+    <string name="set_res_administrans">Collaborative guide to trans paperwork in France: name change, gender marker, ID documents, health cover.</string>
+    <string name="set_res_wikitrans">Collaborative French-language encyclopedia on trans matters: protocols, paperwork, local resources.</string>
+    <string name="set_res_transat_dir_title">Transat (directory)</string>
+    <string name="set_res_transat_dir">Directory of trans-friendly doctors, endocrinologists and practitioners across France.</string>
+    <string name="set_res_sos_title">SOS homophobie · helpline</string>
+    <string name="set_res_sos">Free, anonymous support after an assault, discrimination or distress. 01 48 06 42 41.</string>
+    <string name="set_res_ecoute_title">S* Écoute</string>
+    <string name="set_res_ecoute">A 24/7 helpline if you are going through a very hard time: 01 45 39 40 00.</string>
+    <string name="set_res_outrans">Trans peer-support association in Paris. Drop-ins, discussion groups.</string>
+    <string name="set_res_chrysalide">Peer support for trans and intersex people, people questioning, and those close to them.</string>
+    <string name="set_res_acceptess">Community association defending the rights of trans people, especially migrants and sex workers.</string>
+    <string name="set_res_divergenre">Discord — Amiens / Somme group.</string>
+    <string name="set_res_transat_marseille">Discord — Marseille / Bouches-du-Rhône group.</string>
+    <string name="set_res_transcomte">Discord — Franche-Comté collective.</string>
+    <string name="set_res_attoo">Discord — Toulouse group.</string>
+    <string name="set_res_cia">Discord — intersex group.</string>
+    <string name="set_res_transmission_var">Discord — Toulon / Var group.</string>
+    <string name="set_res_iskis">Discord — LGBTI+ group, Rennes / Ille-et-Vilaine.</string>
+    <string name="set_res_mag">Discord — LGBTI+ youth group, Paris.</string>
+    <string name="set_res_rouen">Discord — Rouen / Normandy server.</string>
+    <string name="set_res_meuf_toulouse">Discord — transfem server, Toulouse.</string>
+    <string name="set_res_revolte">Discord — Nancy / Metz / Grand Est server.</string>
+    <string name="set_res_astr">Discord — transfem server, Switzerland.</string>
+
+</resources>

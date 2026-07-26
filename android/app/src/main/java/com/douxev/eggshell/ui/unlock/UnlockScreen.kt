@@ -1,28 +1,31 @@
 package com.douxev.eggshell.ui.unlock
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backspace
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,10 +40,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.delay
@@ -48,26 +57,31 @@ import com.douxev.eggshell.R
 import com.douxev.eggshell.data.VaultRepository
 import com.douxev.eggshell.security.VaultPrefs
 import com.douxev.eggshell.ui.common.PasswordField
+import com.douxev.eggshell.ui.components.CardVariant
+import com.douxev.eggshell.ui.components.EggCard
 
 /**
- * Two-stage lock screen.
+ * The lock screen of the refonte (§6.13). No header, no chrome: the logo, one
+ * warm sentence, four pips and a keypad that fills the thumb zone.
  *
- *  - Auto-unlock (Keystore-only / Keystore-biometric): biometric prompt or
- *    silent Keystore unwrap, no input.
- *  - Passphrase mode + decoy ENABLED: 4-digit PIN keypad. Access PIN reveals
- *    the passphrase text field; decoy PIN routes to the calculator; anything
- *    else surfaces a "PIN incorrect" message and lets the user retry.
- *  - Passphrase mode + decoy DISABLED: plain passphrase text field (any
- *    length, any characters), with a biometric button for keystore-based
- *    flows where applicable.
+ * It still serves every vault mode:
+ *  - Keystore-only / Keystore-biometric: silent unwrap or biometric prompt.
+ *  - Passphrase / Paranoid: the text field.
+ *  - Decoy configured: the 4-digit gate in front of all of them.
+ *
+ * With a decoy PIN set the whole screen re-dresses as the notes app's passcode
+ * gate — the same neutral teal palette [DecoyScreen] uses, a padlock instead of
+ * the egg, and none of the refonte's tokens — so the hand-off from lock screen
+ * to fake notes shows no colour jump and no lavender flash.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UnlockScreen(
     onUnlocked: () -> Unit,
     vm: UnlockViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
+    val lockoutMs by vm.lockoutMs.collectAsState()
+    val attemptsLeft by vm.attemptsLeft.collectAsState()
     val activity = LocalContext.current as FragmentActivity
     val biometricCopy = VaultRepository.BiometricCopy(
         title = stringResource(R.string.biometric_unlock_title),
@@ -110,165 +124,336 @@ fun UnlockScreen(
     // Onboarding — calling onUnlocked() triggers exactly that path.
     if (state is UnlockViewModel.State.Wiped) { onUnlocked(); return }
 
-    // When a decoy PIN is configured we re-skin the lock screen with the
-    // exact same neutral teal palette the decoy notes app uses. That way
-    // the lock screen → notes transition (when the snooper enters the
-    // decoy PIN) shows no jump in colour, no Transition lavender flash, no
-    // "wait that's a different app" tell. The branded header (heart +
-    // "Transition") is also swapped for a generic lock icon + the literal
-    // label "Notes" so the whole screen reads as the notes app's
-    // passcode gate.
-    val unlockContent: @Composable () -> Unit = {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(horizontal = 32.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                Spacer(modifier = Modifier.weight(1f))
-                Header(decoy = vm.hasDecoy)
-                Subtitle(state, vm.mode)
-                Spacer(modifier = Modifier.height(30.dp))
-
-                when (val s = state) {
-                    UnlockViewModel.State.AwaitingPin ->
-                        PinGate(onSubmit = vm::submitPin, onBiometric = { vm.attemptAutoUnlock(activity, biometricCopy) })
-                    UnlockViewModel.State.AwaitingPassphrase ->
-                        PassphraseStage(
-                            onSubmit = { pp -> vm.submitPassphrase(pp, activity, biometricCopy) },
-                        )
-                    UnlockViewModel.State.AwaitingBiometric ->
-                        BiometricRetryStage(
-                            onRetry = { vm.attemptAutoUnlock(activity, biometricCopy) },
-                        )
-                    UnlockViewModel.State.AccessGranted,
-                    UnlockViewModel.State.InProgress ->
-                        CircularProgressIndicator()
-                    is UnlockViewModel.State.Failed ->
-                        Text(
-                            stringResource(R.string.unlock_error_prefix, s.reason),
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    is UnlockViewModel.State.Throttled ->
-                        Text(
-                            stringResource(
-                                R.string.unlock_throttled_fmt,
-                                ((s.remainingMs + 999L) / 1000L),
-                            ),
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    UnlockViewModel.State.Idle -> Unit
-                    UnlockViewModel.State.Success,
-                    UnlockViewModel.State.Wiped,
-                    UnlockViewModel.State.Decoy -> Unit // handled above
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-            }
-        }
+    val body: @Composable () -> Unit = {
+        UnlockBody(
+            state = state,
+            mode = vm.mode,
+            // Read once for the whole composition: every biometric affordance is
+            // gated on it, so the flag must not be able to differ between the
+            // key that is drawn and the callback that key fires.
+            decoy = vm.hasDecoy,
+            lockoutMs = lockoutMs,
+            attemptsLeft = attemptsLeft,
+            onSubmitPin = vm::submitPin,
+            onSubmitPassphrase = { pp -> vm.submitPassphrase(pp, activity, biometricCopy) },
+            onBiometric = { vm.attemptAutoUnlock(activity, biometricCopy) },
+        )
     }
 
     if (vm.hasDecoy) {
         MaterialTheme(
             colorScheme = DecoyColors,
             typography = MaterialTheme.typography,
-            content = unlockContent,
+            content = body,
         )
     } else {
-        unlockContent()
+        body()
     }
 }
 
-@Composable
-private fun Header(decoy: Boolean) {
-    Box(
-        modifier = Modifier
-            .size(72.dp)
-            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(22.dp)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            // Lock icon when a decoy is active so the header matches the
-            // generic "Notes" identity; the branded heart only shows on the
-            // real, unmasked app lock screen.
-            if (decoy) Icons.Filled.Lock else Icons.Filled.Favorite,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.size(38.dp),
-        )
+/** Which input surface the current state puts in front of the user. */
+private enum class Stage { Pin, Passphrase, Biometric, Working, Silent }
+
+private fun stageFor(
+    state: UnlockViewModel.State,
+    mode: VaultPrefs.Mode?,
+    decoy: Boolean,
+): Stage {
+    if (mode == null) return Stage.Silent
+    // A failure bounces back to whatever surface the user came from, so the
+    // keypad (or the field) stays put under the error line instead of the
+    // screen emptying out for a second and a half.
+    val effective = if (state is UnlockViewModel.State.Failed) {
+        when {
+            decoy -> UnlockViewModel.State.AwaitingPin
+            mode == VaultPrefs.Mode.KEYSTORE_BIOMETRIC -> UnlockViewModel.State.AwaitingBiometric
+            mode == VaultPrefs.Mode.KEYSTORE_ONLY -> UnlockViewModel.State.Idle
+            else -> UnlockViewModel.State.AwaitingPassphrase
+        }
+    } else {
+        state
     }
-    Spacer(modifier = Modifier.height(18.dp))
-    Text(
-        stringResource(if (decoy) R.string.alias_notes else R.string.app_name),
-        style = MaterialTheme.typography.headlineSmall,
-    )
+    val stage = when (effective) {
+        UnlockViewModel.State.AwaitingPin -> Stage.Pin
+        UnlockViewModel.State.AwaitingPassphrase -> Stage.Passphrase
+        UnlockViewModel.State.AwaitingBiometric -> Stage.Biometric
+        UnlockViewModel.State.InProgress,
+        UnlockViewModel.State.AccessGranted -> Stage.Working
+        is UnlockViewModel.State.Throttled -> Stage.Pin
+        else -> Stage.Silent
+    }
+    // Under a decoy the screen has exactly one way in — the PIN typed on it,
+    // which then routes to the real vault or to the notes app. A fingerprint
+    // surface here would open the *real* vault straight from a screen that
+    // claims to be a notes-app passcode gate, so it never appears.
+    return if (decoy && stage == Stage.Biometric) Stage.Pin else stage
 }
 
 @Composable
-private fun Subtitle(state: UnlockViewModel.State, mode: VaultPrefs.Mode?) {
-    val text = when {
-        mode == null -> stringResource(R.string.unlock_not_initialized)
-        // AwaitingBiometric already shows its own helper text inside the stage —
-        // keep the subtitle quiet to avoid stacked instructions.
-        state == UnlockViewModel.State.AwaitingBiometric -> ""
-        state == UnlockViewModel.State.AwaitingPin ->
-            stringResource(R.string.unlock_prompt_pin)
-        state == UnlockViewModel.State.AwaitingPassphrase ->
-            stringResource(R.string.unlock_prompt_passphrase)
-        state == UnlockViewModel.State.InProgress ||
-            state == UnlockViewModel.State.AccessGranted ->
-            stringResource(R.string.unlock_in_progress)
-        mode == VaultPrefs.Mode.KEYSTORE_ONLY ||
-            mode == VaultPrefs.Mode.KEYSTORE_BIOMETRIC ->
-            stringResource(R.string.unlock_prompt_auto)
-        else -> ""
-    }
-    Text(
-        text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 4.dp),
-    )
-}
+private fun UnlockBody(
+    state: UnlockViewModel.State,
+    mode: VaultPrefs.Mode?,
+    decoy: Boolean,
+    lockoutMs: Long,
+    attemptsLeft: Int?,
+    onSubmitPin: (String) -> Unit,
+    onSubmitPassphrase: (String) -> Unit,
+    onBiometric: () -> Unit,
+) {
+    val stage = stageFor(state, mode, decoy)
+    val locked = lockoutMs > 0L
 
-@Composable
-private fun PinGate(onSubmit: (String) -> Unit, onBiometric: () -> Unit) {
+    // Never `rememberSaveable`: that would serialise the PIN into the
+    // saved-state Bundle, where `dumpsys` can read it back.
     var pin by remember { mutableStateOf("") }
-
-    // Auto-submit when we reach 4 digits.
     LaunchedEffect(pin) {
         if (pin.length == 4) {
-            onSubmit(pin)
+            onSubmitPin(pin)
             pin = ""
         }
     }
+    LaunchedEffect(stage) { if (stage != Stage.Pin) pin = "" }
 
-    PinDots(filled = pin.length, capacity = 4)
-    Spacer(modifier = Modifier.height(40.dp))
-    Keypad(
-        onDigit = { d -> if (pin.length < 4) pin += d },
-        onBackspace = { if (pin.isNotEmpty()) pin = pin.dropLast(1) },
-        onBiometric = onBiometric,
-    )
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .padding(horizontal = ScreenPad),
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                BrandMark(decoy = decoy)
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    stringResource(
+                        if (decoy) R.string.alias_notes else R.string.access_unlock_welcome
+                    ),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                )
+
+                when (stage) {
+                    Stage.Pin -> {
+                        Spacer(Modifier.height(16.dp))
+                        PinPips(filled = pin.length)
+                    }
+                    Stage.Working -> {
+                        Spacer(Modifier.height(20.dp))
+                        LinearProgressIndicator(modifier = Modifier.width(120.dp))
+                    }
+                    else -> Unit
+                }
+
+                val message = messageFor(state, mode, stage)
+                if (message != null) {
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (state is UnlockViewModel.State.Failed) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        textAlign = TextAlign.Center,
+                    )
+                }
+
+                if (locked) {
+                    Spacer(Modifier.height(18.dp))
+                    LockoutCard(
+                        lockoutMs = lockoutMs,
+                        attemptsLeft = attemptsLeft,
+                        decoy = decoy,
+                    )
+                }
+
+                when (stage) {
+                    Stage.Passphrase -> {
+                        Spacer(Modifier.height(22.dp))
+                        PassphraseStage(onSubmit = onSubmitPassphrase)
+                    }
+                    Stage.Biometric -> {
+                        Spacer(Modifier.height(22.dp))
+                        BiometricStage(onRetry = onBiometric)
+                    }
+                    else -> Unit
+                }
+            }
+
+            if (stage == Stage.Pin) {
+                Keypad(
+                    enabled = !locked,
+                    onDigit = { d -> if (pin.length < 4) pin += d },
+                    onBackspace = { if (pin.isNotEmpty()) pin = pin.dropLast(1) },
+                    // No biometric key at all on the decoy skin: one finger on
+                    // it would unwrap the Keystore and open the real vault.
+                    onBiometric = if (decoy) null else onBiometric,
+                    modifier = Modifier.padding(bottom = 30.dp),
+                )
+            }
+        }
+    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * The eggshell mark, drawn from the launcher artwork so it is **never**
+ * re-tinted by the active palette (§11). Under a decoy it is replaced by a
+ * plain padlock: nothing of the real app may show through here.
+ */
 @Composable
-private fun PassphraseStage(
-    onSubmit: (String) -> Unit,
-) {
+private fun BrandMark(decoy: Boolean) {
+    if (decoy) {
+        Box(
+            modifier = Modifier
+                .size(LogoSize)
+                .background(
+                    MaterialTheme.colorScheme.surfaceContainerHigh,
+                    RoundedCornerShape(22.dp),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.Lock,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(36.dp),
+            )
+        }
+    } else {
+        Image(
+            painter = painterResource(R.drawable.ic_launcher_foreground),
+            contentDescription = null,
+            modifier = Modifier.size(LogoSize),
+        )
+    }
+}
+
+/**
+ * Four pips: filled ones in `primary`, the *next* one ringed in `outline` so the
+ * eye knows where the following digit lands, the rest in `outlineVariant`.
+ */
+@Composable
+private fun PinPips(filled: Int) {
+    val progress = stringResource(R.string.access_unlock_pin_progress, filled)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(15.dp),
+        modifier = Modifier.semantics {
+            liveRegion = LiveRegionMode.Polite
+            contentDescription = progress
+        },
+    ) {
+        repeat(PIN_LENGTH) { index ->
+            val isFilled = index < filled
+            val ring = when {
+                isFilled -> Color.Transparent
+                index == filled -> MaterialTheme.colorScheme.outline
+                else -> MaterialTheme.colorScheme.outlineVariant
+            }
+            Box(
+                modifier = Modifier
+                    .size(PipSize)
+                    .background(
+                        if (isFilled) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        CircleShape,
+                    )
+                    .border(1.5.dp, ring, CircleShape),
+            )
+        }
+    }
+}
+
+/**
+ * The lockout notice. The ladder itself (3 free tries, 5 s → 30 s → 2 min →
+ * 10 min → 1 h, wipe at 12) belongs to `PinRateLimiter`; all this does is make
+ * the wait — and how close the vault is to erasing itself — readable.
+ */
+@Composable
+private fun LockoutCard(lockoutMs: Long, attemptsLeft: Int?, decoy: Boolean) {
+    EggCard(variant = CardVariant.Error) {
+        Text(
+            stringResource(R.string.access_unlock_locked_title),
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Text(
+            stringResource(R.string.access_unlock_locked_body, formatRemaining(lockoutMs)),
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        if (attemptsLeft != null && attemptsLeft > 0) {
+            Text(
+                // The word "coffre" would betray that an encrypted vault sits
+                // behind this screen — on the decoy skin, which presents itself
+                // as a notes app's passcode gate, that is the one thing it must
+                // never say. The warning stays, the noun goes.
+                pluralStringResource(
+                    if (decoy) {
+                        R.plurals.access_unlock_attempts_left_neutral
+                    } else {
+                        R.plurals.access_unlock_attempts_left
+                    },
+                    attemptsLeft,
+                    attemptsLeft,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.W600,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun formatRemaining(ms: Long): String {
+    val total = ((ms + 999L) / 1000L).toInt()
+    val hours = total / 3600
+    val minutes = (total % 3600) / 60
+    val seconds = total % 60
+    return when {
+        hours > 0 -> stringResource(R.string.access_duration_h_min, hours, minutes)
+        minutes > 0 -> stringResource(R.string.access_duration_min_s, minutes, seconds)
+        else -> stringResource(R.string.access_duration_s, seconds)
+    }
+}
+
+@Composable
+private fun messageFor(
+    state: UnlockViewModel.State,
+    mode: VaultPrefs.Mode?,
+    stage: Stage,
+): String? = when {
+    mode == null -> stringResource(R.string.unlock_not_initialized)
+    state is UnlockViewModel.State.Failed ->
+        // A wrong PIN is the one failure the user can act on, so it gets plain
+        // language; anything else keeps the underlying reason for debugging.
+        if (state.reason == UnlockViewModel.REASON_WRONG_PIN) {
+            stringResource(R.string.access_unlock_wrong_pin)
+        } else {
+            stringResource(R.string.unlock_error_prefix, state.reason)
+        }
+    stage == Stage.Working -> stringResource(R.string.unlock_in_progress)
+    // The passphrase field already labels itself; only the biometric stage
+    // needs a sentence to explain what the big fingerprint tile does.
+    stage == Stage.Biometric -> stringResource(R.string.unlock_prompt_biometric)
+    else -> null
+}
+
+@Composable
+private fun PassphraseStage(onSubmit: (String) -> Unit) {
     var passphrase by remember { mutableStateOf("") }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         PasswordField(
@@ -280,114 +465,98 @@ private fun PassphraseStage(
         Button(
             onClick = { onSubmit(passphrase) },
             enabled = passphrase.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
         ) { Text(stringResource(R.string.action_unlock)) }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BiometricRetryStage(onRetry: () -> Unit) {
+private fun BiometricStage(onRetry: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Text(
-            stringResource(R.string.unlock_prompt_biometric),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Surface(
             onClick = onRetry,
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer,
+            shape = RoundedCornerShape(22.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = Modifier.size(96.dp),
         ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Icon(
                     Icons.Filled.Fingerprint,
                     contentDescription = stringResource(R.string.unlock_biometric_cd),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(56.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(48.dp),
                 )
             }
         }
         Button(
             onClick = onRetry,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
         ) { Text(stringResource(R.string.unlock_action_biometric)) }
     }
 }
 
 @Composable
-private fun PinDots(filled: Int, capacity: Int) {
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        repeat(capacity) { i ->
-            val isFilled = i < filled
-            Box(
-                modifier = Modifier
-                    .size(15.dp)
-                    .background(
-                        if (isFilled) MaterialTheme.colorScheme.primary else Color.Transparent,
-                        CircleShape,
-                    )
-                    .border(
-                        width = 2.dp,
-                        color = if (isFilled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                        shape = CircleShape,
-                    ),
-            )
-        }
-    }
-}
-
-@Composable
 private fun Keypad(
+    enabled: Boolean,
     onDigit: (String) -> Unit,
     onBackspace: () -> Unit,
-    onBiometric: () -> Unit,
+    /** `null` removes the fingerprint key entirely (decoy skin). */
+    onBiometric: (() -> Unit)?,
+    modifier: Modifier = Modifier,
 ) {
-    val rows = listOf(
-        listOf("1", "2", "3"),
-        listOf("4", "5", "6"),
-        listOf("7", "8", "9"),
-        listOf("bio", "0", "del"),
-    )
-    Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        rows.forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                row.forEach { k ->
-                    when (k) {
-                        "bio" -> Key(onClick = onBiometric, background = Color.Transparent) {
-                            Icon(
-                                Icons.Filled.Fingerprint,
-                                contentDescription = stringResource(R.string.unlock_biometric_cd),
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(30.dp),
-                            )
-                        }
-                        "del" -> Key(onClick = onBackspace, background = Color.Transparent) {
-                            Icon(
-                                Icons.Filled.Backspace,
-                                contentDescription = stringResource(R.string.unlock_delete_cd),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(26.dp),
-                            )
-                        }
-                        else -> Key(
-                            onClick = { onDigit(k) },
-                            background = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        ) {
-                            Text(
-                                k,
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.W500,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                    }
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(KeypadGap),
+    ) {
+        listOf(
+            listOf("1", "2", "3"),
+            listOf("4", "5", "6"),
+            listOf("7", "8", "9"),
+        ).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(KeypadGap)) {
+                row.forEach { digit -> DigitKey(digit, enabled, onDigit) }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(KeypadGap)) {
+            // Special keys carry no background but keep the full 62 dp target,
+            // so the grid stays square to the thumb even where it looks empty.
+            //
+            // With no biometric callback the slot is left blank rather than
+            // disabled: a greyed-out fingerprint on a notes-app passcode gate
+            // would still say "this phone has something else behind it".
+            if (onBiometric != null) {
+                FlatKey(onClick = onBiometric, enabled = enabled) {
+                    Icon(
+                        Icons.Filled.Fingerprint,
+                        contentDescription = stringResource(R.string.unlock_biometric_cd),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(27.dp),
+                    )
                 }
+            } else {
+                Spacer(
+                    Modifier
+                        .weight(1f)
+                        .height(KeyHeight)
+                )
+            }
+            DigitKey("0", enabled, onDigit)
+            FlatKey(onClick = onBackspace, enabled = enabled) {
+                Icon(
+                    Icons.Filled.Backspace,
+                    contentDescription = stringResource(R.string.unlock_delete_cd),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(25.dp),
+                )
             }
         }
     }
@@ -395,19 +564,53 @@ private fun Keypad(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Key(
+private fun RowScope.DigitKey(digit: String, enabled: Boolean, onDigit: (String) -> Unit) {
+    Surface(
+        onClick = { onDigit(digit) },
+        enabled = enabled,
+        modifier = Modifier
+            .weight(1f)
+            .height(KeyHeight),
+        shape = RoundedCornerShape(KeyRadius),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                digit,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.W500,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RowScope.FlatKey(
     onClick: () -> Unit,
-    background: Color,
+    enabled: Boolean,
     content: @Composable () -> Unit,
 ) {
     Surface(
         onClick = onClick,
-        shape = CircleShape,
-        color = background,
-        modifier = Modifier.size(72.dp),
+        enabled = enabled,
+        modifier = Modifier
+            .weight(1f)
+            .height(KeyHeight),
+        shape = RoundedCornerShape(KeyRadius),
+        color = Color.Transparent,
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             content()
         }
     }
 }
+
+private const val PIN_LENGTH = 4
+private val ScreenPad = 26.dp
+private val LogoSize = 74.dp
+private val PipSize = 14.dp
+private val KeyHeight = 62.dp
+private val KeyRadius = 22.dp
+private val KeypadGap = 12.dp

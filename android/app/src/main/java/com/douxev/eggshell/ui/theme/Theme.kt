@@ -3,6 +3,7 @@ package com.douxev.eggshell.ui.theme
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -20,6 +21,10 @@ import com.douxev.eggshell.data.ThemePrefs
  * When the user keeps the default ([AppTheme.SYSTEM]) we fall back to the
  * lavender palette and let the OS dark-mode setting choose between light
  * and dark.
+ *
+ * Material 3 has no `success` role, so the palette's green travels alongside
+ * the scheme in [LocalEggExtendedColors] — that is what keeps the Évolution
+ * tiles and the success chips reactive to all 15 palettes.
  */
 @Composable
 fun EggshellTheme(content: @Composable () -> Unit) {
@@ -27,11 +32,15 @@ fun EggshellTheme(content: @Composable () -> Unit) {
     val selected by vm.theme.collectAsState()
     val systemDark = isSystemInDarkTheme()
     val scheme = resolveScheme(selected, systemInDark = systemDark)
-    MaterialTheme(
-        colorScheme = scheme,
-        typography = TransitionTypography,
-        content = content,
-    )
+    CompositionLocalProvider(
+        LocalEggExtendedColors provides extendedColorsFor(selected, systemInDark = systemDark),
+    ) {
+        MaterialTheme(
+            colorScheme = scheme,
+            typography = TransitionTypography,
+            content = content,
+        )
+    }
 }
 
 @HiltViewModel

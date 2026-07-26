@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Le document PDF remis au médecin (§7). Rien ici n’est affiché dans l’app :
+  ce sont les mots imprimés sur la page. Les libellés en capitales sont écrits
+  en majuscules dans la chaîne, jamais via une transformation, pour qu’une
+  traduction puisse en décider.
+-->
+<resources>
+
+    <!-- ===== Bandeau, pied de page, en-tête ===== -->
+    <string name="pdfdoc_banner">SUIVI DE TRANSITION — RAPPORT DE SUIVI</string>
+    <string name="pdfdoc_footer_fmt">eggshell %1$s — document produit hors ligne, aucune donnée transmise.</string>
+    <string name="pdfdoc_title_fmt">Période du %1$s au %2$s</string>
+    <string name="pdfdoc_subtitle_fmt">%1$s · document édité le %2$s · établi à partir des saisies de la personne concernée</string>
+    <plurals name="pdfdoc_days">
+        <item quantity="one">%1$d jour</item>
+        <item quantity="other">%1$d jours</item>
+    </plurals>
+
+    <!-- ===== Titres de section ===== -->
+    <string name="pdfdoc_s_treatments">TRAITEMENTS EN COURS</string>
+    <string name="pdfdoc_s_changes">MODIFICATIONS SUR LA PÉRIODE</string>
+    <string name="pdfdoc_s_regularity">RÉGULARITÉ DES PRISES</string>
+    <string name="pdfdoc_s_hormones">TAUX HORMONAUX</string>
+    <string name="pdfdoc_s_weight">POIDS</string>
+    <string name="pdfdoc_s_feel">RESSENTI DÉCLARÉ</string>
+    <string name="pdfdoc_s_bleeding">RÈGLES</string>
+    <string name="pdfdoc_s_voice">VOIX</string>
+    <string name="pdfdoc_s_questions">QUESTIONS À ABORDER</string>
+    <string name="pdfdoc_s_photos">PHOTOS D’ÉVOLUTION</string>
+
+    <!-- ===== 1. Traitements ===== -->
+    <string name="pdfdoc_col_molecule">MOLÉCULE</string>
+    <string name="pdfdoc_col_dose">DOSE</string>
+    <string name="pdfdoc_col_route">VOIE</string>
+    <string name="pdfdoc_col_rhythm">RYTHME</string>
+    <string name="pdfdoc_col_since">DEPUIS</string>
+    <string name="pdfdoc_rhythm_daily_fmt">%1$d × / j — %2$s</string>
+    <string name="pdfdoc_rhythm_days_fmt">1 × tous les %1$d j — %2$s</string>
+    <string name="pdfdoc_rhythm_hours_fmt">toutes les %1$d h</string>
+    <string name="pdfdoc_rhythm_minutes_fmt">toutes les %1$d min</string>
+    <string name="pdfdoc_rhythm_none">Aucun rappel programmé</string>
+    <string name="pdfdoc_hour_fmt">%1$d h</string>
+    <string name="pdfdoc_hour_minute_fmt">%1$d h %2$02d</string>
+    <string name="pdfdoc_treatments_note">La colonne « depuis » donne la date de création de la fiche dans l’application, qui peut être postérieure au début réel du traitement.</string>
+
+    <!-- ===== 2. Modifications ===== -->
+    <string name="pdfdoc_change_dose_fmt">%1$s : dose passée de %2$s à %3$s.</string>
+    <string name="pdfdoc_change_unit_fmt">%1$s : unité de dose passée de %2$s à %3$s.</string>
+    <string name="pdfdoc_change_route_fmt">%1$s : voie d’administration passée de %2$s à %3$s.</string>
+    <string name="pdfdoc_change_other_fmt">%1$s : %2$s passé de %3$s à %4$s.</string>
+    <string name="pdfdoc_value_unset">non renseigné</string>
+
+    <!-- ===== 3. Régularité ===== -->
+    <string name="pdfdoc_stat_planned">Doses prévues</string>
+    <string name="pdfdoc_stat_logged">Doses notées</string>
+    <string name="pdfdoc_stat_logged_fmt">%1$d · %2$d %%</string>
+    <string name="pdfdoc_stat_missed">Doses oubliées</string>
+    <string name="pdfdoc_stat_mean_delay">Retard moyen</string>
+    <string name="pdfdoc_stat_over_two_hours">Prises &gt; 2 h de retard</string>
+    <string name="pdfdoc_delay_minutes_fmt">%1$d min</string>
+    <string name="pdfdoc_delay_hours_fmt">%1$d h %2$02d</string>
+    <string name="pdfdoc_caption_punctuality_fmt">ÉCART À L’HEURE PRÉVUE, %1$d DERNIÈRES PRISES</string>
+    <string name="pdfdoc_axis_on_time">à l’heure</string>
+    <string name="pdfdoc_axis_hours_fmt">+%1$d h</string>
+    <string name="pdfdoc_axis_minutes_fmt">+%1$d min</string>
+    <string name="pdfdoc_axis_hours_minutes_fmt">+%1$d h %2$02d</string>
+    <string name="pdfdoc_axis_early_fmt">−%1$d min</string>
+    <string name="pdfdoc_axis_missed">oubliée</string>
+    <string name="pdfdoc_axis_missed_fmt">oubliées · %1$d</string>
+    <string name="pdfdoc_punct_estimate">Les doses prévues sont rejouées depuis les schémas d’administration enregistrés : c’est une estimation, pas un relevé. L’axe se cale sur le plus grand retard de la période.</string>
+    <string name="pdfdoc_punct_none">Aucune prise de la période n’a pu être rapprochée d’une heure prévue : les écarts ne sont pas calculés, et aucun pourcentage n’est avancé.</string>
+    <plurals name="pdfdoc_punct_excluded">
+        <item quantity="one">%1$d prise notée sans heure prévue, exclue du calcul des écarts.</item>
+        <item quantity="other">%1$d prises notées sans heure prévue, exclues du calcul des écarts.</item>
+    </plurals>
+
+    <!-- ===== 4. Taux hormonaux ===== -->
+    <string name="pdfdoc_head_last_fmt">%1$s — DERNIÈRE VALEUR</string>
+    <string name="pdfdoc_col_sample">PRÉLÈVEMENT</string>
+    <string name="pdfdoc_col_lab">LABORATOIRE</string>
+    <string name="pdfdoc_col_analyte">ANALYSE</string>
+    <string name="pdfdoc_col_value">VALEUR</string>
+    <string name="pdfdoc_lab_manual">Saisie manuelle</string>
+    <string name="pdfdoc_caption_other_labs">AUTRES ANALYSES DE LA PÉRIODE</string>
+    <string name="pdfdoc_legend_plain_fmt">%1$s (%2$s)</string>
+    <string name="pdfdoc_legend_scaled_fmt">%1$s (%2$s, ×%3$d)</string>
+    <string name="pdfdoc_legend_axis_fmt">Axe temporel proportionnel · %1$s → %2$s</string>
+    <string name="pdfdoc_marker_dose_fmt">↑ dose %1$s</string>
+    <string name="pdfdoc_hormones_note">Valeurs reportées dans l’unité du compte rendu d’origine. Aucun intervalle de référence n’est affiché : il dépend du laboratoire et de l’objectif thérapeutique.</string>
+
+    <!-- ===== 5. Poids ===== -->
+    <string name="pdfdoc_weight_current">Actuel</string>
+    <string name="pdfdoc_weight_start">Début de période</string>
+    <string name="pdfdoc_weight_delta">Variation</string>
+
+    <!-- ===== 6. Ressenti ===== -->
+    <string name="pdfdoc_feel_intro_fmt">%1$s sur %2$s. Échelles de 0 à 10, remplies par la personne elle-même. Le texte libre du journal n’est pas exporté.</string>
+    <plurals name="pdfdoc_entries">
+        <item quantity="one">%1$d saisie</item>
+        <item quantity="other">%1$d saisies</item>
+    </plurals>
+    <string name="pdfdoc_col_indicator">INDICATEUR</string>
+    <string name="pdfdoc_col_mean">MOYENNE</string>
+    <string name="pdfdoc_col_previous">PÉRIODE −1</string>
+    <string name="pdfdoc_col_trend">TENDANCE</string>
+    <string name="pdfdoc_trend_stable">Stable</string>
+    <string name="pdfdoc_trend_up">En hausse</string>
+    <string name="pdfdoc_trend_down">En baisse</string>
+    <string name="pdfdoc_trend_slight_up">Légère hausse</string>
+    <string name="pdfdoc_trend_slight_down">Légère baisse</string>
+    <string name="pdfdoc_trend_steady_up_fmt">En hausse régulière depuis %1$s</string>
+    <string name="pdfdoc_trend_steady_down_fmt">En baisse régulière depuis %1$s</string>
+    <string name="pdfdoc_trend_new">Première période mesurée</string>
+    <string name="pdfdoc_empty_cell">—</string>
+    <string name="pdfdoc_caption_mood_week">HUMEUR MOYENNE PAR SEMAINE</string>
+    <string name="pdfdoc_caption_effects">EFFETS LES PLUS SIGNALÉS</string>
+    <string name="pdfdoc_effect_days_fmt">%1$d j</string>
+
+    <!-- ===== Règles ===== -->
+    <string name="pdfdoc_col_start">DÉBUT</string>
+    <string name="pdfdoc_col_end">FIN</string>
+    <string name="pdfdoc_col_duration">DURÉE</string>
+    <string name="pdfdoc_col_nature">NATURE</string>
+    <string name="pdfdoc_bleeding_period">Règles</string>
+    <string name="pdfdoc_bleeding_spotting">Spotting</string>
+    <string name="pdfdoc_bleeding_both">Règles et spotting</string>
+    <plurals name="pdfdoc_bleeding_days">
+        <item quantity="one">%1$d jour</item>
+        <item quantity="other">%1$d jours</item>
+    </plurals>
+    <string name="pdfdoc_bleeding_note_fmt">Intervalle moyen observé entre deux débuts : %1$d jours.</string>
+
+    <!-- ===== 7. Voix ===== -->
+    <string name="pdfdoc_caption_voice">HAUTEUR FONDAMENTALE MESURÉE</string>
+    <string name="pdfdoc_voice_current">Actuelle</string>
+    <string name="pdfdoc_voice_delta">Variation</string>
+    <string name="pdfdoc_voice_count">Enregistrements</string>
+    <string name="pdfdoc_hz_fmt">%1$d Hz</string>
+    <string name="pdfdoc_voice_note">Hauteur fondamentale mesurée sur l’appareil, sensible aux conditions d’enregistrement — à lire comme une tendance, pas comme une mesure de phoniatrie.</string>
+
+    <!-- ===== Photos ===== -->
+    <string name="pdfdoc_photos_note">Photographies enregistrées dans l’application, réduites pour l’impression. Elles ne sont incluses que parce qu’elles ont été cochées explicitement.</string>
+
+    <!-- ===== Nature de ce document ===== -->
+    <string name="pdfdoc_disclaimer_lead">Nature de ce document.</string>
+    <string name="pdfdoc_disclaimer_body">Toutes les données sont saisies par la personne concernée dans une application personnelle ; elles ne sont ni vérifiées ni horodatées par un tiers. Les analyses biologiques sont recopiées ou lues automatiquement à partir des comptes rendus de laboratoire, dont les originaux font foi. Ce document est une aide à la consultation, il ne remplace ni un examen clinique ni un compte rendu de laboratoire.</string>
+
+</resources>

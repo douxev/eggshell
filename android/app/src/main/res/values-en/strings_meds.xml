@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Meds: the list, a treatment's detail, how regular the intakes are.
+  Ergonomic redesign — handoff §6.4 and §6.5.
+  Small-caps labels are written in uppercase inside the string, never through a
+  text transform: a translation has to be able to opt out.
+-->
+<resources>
+    <!-- ===== List ===== -->
+    <string name="meds_search">Search</string>
+    <string name="meds_search_close">Close search</string>
+    <string name="meds_search_hint">Treatment name</string>
+    <string name="meds_filter_active">Active</string>
+    <string name="meds_filter_all">All</string>
+    <string name="meds_filter_archived">Archived</string>
+    <string name="meds_add_treatment">Add a treatment</string>
+    <string name="meds_archived_badge">Archived</string>
+    <string name="meds_empty_archived">Nothing archived yet. An archived treatment lands here, with all of its history.</string>
+    <string name="meds_empty_search_fmt">Nothing matches “%1$s”.</string>
+
+    <!-- Row subtitle: dose · route · adherence · average offset -->
+    <string name="meds_adherence_fmt">%1$d%%</string>
+    <string name="meds_mean_delay_fmt">%1$s on average</string>
+
+    <!-- ===== “Regularity” card ===== -->
+    <string name="meds_regularity">Regularity</string>
+    <string name="meds_regularity_period">30 days</string>
+    <string name="meds_stat_logged">doses logged</string>
+    <string name="meds_stat_mean_delay">average delay</string>
+    <string name="meds_stat_missed">missed</string>
+    <string name="meds_chart_caption">OFFSET FROM THE PLANNED TIME · LAST 30 DOSES</string>
+    <string name="meds_chart_cd">How far each dose was from its planned time, over 30 days.</string>
+    <string name="meds_regularity_empty">No planned times over the last 30 days, so there is nothing to compare. Set a reminder and your doses will place themselves here.</string>
+
+    <!-- Interpretation sentence: computed, never canned -->
+    <string name="meds_insight_good_fmt">All good: %1$d of %2$d doses logged on time.</string>
+    <string name="meds_insight_late_fmt">You barely forget any, but you often take them late: %1$d of %2$d doses more than a quarter of an hour behind.</string>
+    <string name="meds_insight_missed_fmt">When you take them it\'s on time — but %1$d of %2$d doses slipped through.</string>
+    <string name="meds_insight_both_fmt">Out of %3$d planned doses, %1$d were missed and %2$d came in late.</string>
+    <string name="meds_action_shift_fmt">Move the %1$s reminder to %2$s?</string>
+    <string name="meds_action_priority_fmt">Make the %1$s reminder harder to miss?</string>
+    <string name="meds_action_none">Nothing to change for now.</string>
+
+    <!-- ===== Punctuality: a glyph, a colour AND a word ===== -->
+    <string name="meds_on_time">on time</string>
+    <string name="meds_missed">missed</string>
+    <string name="meds_skipped">skipped</string>
+    <string name="meds_logged">logged</string>
+    <string name="meds_not_logged">Not logged</string>
+    <string name="meds_delta_minutes_fmt">+%1$d min</string>
+    <string name="meds_delta_hours_fmt">+%1$d h</string>
+    <string name="meds_delta_hours_minutes_fmt">+%1$d h %2$02d</string>
+    <string name="meds_delta_early_fmt">−%1$d min</string>
+    <string name="meds_chart_missed_fmt">missed · %1$d</string>
+
+    <!-- ===== Detail ===== -->
+    <!-- “Today” is reused from today_section_today. -->
+    <string name="meds_yesterday">Yesterday</string>
+    <string name="meds_dose_per_intake_fmt">%1$s per dose</string>
+    <string name="meds_dose_unspecified">Free dose</string>
+    <string name="meds_alias_row">Alias in notifications</string>
+    <string name="meds_schedules">Dose schedules</string>
+    <string name="meds_schedule_toggle">Turn the reminder on</string>
+    <string name="meds_reminder_text">Reminder text</string>
+    <string name="meds_quoted_fmt">“%1$s”</string>
+    <string name="meds_unarchive">Take out of the archive</string>
+    <string name="meds_archived_notice">This treatment is archived: it keeps all of its history, but no longer sends reminders.</string>
+
+    <!-- ===== Forms (add / reminder / dose) ===== -->
+    <string name="meds_section_identity">The treatment</string>
+    <string name="meds_section_dose">The dose</string>
+    <string name="meds_section_notification">In notifications</string>
+    <string name="meds_section_color">Its colour</string>
+    <string name="meds_section_when">When</string>
+    <string name="meds_section_cadence">The cadence</string>
+    <string name="meds_section_site">The site</string>
+    <string name="meds_section_note">A word</string>
+    <string name="meds_color_none_cd">No colour</string>
+    <string name="meds_color_swatch_cd">Colour %1$d</string>
+</resources>

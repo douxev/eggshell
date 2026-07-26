@@ -3,17 +3,22 @@ import TransitionCore
 import AVFoundation
 
 // ===========================================================================
-// TAB-ROOT — Mémos vocaux. Enregistre de courts clips, les chiffre au repos
-// dans AppPaths.voiceDir, estime la fréquence fondamentale (F0) via YIN, puis
-// liste / lit / partage / supprime les clips. La carte de tendance trace
-// l'évolution de la hauteur — c'est le signal de suivi de voix sous HRT.
+// Voix (§6.11) — un écran poussé de la pile unique.
+//
+// Trois blocs, dans cet ordre : la tendance (où en est ta hauteur), le
+// magnétophone (le geste du jour), puis tes enregistrements. Les clips sont
+// chiffrés au repos dans AppPaths.voiceDir ; la fréquence fondamentale (F0)
+// est estimée sur l'appareil par YIN, jamais ailleurs.
+//
+// Grammaire iOS (§4) : pas de bande d'action ici — la colonne porte simplement
+// 40 pt de marge basse, comme le prototype.
 //
 // Parité Android : VoiceScreen.kt + VoiceRepository.kt + PitchDetector.kt.
 // ===========================================================================
 
 @MainActor
 final class VoiceViewModel: NSObject, ObservableObject {
-    /// Cycle de vie de l'enregistreur. "Traitement" couvre le décodage +
+    /// Cycle de vie de l'enregistreur. « Traitement » couvre le décodage +
     /// détection de hauteur YIN + chiffrement AES-GCM, qui prend quelques
     /// secondes — assez pour que sans état dédié l'utilisateur croie que le
     /// bouton stop n'a pas répondu et double-tape.
@@ -25,6 +30,9 @@ final class VoiceViewModel: NSObject, ObservableObject {
     @Published var phase: Phase = .idle
     @Published var recordingMs: Int64 = 0
     @Published var playingId: String?
+    /// Incrémenté quand un clip vient d'être scellé dans le coffre : la vue
+    /// s'en sert pour déclencher le retour haptique de succès.
+    @Published var savedTick = 0
 
     private var recorder: AVAudioRecorder?
     private var player: AVAudioPlayer?
@@ -39,6 +47,7 @@ final class VoiceViewModel: NSObject, ObservableObject {
 
     func load(_ session: VaultService) async {
         loading = true
+        error = nil
         do {
             clips = try await session.listVoiceClips().sorted { $0.atMs > $1.atMs }
         } catch {
@@ -61,7 +70,7 @@ final class VoiceViewModel: NSObject, ObservableObject {
         error = nil
         let granted = await requestPermission()
         guard granted else {
-            error = "Permission micro refusée."
+            error = "Le micro n'est pas autorisé. Tu peux l'activer dans les réglages du téléphone."
             return
         }
         do {
@@ -79,7 +88,7 @@ final class VoiceViewModel: NSObject, ObservableObject {
             let rec = try AVAudioRecorder(url: url, settings: settings)
             rec.prepareToRecord()
             guard rec.record() else {
-                error = "Impossible de démarrer l'enregistrement."
+                error = "On n'a pas réussi à démarrer l'enregistrement. Réessaie dans un instant."
                 return
             }
             recorder = rec
@@ -104,7 +113,7 @@ final class VoiceViewModel: NSObject, ObservableObject {
         let startedAtMs = recordStartedAtMs
         rec.stop()
         recorder = nil
-        // Bascule sur "Traitement…" immédiatement : le bouton montre un
+        // Bascule sur « Traitement… » immédiatement : le bouton montre un
         // indicateur et ignore les taps pendant le décodage + chiffrement.
         phase = .processing
         recordingMs = 0
@@ -125,6 +134,7 @@ final class VoiceViewModel: NSObject, ObservableObject {
             AppPaths.secureDelete(url)
             tempRecordingURL = nil
             recordStartedAt = nil
+            savedTick += 1
             await load(session)
         } catch {
             AppPaths.secureDelete(url)
@@ -180,7 +190,7 @@ final class VoiceViewModel: NSObject, ObservableObject {
                 let p = try AVAudioPlayer(contentsOf: temp)
                 p.delegate = self
                 guard p.play() else {
-                    error = "Lecture impossible."
+                    error = "Ce clip refuse de se lire. Il est peut-être abîmé."
                     return
                 }
                 player = p
@@ -235,171 +245,273 @@ extension VoiceViewModel: AVAudioPlayerDelegate {
     }
 }
 
+// MARK: - Écran
+
 struct VoiceView: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.palette) private var palette
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var vm = VoiceViewModel()
 
     var body: some View {
-        TabScaffold(title: "Voix") {
-            if vm.loading {
-                ProgressView().tint(palette.primary).frame(maxWidth: .infinity).padding()
-            } else {
-                trendCard
-                if vm.clips.contains(where: { $0.pitchHz != nil }) {
-                    Text("Estimation locale, sensible aux conditions de capture. Une variation de quelques Hz n'est pas forcément un vrai changement de F0.")
-                        .font(.eggCaption)
-                        .foregroundStyle(palette.onSurface.opacity(0.55))
-                        .padding(.horizontal, Spacing.xs)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                if let message = vm.error {
+                    ErrorCardView(message, retryLabel: "Réessayer") { Task { await reload() } }
                 }
 
-                recordCard
-
-                Text("Enregistrements")
-                    .font(.eggLabel)
-                    .foregroundStyle(palette.onSurface.opacity(0.6))
-
-                if vm.clips.isEmpty {
-                    EmptyStateCard(text: "Aucun enregistrement vocal pour le moment.", systemImage: "waveform")
+                if vm.loading {
+                    SkeletonBlock(height: 170, cornerRadius: Radius.card)
+                    SkeletonBlock(height: 210, cornerRadius: Radius.card)
+                    SkeletonBlock(height: 140, cornerRadius: Radius.card)
                 } else {
-                    ForEach(vm.clips, id: \.id) { clip in
-                        ClipRow(
-                            clip: clip,
-                            playing: vm.playingId == clip.id,
-                            onPlay: { if let s = app.session { vm.togglePlay(clip, session: s) } },
-                            decryptToTemp: { await vm.decryptToTemp(clip, session: $0) },
-                            onDelete: { if let s = app.session { Task { await vm.delete(clip, session: s) } } })
-                    }
+                    trendCard
+                    if hasPitch { estimateCaveat }
+                    recorderCard
+                    SectionTitleView("TES ENREGISTREMENTS")
+                    clipList
                 }
             }
-            if let e = vm.error { ErrorBanner(message: e) }
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.top, Spacing.s)
+            // Voix ne porte pas de bande d'action : la colonne réserve sa
+            // propre marge basse (§6.11).
+            .padding(.bottom, 40)
         }
-        .task { if let s = app.session { await vm.load(s) } }
+        .background(palette.surface.ignoresSafeArea())
+        .navigationTitle("Voix")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { dismiss() } label: {
+                    HStack(spacing: 2) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Retour").font(.system(size: 16))
+                    }
+                    .foregroundStyle(palette.primary)
+                }
+                .accessibilityLabel("Retour")
+            }
+        }
+        .toolbarBackground(palette.surface, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .sensoryFeedback(.success, trigger: vm.savedTick)
+        .task { await reload() }
         .onDisappear { vm.stopPlayback() }
     }
+
+    private func reload() async {
+        if let session = app.session { await vm.load(session) }
+    }
+
+    private var pitched: [VoiceClip] { vm.clips.filter { $0.pitchHz != nil } }
+    private var hasPitch: Bool { !pitched.isEmpty }
 
     // MARK: - Carte de tendance F0
 
     private var trendCard: some View {
         // Hauteur du dernier clip en titre, delta vs. le tout premier clip
-        // analysé : c'est le signal d'entraînement vocal sous HRT.
-        let withPitch = vm.clips.filter { $0.pitchHz != nil }
-        let latest = withPitch.first?.pitchHz
-        let earliest = withPitch.last?.pitchHz
+        // analysé : c'est le signal d'entraînement vocal.
+        let latest = pitched.first
+        let earliest = pitched.last
         let delta: Int32? = {
-            guard let latest, let earliest, withPitch.count >= 2 else { return nil }
-            return latest - earliest
+            guard let a = latest?.pitchHz, let b = earliest?.pitchHz, pitched.count >= 2 else {
+                return nil
+            }
+            return a - b
         }()
         // Sparkline chronologique (du plus ancien au plus récent).
-        let series = withPitch.compactMap { $0.pitchHz }.reversed().map { Double($0) }
+        let series = pitched.compactMap(\.pitchHz).reversed().map { Double($0) }
 
-        return SectionCard {
+        return EggCard(variant: .low, paddingH: 18, paddingV: 18, spacing: Metrics.blockGap) {
             HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text(latest != nil ? "Hauteur (F0)" : "Clips enregistrés")
-                        .font(.eggLabel)
-                        .foregroundStyle(palette.onSurface.opacity(0.6))
-                    if let latest {
-                        HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
-                            Text("\(latest)")
-                                .font(.eggDisplay)
-                                .foregroundStyle(palette.onSurface)
-                            Text("Hz")
-                                .font(.eggBody)
-                                .foregroundStyle(palette.onSurface.opacity(0.7))
-                        }
-                        Text(deltaLabel(delta, count: vm.clips.count))
-                            .font(.eggCaption)
-                            .foregroundStyle(palette.onSurface.opacity(0.8))
-                    } else {
-                        HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
-                            Text("\(vm.clips.count)")
-                                .font(.eggDisplay)
-                                .foregroundStyle(palette.onSurface)
-                            Text(vm.clips.count <= 1 ? "clip" : "clips")
-                                .font(.eggBody)
-                                .foregroundStyle(palette.onSurface.opacity(0.7))
-                        }
-                        Text("Enregistre régulièrement pour suivre ta hauteur.")
-                            .font(.eggCaption)
-                            .foregroundStyle(palette.onSurface.opacity(0.8))
+                VStack(alignment: .leading, spacing: 2) {
+                    MicroLabel(eyebrow(latest))
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(headlineValue(latest))
+                            .font(.system(size: 34, weight: .semibold))
+                            .foregroundStyle(palette.onSurface)
+                        Text(headlineUnit(latest))
+                            .font(EggFont.titleS)
+                            .foregroundStyle(palette.onSurfaceVariant)
                     }
                 }
-                Spacer()
-                if series.count >= 2 {
-                    Sparkline(values: series, tint: palette.primary, height: 48)
-                        .frame(width: 130)
-                }
+                Spacer(minLength: Spacing.s)
+                if let delta { deltaPill(delta) }
+            }
+            .accessibilityElement(children: .combine)
+
+            if series.count >= 2 {
+                PitchSparkline(values: series)
+                    .frame(height: 56)
+            } else {
+                Text(hasPitch
+                     ? "Enregistre-toi une deuxième fois et la courbe se dessinera ici."
+                     : "Enregistre-toi de temps en temps : la hauteur se lit sur la durée, "
+                       + "jamais sur un seul clip.")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    private func deltaLabel(_ delta: Int32?, count: Int) -> String {
-        guard let delta else { return "\(count) clip\(count <= 1 ? "" : "s")" }
-        if delta > 0 { return "+\(delta) Hz depuis le début" }
-        if delta < 0 { return "\(delta) Hz depuis le début" }
-        return "Stable depuis le début"
+    private func eyebrow(_ latest: VoiceClip?) -> String {
+        guard let latest else { return "TA VOIX" }
+        return "HAUTEUR MOYENNE · \(dayMonthUpper(latest.atMs))"
+    }
+
+    private func headlineValue(_ latest: VoiceClip?) -> String {
+        if let pitch = latest?.pitchHz { return "\(pitch)" }
+        return "\(vm.clips.count)"
+    }
+
+    private func headlineUnit(_ latest: VoiceClip?) -> String {
+        if latest?.pitchHz != nil { return "Hz" }
+        return vm.clips.count <= 1 ? "clip" : "clips"
+    }
+
+    /// La pilule marque **qu'il s'est passé quelque chose**, pas une bonne ou
+    /// une mauvaise direction : certaines voix s'entraînent vers le haut,
+    /// d'autres vers le bas. Le sens est porté par le glyphe et le signe, jamais
+    /// par la couleur seule (§10).
+    private func deltaPill(_ delta: Int32) -> some View {
+        let stable = delta == 0
+        let rising = delta > 0
+        let glyph = stable ? "arrow.right" : (rising ? "arrow.up.right" : "arrow.down.right")
+        let label = stable ? "Stable" : "\(rising ? "+" : "")\(delta) Hz"
+        let spoken: String = {
+            if stable { return "Hauteur stable depuis le premier enregistrement." }
+            let amount = abs(Int(delta))
+            return rising
+                ? "\(amount) hertz de plus qu'au premier enregistrement."
+                : "\(amount) hertz de moins qu'au premier enregistrement."
+        }()
+
+        return StatusPillView(
+            label,
+            systemImage: glyph,
+            container: stable ? palette.surfaceContainerHighest : palette.successContainer,
+            content: stable ? palette.onSurfaceVariant : palette.onSuccessContainer)
+            .accessibilityLabel(spoken)
+    }
+
+    private var estimateCaveat: some View {
+        Text("Estimation faite sur l'appareil, sensible aux conditions de capture. "
+             + "Quelques hertz d'écart ne sont pas forcément un vrai changement.")
+            .font(EggFont.bodyS)
+            .foregroundStyle(palette.onSurfaceVariant)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, Spacing.xs)
     }
 
     // MARK: - Carte d'enregistrement
 
-    private var recordCard: some View {
-        SectionCard {
-            VStack(spacing: Spacing.m) {
-                ZStack {
-                    Circle()
-                        .fill(recorderColor)
-                        .frame(width: 92, height: 92)
-                        .scaleEffect(vm.isRecording ? 1.06 : 1)
-                        .animation(.easeInOut(duration: 0.25), value: vm.isRecording)
-                    if vm.isProcessing {
-                        ProgressView().tint(palette.onPrimary)
-                    } else {
-                        Button {
-                            if let s = app.session { vm.toggle(s) }
-                        } label: {
-                            Image(systemName: vm.isRecording ? "stop.fill" : "mic.fill")
-                                .font(.system(size: 38, weight: .semibold))
-                                .foregroundStyle(palette.onPrimary)
-                                .frame(width: 92, height: 92)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
+    private var recorderCard: some View {
+        EggCard(variant: .primary, spacing: 14) {
+            VStack(spacing: 14) {
+                recorderButton
                 Text(recorderTitle)
-                    .font(.eggCallout)
-                    .foregroundStyle(palette.onSurface)
-
-                Text(recorderSubtitle)
-                    .font(.eggCaption)
-                    .foregroundStyle(palette.onSurface.opacity(0.55))
+                    .font(EggFont.titleS)
+                    .monospacedDigit()
+                Text(recorderCaption)
+                    .font(EggFont.bodyS)
+                    .opacity(0.8)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity)
         }
     }
 
-    private var recorderColor: Color {
-        switch vm.phase {
-        case .recording: return palette.error
-        case .processing: return palette.surfaceContainerHigh
-        case .idle: return palette.primary
+    private var recorderButton: some View {
+        Button {
+            if let session = app.session { vm.toggle(session) }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(vm.isRecording ? palette.error : palette.primary)
+                    .shadow(color: palette.scrim.opacity(0.22), radius: 10, y: 6)
+                if vm.isProcessing {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(palette.onPrimary)
+                } else {
+                    Image(systemName: vm.isRecording ? "stop.fill" : "mic.fill")
+                        .font(.system(size: 42, weight: .semibold))
+                        .foregroundStyle(vm.isRecording ? palette.onError : palette.onPrimary)
+                }
+            }
+            .frame(width: 96, height: 96)
+            .scaleEffect(vm.isRecording && !reduceMotion ? 1.06 : 1)
+            .animation(.easeInOut(duration: 0.25), value: vm.isRecording)
+            .contentShape(Circle())
         }
+        .buttonStyle(.plain)
+        .disabled(vm.isProcessing)
+        .accessibilityLabel(recorderAccessibilityLabel)
     }
 
     private var recorderTitle: String {
         switch vm.phase {
-        case .recording: return "Enregistrement… \(mmss(vm.recordingMs))"
+        case .recording: return "Enregistrement · \(mmss(vm.recordingMs))"
         case .processing: return "Traitement…"
-        case .idle: return "Appuie pour enregistrer"
+        case .idle: return "Enregistrer 30 secondes"
         }
     }
 
-    private var recorderSubtitle: String {
+    private var recorderCaption: String {
         switch vm.phase {
-        case .processing: return "Estimation de la hauteur et chiffrement en cours."
-        default: return "Quelques secondes suffisent pour estimer la hauteur (F0)."
+        case .recording:
+            return "Appuie de nouveau pour arrêter. Trente secondes suffisent largement."
+        case .processing:
+            return "On estime la hauteur et on chiffre le clip. Encore quelques secondes."
+        case .idle:
+            return "Pièce calme, même paragraphe, téléphone à 30 cm — c'est ce qui rend la "
+                + "courbe comparable."
+        }
+    }
+
+    private var recorderAccessibilityLabel: String {
+        switch vm.phase {
+        case .recording: return "Arrêter l'enregistrement, \(mmss(vm.recordingMs)) écoulées"
+        case .processing: return "Traitement de l'enregistrement en cours"
+        case .idle: return "Enregistrer trente secondes de voix"
+        }
+    }
+
+    // MARK: - Liste des clips
+
+    @ViewBuilder
+    private var clipList: some View {
+        if vm.clips.isEmpty {
+            EmptyStateView(
+                "Rien d'enregistré pour l'instant. Un premier clip te donnera le point de "
+                    + "départ auquel comparer tous les suivants.",
+                systemImage: "waveform")
+        } else {
+            ListGroup {
+                ForEach(Array(vm.clips.enumerated()), id: \.element.id) { pair in
+                    ClipRow(
+                        clip: pair.element,
+                        playing: vm.playingId == pair.element.id,
+                        showsSeparator: pair.offset < vm.clips.count - 1,
+                        onPlay: {
+                            if let session = app.session {
+                                vm.togglePlay(pair.element, session: session)
+                            }
+                        },
+                        decryptToTemp: { await vm.decryptToTemp(pair.element, session: $0) },
+                        onDelete: {
+                            if let session = app.session {
+                                Task { await vm.delete(pair.element, session: session) }
+                            }
+                        })
+                }
+            }
         }
     }
 }
@@ -412,56 +524,92 @@ private struct ClipRow: View {
 
     let clip: VoiceClip
     let playing: Bool
+    let showsSeparator: Bool
     let onPlay: () -> Void
     let decryptToTemp: (VaultService) async -> URL?
     let onDelete: () -> Void
 
     @State private var shareItem: ShareItem?
+    @State private var confirmDelete = false
 
     var body: some View {
-        HStack(spacing: Spacing.m) {
-            Button(action: onPlay) {
-                Image(systemName: playing ? "stop.circle.fill" : "play.circle.fill")
-                    .font(.title)
-                    .foregroundStyle(palette.primary)
-            }
-            .buttonStyle(.plain)
+        VStack(spacing: 0) {
+            HStack(spacing: Metrics.blockGap) {
+                Button(action: onPlay) {
+                    Image(systemName: playing ? "stop.fill" : "play.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(palette.onPrimaryContainer)
+                        .frame(width: 36, height: 36)
+                        .background(palette.primaryContainer, in: Circle())
+                        .frame(width: Metrics.touchTarget, height: Metrics.touchTarget)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(playing
+                                    ? "Arrêter la lecture"
+                                    : "Écouter l'enregistrement du \(dayMonth(clip.atMs))")
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack {
-                    Text(dateLabel(clip.atMs))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(dayMonth(clip.atMs))
                         .font(.eggCallout)
                         .foregroundStyle(palette.onSurface)
-                    Spacer()
-                    if let pitch = clip.pitchHz {
-                        Pill(text: "\(pitch) Hz")
+                    Text("\(mmss(clip.durationMs)) · \(timeLabel(clip.atMs))")
+                        .font(EggFont.bodyS)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                }
+
+                Spacer(minLength: Spacing.s)
+
+                if let pitch = clip.pitchHz {
+                    TypeBadgeView("\(pitch) Hz")
+                        .accessibilityLabel("Hauteur estimée : \(pitch) hertz")
+                }
+
+                // Partager et supprimer sont des gestes rares : ils passent par
+                // un menu explicite plutôt que par deux boutons permanents qui
+                // écraseraient la ligne. Le glyphe reste visible pour rester
+                // découvrable — un menu contextuel invisible ne l'est pas.
+                Menu {
+                    Button { startShare() } label: {
+                        Label("Partager", systemImage: "square.and.arrow.up")
                     }
+                    Button(role: .destructive) { confirmDelete = true } label: {
+                        Label("Supprimer", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(palette.onSurfaceVariant)
+                        .frame(width: Metrics.touchTarget, height: Metrics.touchTarget)
+                        .contentShape(Rectangle())
                 }
-                Text(mmss(clip.durationMs))
-                    .font(.eggCaption)
-                    .foregroundStyle(palette.onSurface.opacity(0.6))
+                .accessibilityLabel("Autres actions pour l'enregistrement du \(dayMonth(clip.atMs))")
             }
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.vertical, Spacing.m)
 
-            Button {
-                guard let s = app.session else { return }
-                Task {
-                    if let url = await decryptToTemp(s) { shareItem = ShareItem(url: url) }
-                }
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-                    .foregroundStyle(palette.onSurface.opacity(0.7))
+            if showsSeparator {
+                Rectangle()
+                    .fill(palette.outlineVariant)
+                    .frame(height: 1)
+                    .padding(.leading, Metrics.screenMargin)
             }
-            .buttonStyle(.plain)
-
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .foregroundStyle(palette.error)
-            }
-            .buttonStyle(.plain)
         }
-        .padding(.vertical, Spacing.xs)
         .sheet(item: $shareItem) { item in
             ShareSheet(url: item.url) { AppPaths.secureDelete(item.url) }
+        }
+        .alert("Supprimer cet enregistrement ?", isPresented: $confirmDelete) {
+            Button("Annuler", role: .cancel) {}
+            Button("Supprimer", role: .destructive) { onDelete() }
+        } message: {
+            Text("Le clip quitte le coffre pour de bon, et sa hauteur disparaît de la courbe.")
+        }
+    }
+
+    private func startShare() {
+        guard let session = app.session else { return }
+        Task {
+            if let url = await decryptToTemp(session) { shareItem = ShareItem(url: url) }
         }
     }
 }
@@ -478,27 +626,114 @@ private struct ShareItem: Identifiable {
 /// fermeture (defense-in-depth — on ne laisse pas traîner d'audio déchiffré).
 private struct ShareSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.palette) private var palette
     let url: URL
     let onClose: () -> Void
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: Spacing.l) {
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                Text("Une copie en clair a été préparée juste pour ce partage. "
+                     + "Elle est effacée dès que tu fermes cette feuille.")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 ShareLink(item: url) {
-                    Label("Partager l'enregistrement", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
+                    HStack(spacing: Spacing.s) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 17, weight: .semibold))
+                        Text("Partager l'enregistrement")
+                            .font(.system(size: 15.5, weight: .semibold))
+                    }
+                    .foregroundStyle(palette.onPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .background(palette.primary, in: Capsule())
+                    .contentShape(Capsule())
                 }
-                .glassProminentButton()
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 0)
             }
-            .padding(Spacing.xl)
+            .padding(Metrics.cardPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(palette.surface.ignoresSafeArea())
             .navigationTitle("Partager")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Fermer") { dismiss() }
                 }
             }
         }
+        .presentationDetents([.height(260)])
+        .presentationDragIndicator(.visible)
         .onDisappear { onClose() }
+    }
+}
+
+// MARK: - Sparkline de hauteur
+
+/// La courbe du prototype : trait `--primary` de 2,4, bouts arrondis, et un
+/// point terminal plein qui dit « voilà où tu en es aujourd'hui ».
+private struct PitchSparkline: View {
+    @Environment(\.palette) private var palette
+    let values: [Double]
+
+    /// Marge intérieure : le point terminal a un rayon de 4,2, il lui faut la
+    /// place de ne pas être rogné par le bord du cadre.
+    private let inset: CGFloat = 5
+
+    var body: some View {
+        GeometryReader { geo in
+            let pts = points(in: geo.size)
+            ZStack {
+                Path { path in
+                    guard let first = pts.first else { return }
+                    path.move(to: first)
+                    for point in pts.dropFirst() { path.addLine(to: point) }
+                }
+                .stroke(
+                    palette.primary,
+                    style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+
+                if let last = pts.last {
+                    Circle()
+                        .fill(palette.primary)
+                        .frame(width: 8.4, height: 8.4)
+                        .position(last)
+                }
+            }
+        }
+        .accessibilityElement()
+        .accessibilityLabel(spokenSummary)
+    }
+
+    private func points(in size: CGSize) -> [CGPoint] {
+        guard values.count >= 2 else { return [] }
+        let minValue = values.min() ?? 0
+        let maxValue = values.max() ?? 1
+        let span = max(maxValue - minValue, 0.0001)
+        let width = max(size.width - inset * 2, 1)
+        let height = max(size.height - inset * 2, 1)
+        let step = width / CGFloat(values.count - 1)
+        var result: [CGPoint] = []
+        result.reserveCapacity(values.count)
+        for index in values.indices {
+            let ratio = CGFloat((values[index] - minValue) / span)
+            result.append(CGPoint(
+                x: inset + CGFloat(index) * step,
+                y: inset + height * (1 - ratio)))
+        }
+        return result
+    }
+
+    /// Un tracé n'a pas de contenu lisible : il est annoncé en une phrase (§10).
+    private var spokenSummary: String {
+        guard let first = values.first, let last = values.last else { return "Aucune courbe" }
+        return "Courbe de hauteur sur \(values.count) enregistrements, "
+            + "de \(Int(first.rounded())) à \(Int(last.rounded())) hertz."
     }
 }
 
@@ -509,10 +744,27 @@ private func mmss(_ ms: Int64) -> String {
     return String(format: "%d:%02d", total / 60, total % 60)
 }
 
-private func dateLabel(_ ms: Int64) -> String {
+/// « 21 juillet », l'année seulement quand ce n'est pas l'année en cours.
+private func dayMonth(_ ms: Int64) -> String {
     let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-    let f = DateFormatter()
-    f.locale = Locale(identifier: "fr_FR")
-    f.dateFormat = "d MMM HH:mm"
-    return f.string(from: date)
+    let calendar = Calendar.current
+    let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: Date())
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "fr_FR")
+    formatter.dateFormat = sameYear ? "d MMMM" : "d MMMM yyyy"
+    return formatter.string(from: date)
+}
+
+/// « 21 JUILLET » — l'étiquette en petites capitales de la carte de tendance,
+/// mise en capitales dans la chaîne elle-même (§3.3).
+private func dayMonthUpper(_ ms: Int64) -> String {
+    let locale = Locale(identifier: "fr_FR")
+    return dayMonth(ms).uppercased(with: locale)
+}
+
+private func timeLabel(_ ms: Int64) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "fr_FR")
+    formatter.dateFormat = "HH:mm"
+    return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(ms) / 1000))
 }

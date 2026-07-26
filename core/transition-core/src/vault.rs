@@ -623,6 +623,25 @@ impl Vault {
         crate::appointments::delete(&*self.db()?, id)
     }
 
+    // -- In-vault settings ---------------------------------------------------
+    //
+    // The only encrypted key/value store the apps have. Anything that
+    // identifies the person — the two fields of the doctor report's identity
+    // block, for instance — belongs here and never in the platforms' own
+    // preference files, which are not encrypted.
+
+    pub fn get_setting(&self, key: String) -> Result<Option<String>, TransitionError> {
+        crate::settings::get(&*self.db()?, &key)
+    }
+
+    pub fn set_setting(&self, key: String, value: String) -> Result<(), TransitionError> {
+        crate::settings::set(&*self.db()?, &key, &value)
+    }
+
+    pub fn delete_setting(&self, key: String) -> Result<(), TransitionError> {
+        crate::settings::delete(&*self.db()?, &key)
+    }
+
     // -- Generic blob encryption (for photos, voice clips, etc.) -------------
 
     pub fn encrypt_blob(&self, plaintext: Vec<u8>) -> Result<Vec<u8>, TransitionError> {

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Déverrouillage (§6.13) et première ouverture (§6.14). -->
+<resources>
+
+    <!-- ============================ Déverrouillage ============================ -->
+    <string name="access_unlock_welcome">Content de te revoir</string>
+    <!-- Annoncé par le lecteur d'écran à chaque chiffre : les pastilles n'ont
+         aucune valeur textuelle en elles-mêmes. -->
+    <string name="access_unlock_pin_progress">%1$d chiffres sur 4</string>
+    <string name="access_unlock_locked_title">On souffle un instant</string>
+    <string name="access_unlock_locked_body">Trop d\'essais d\'affilée. Réessaie dans %1$s.</string>
+    <plurals name="access_unlock_attempts_left">
+        <item quantity="one">Il te reste %1$d essai avant que le coffre s\'efface.</item>
+        <item quantity="other">Il te reste %1$d essais avant que le coffre s\'efface.</item>
+    </plurals>
+    <string name="access_unlock_wrong_pin">Ce code ne correspond pas.</string>
+
+    <string name="access_duration_s">%1$d s</string>
+    <string name="access_duration_min_s">%1$d min %2$d s</string>
+    <string name="access_duration_h_min">%1$d h %2$d min</string>
+
+    <!-- ========================= Première ouverture ========================== -->
+    <string name="access_onboarding_skip">Passer</string>
+    <string name="access_onboarding_progress_cd">Étape %1$d sur 3</string>
+    <string name="access_onboarding_back_cd">Revenir en arrière</string>
+    <string name="access_onboarding_skip_confirm_title">Passer la configuration ?</string>
+    <string name="access_onboarding_skip_confirm_body">L\'app s\'ouvrira sans code. Tes données restent chiffrées sur l\'appareil, et tu pourras ajouter un code quand tu veux depuis Réglages.</string>
+    <string name="access_onboarding_skip_confirm_yes">Passer quand même</string>
+
+    <!-- Étape 1 — une question de situation, pas un choix technique. -->
+    <string name="access_onboarding_who_title">Qui peut prendre ton téléphone ?</string>
+    <string name="access_onboarding_who_body">Une seule question, et l\'app se configure. Tu pourras tout changer plus tard.</string>
+    <string name="access_onboarding_who_calm_title">Personne, je suis tranquille</string>
+    <string name="access_onboarding_who_calm_body">Ouverture immédiate. Les données restent chiffrées sur l\'appareil.</string>
+    <string name="access_onboarding_who_close_title">Mon entourage, parfois</string>
+    <string name="access_onboarding_who_close_body">Empreinte ou visage à chaque ouverture.</string>
+    <string name="access_onboarding_who_forced_title">On peut me demander de l\'ouvrir</string>
+    <string name="access_onboarding_who_forced_body">Phrase secrète, second code qui ouvre une app de notes anodine, et icône déguisée.</string>
+    <string name="access_onboarding_who_forced_endorsement">Recommandé si tu hésites</string>
+    <string name="access_onboarding_manual">Configurer manuellement</string>
+
+    <!-- Étape 2 — ce que tu veux suivre. -->
+    <string name="access_onboarding_track_title">Qu\'est-ce que tu veux suivre ?</string>
+    <string name="access_onboarding_track_body">Coche ce qui te parle. Rien n\'est définitif : tout se règle plus tard.</string>
+    <string name="access_onboarding_modules_section">Ce que l\'app suit pour toi</string>
+    <string name="access_onboarding_first_med_section">Ton premier traitement</string>
+    <string name="access_onboarding_first_med_body">Si tu en prends un. Sinon, laisse vide et continue.</string>
+    <string name="access_onboarding_first_med_remind">Me le rappeler chaque jour</string>
+    <string name="access_onboarding_reminders_section">Petits rappels</string>
+    <string name="access_onboarding_reminder_labs">Penser à mon bilan</string>
+    <string name="access_onboarding_reminder_labs_sub">Tous les 90 jours</string>
+    <string name="access_onboarding_reminder_photos">Ma photo d\'évolution</string>
+    <string name="access_onboarding_reminder_photos_sub">Tous les 30 jours</string>
+    <string name="access_onboarding_reminder_voice">Un extrait de ma voix</string>
+    <string name="access_onboarding_reminder_voice_sub">Tous les 30 jours</string>
+
+    <!-- Étape 3 — à quoi ça ressemble. -->
+    <string name="access_onboarding_look_title">À quoi ça ressemble ?</string>
+    <string name="access_onboarding_look_body">Choisis l\'ambiance. Elle s\'applique tout de suite, essaie-en plusieurs.</string>
+    <string name="access_onboarding_ready_title">Tout est prêt ✓</string>
+    <string name="access_onboarding_ready_body">Tu peux commencer. Chaque réglage reste modifiable dans Réglages.</string>
+    <string name="access_onboarding_start">C\'est parti</string>
+
+    <plurals name="access_unlock_attempts_left_neutral">
+        <item quantity="one">Il te reste %1$d essai avant que les données soient effacées.</item>
+        <item quantity="other">Il te reste %1$d essais avant que les données soient effacées.</item>
+    </plurals>
+</resources>

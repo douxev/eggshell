@@ -2,19 +2,19 @@ import SwiftUI
 import TransitionCore
 
 // ===========================================================================
-// PUSHED screen — create or edit a dose schedule for a medication.
-//   • kind picker via ChoiceChip (interval / daily / days_interval)
-//   • interval     : minutes / heures
-//   • daily        : heure (DatePicker)
-//   • days_interval: heure (DatePicker) + intervalle en jours + date de départ
-//                    → firstDue is computed FROM the chosen start date so the
-//                      cadence phase is anchored on that day.
-//   • label        : optional free text shown in notifications instead of the
-//                    med name (never in generic mode), max 60 chars.
-//   With editScheduleId set, the form is seeded from the existing reminder and
-//   saved via updateSchedule (id stable; nextDue recomputed as if created now).
-//   Asks for notification authorization, persists, refreshes the scheduled
-//   reminders, then dismisses. Parity with Android AddSchedule.
+// Médics — create or edit a reminder (handoff §6.5, « Schémas de prise ·
+// Ajouter »).
+//
+// The three cadences the core supports, and nothing invented on top:
+//   • interval      — toutes les N heures / minutes
+//   • daily         — chaque jour à HH:MM
+//   • days_interval — tous les N jours à HH:MM, phase anchored on the chosen
+//                     start day, so a 14-day injection cycle keeps its rhythm.
+//
+// Two hard-won behaviours are preserved verbatim in `buildSchedule()`: a
+// cadence-preserving edit of an « interval » reminder keeps its running
+// countdown (a label-only edit must not push an every-12-h reminder back), and
+// the N-day cycle re-anchors on the current next-due day rather than on today.
 // ===========================================================================
 
 @MainActor
@@ -57,9 +57,13 @@ struct AddScheduleView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var vm = AddScheduleViewModel()
 
-    @State private var kind = "interval"
+    /// The three cadences, in the order the segmented selector shows them.
+    private static let kinds = ["interval", "daily", "days_interval"]
+    private static let kindLabels = ["Intervalle", "Chaque jour", "N jours"]
+
+    @State private var kindIndex = 0
     // interval
-    @State private var intervalUnitHours = true   // true: heures, false: minutes
+    @State private var intervalUnitIndex = 0      // 0: heures, 1: minutes
     @State private var intervalValue = 12
     // daily / days_interval time of day
     @State private var time = AddScheduleView.defaultTime()
@@ -84,18 +88,38 @@ struct AddScheduleView: View {
         self.init(medId: medicationId, editScheduleId: editScheduleId)
     }
 
+    private var kind: String { Self.kinds[max(0, min(kindIndex, Self.kinds.count - 1))] }
+    private var intervalUnitHours: Bool { intervalUnitIndex == 0 }
+    private var isEditing: Bool { editScheduleId != nil }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.l) {
-                kindCard
-                fieldsCard
-                labelCard
-                if let e = vm.error { ErrorBanner(message: e) }
-                saveButton
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                if let e = vm.error {
+                    ErrorCardView(e)
+                }
+
+                SegmentedSelector(
+                    options: Self.kindLabels,
+                    selection: $kindIndex,
+                    accessibilityLabel: "Rythme du rappel")
+
+                cadenceBlock
+                previewCard
+                labelBlock
             }
-            .padding(Spacing.l)
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.top, Spacing.xs)
+            .padding(.bottom, Metrics.blockGap)
         }
-        .navigationTitle(editScheduleId == nil ? "Nouveau planning" : "Modifier le rappel")
+        .medsScreen(isEditing ? "Modifier le rappel" : "Nouveau rappel")
+        .eggActionBar {
+            ActionBarButton(
+                isEditing ? "Enregistrer" : "Programmer",
+                systemImage: "bell.fill",
+                enabled: !vm.isSubmitting && !(isEditing && !seeded)
+            ) { save() }
+        }
         .task {
             // Seed FIRST — the permission prompt can hold the task open for
             // seconds, and the edit form must not sit on default values with
@@ -112,14 +136,14 @@ struct AddScheduleView: View {
         guard let id = editScheduleId, !seeded, let session = app.session else { return }
         let schedules = (try? await session.listSchedulesForMedication(medId, includeInactive: true)) ?? []
         guard let s = schedules.first(where: { $0.id == id }) else {
-            vm.error = "Rappel introuvable."
+            vm.error = "Ce rappel est introuvable. Reviens en arrière et réessaie."
             return
         }
         loadedSchedule = s
-        kind = s.kind
+        kindIndex = Self.kinds.firstIndex(of: s.kind) ?? 0
         if let mins = s.intervalMinutes {
             let m = Int(mins)
-            intervalUnitHours = m % 60 == 0
+            intervalUnitIndex = m % 60 == 0 ? 0 : 1
             intervalValue = m % 60 == 0 ? m / 60 : m
         }
         let cal = Calendar.current
@@ -134,102 +158,79 @@ struct AddScheduleView: View {
         seeded = true
     }
 
-    private var kindCard: some View {
-        SectionCard {
-            Text("Type de planning").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            FlowChips {
-                ChoiceChip(label: "Intervalle", selected: kind == "interval") { kind = "interval" }
-                ChoiceChip(label: "Quotidien", selected: kind == "daily") { kind = "daily" }
-                ChoiceChip(label: "Tous les N jours", selected: kind == "days_interval") { kind = "days_interval" }
-            }
-        }
-    }
+    // MARK: - Blocks
 
     @ViewBuilder
-    private var fieldsCard: some View {
+    private var cadenceBlock: some View {
         switch kind {
         case "interval":
-            SectionCard {
-                Text("Intervalle").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-                HStack(spacing: Spacing.s) {
-                    ChoiceChip(label: "Heures", selected: intervalUnitHours) { intervalUnitHours = true }
-                    ChoiceChip(label: "Minutes", selected: !intervalUnitHours) { intervalUnitHours = false }
-                }
-                stepperRow(label: intervalUnitHours ? "Toutes les … heures" : "Toutes les … minutes",
-                           value: $intervalValue,
-                           range: 1...(intervalUnitHours ? 168 : 1440))
+            MedsFormBlock("LA CADENCE") {
+                SegmentedSelector(
+                    options: ["Heures", "Minutes"],
+                    selection: $intervalUnitIndex,
+                    accessibilityLabel: "Unité de l'intervalle")
+                MedsStepperRow(
+                    label: intervalUnitHours ? "Toutes les … heures" : "Toutes les … minutes",
+                    value: $intervalValue,
+                    range: 1...(intervalUnitHours ? 168 : 1440))
             }
         case "daily":
-            SectionCard {
-                Text("Heure").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-                DatePicker("Heure de prise", selection: $time, displayedComponents: .hourAndMinute)
+            MedsFormBlock("LA CADENCE") {
+                DatePicker("À quelle heure", selection: $time, displayedComponents: .hourAndMinute)
                     .font(.eggBody)
-                    .tint(palette.primary)
             }
         default:
-            SectionCard {
-                Text("Intervalle en jours").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-                stepperRow(label: "Tous les … jours", value: $days, range: 1...365)
-            }
-            SectionCard {
-                Text("Heure").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-                DatePicker("Heure de prise", selection: $time, displayedComponents: .hourAndMinute)
+            MedsFormBlock(
+                "LA CADENCE",
+                footnote: "Le cycle part de la date que tu choisis : c'est elle qui donne le rythme."
+            ) {
+                MedsStepperRow(label: "Tous les … jours", value: $days, range: 1...365)
+                DatePicker("À quelle heure", selection: $time, displayedComponents: .hourAndMinute)
                     .font(.eggBody)
-                    .tint(palette.primary)
-            }
-            SectionCard {
-                Text("Date de départ").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-                DatePicker("Date de départ", selection: $startDate, displayedComponents: .date)
+                DatePicker("À partir du", selection: $startDate, displayedComponents: .date)
                     .font(.eggBody)
-                    .tint(palette.primary)
             }
         }
     }
 
-    private var labelCard: some View {
-        SectionCard {
-            Text("Texte du rappel (optionnel)").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            TextField("Ex. : aller chercher le traitement", text: $label)
-                .font(.eggBody)
-                .foregroundStyle(palette.onSurface)
-                .onChange(of: label) { _, newValue in
-                    if newValue.count > 60 { label = String(newValue.prefix(60)) }
-                }
-            Text("Affiché à la place du nom du traitement. Jamais montré en mode générique.")
-                .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+    /// The cadence read back in the words the treatment's detail card will use,
+    /// with the first time it will actually ring — so nothing is a surprise
+    /// after you tap « Programmer ».
+    private var previewCard: some View {
+        let draft = buildSchedule()
+        return EggCard(variant: .primary, paddingH: 18, paddingV: 16, spacing: 2) {
+            MicroLabel("CE QUE ÇA DONNE", color: palette.onPrimaryContainer.opacity(0.75))
+            Text(MedFormat.cadence(
+                kind: draft.kind,
+                intervalMinutes: draft.intervalMinutes.map { Int($0) },
+                dailyHour: draft.dailyHour.map { Int($0) },
+                dailyMinute: draft.dailyMinute.map { Int($0) },
+                intervalDays: draft.intervalDays.map { Int($0) }))
+                .font(EggFont.titleS)
+            Text("Premier rappel : " + MedFormat.dayAndTime(draft.nextDueAtMs))
+                .font(EggFont.bodyS)
+                .opacity(0.82)
         }
     }
 
-    private func stepperRow(label: String, value: Binding<Int>, range: ClosedRange<Int>) -> some View {
-        HStack {
-            Text(label).font(.eggCallout).foregroundStyle(palette.onSurface)
-            Spacer()
-            TextField(label, value: value, format: .number)
-                .keyboardType(.numberPad)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 64)
-                .font(.eggBody)
-                .foregroundStyle(palette.onSurface)
-            Stepper("", value: value, in: range).labelsHidden()
+    private var labelBlock: some View {
+        MedsFormBlock("LE TEXTE DU RAPPEL", footnote: labelFootnote) {
+            MedsField(
+                placeholder: "Ex. : aller chercher le traitement",
+                text: $label,
+                maxLength: 60)
         }
     }
 
-    private var saveButton: some View {
-        Button {
-            save()
-        } label: {
-            if vm.isSubmitting {
-                ProgressView().tint(palette.onPrimary).frame(maxWidth: .infinity)
-            } else {
-                Text("Enregistrer").frame(maxWidth: .infinity)
-            }
-        }
-        .glassProminentButton()
-        .tint(palette.primary)
-        // In edit mode, block Save until the reminder actually seeded — see
-        // seedFromExistingSchedule().
-        .disabled(vm.isSubmitting || (editScheduleId != nil && !seeded))
+    /// In generic mode the notification says nothing about the treatment, so a
+    /// custom text would never be shown: say so instead of pretending.
+    private var labelFootnote: String {
+        NotifPrefs.contentMode == .generic
+            ? "Affiché à la place du nom du traitement. Tes rappels sont en mode générique pour l'instant : ce texte ne s'affichera nulle part tant que tu n'auras pas changé de mode dans Réglages → Rappels."
+            : "Affiché à la place du nom du traitement, dans le rappel."
     }
+
+    // MARK: - Saving
 
     private func save() {
         guard let session = app.session else { return }
@@ -310,50 +311,5 @@ struct AddScheduleView: View {
     private static func defaultTime() -> Date {
         let cal = Calendar.current
         return cal.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
-    }
-}
-
-// Private layout helper: wraps the kind chips onto multiple lines if needed.
-private struct FlowChips: Layout {
-    var spacing: CGFloat = Spacing.s
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var rowWidth: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var totalHeight: CGFloat = 0
-        var totalWidth: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if rowWidth > 0, rowWidth + spacing + size.width > maxWidth {
-                totalHeight += rowHeight + spacing
-                totalWidth = max(totalWidth, rowWidth)
-                rowWidth = size.width
-                rowHeight = size.height
-            } else {
-                rowWidth += (rowWidth > 0 ? spacing : 0) + size.width
-                rowHeight = max(rowHeight, size.height)
-            }
-        }
-        totalHeight += rowHeight
-        totalWidth = max(totalWidth, rowWidth)
-        return CGSize(width: maxWidth.isFinite ? totalWidth : rowWidth, height: totalHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > bounds.maxX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
     }
 }

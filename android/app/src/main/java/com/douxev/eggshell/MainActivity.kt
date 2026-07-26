@@ -48,6 +48,7 @@ class MainActivity : AppCompatActivity() {
     @Inject lateinit var vault: VaultRepository
     @Inject lateinit var photos: com.douxev.eggshell.data.PhotosRepository
     @Inject lateinit var voice: com.douxev.eggshell.data.VoiceRepository
+    @Inject lateinit var pdfExports: com.douxev.eggshell.data.PdfReportExporter
 
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStop(owner: LifecycleOwner) {
@@ -57,8 +58,13 @@ class MainActivity : AppCompatActivity() {
             // decrypted photos/voice. Also lock Paranoid-mode vaults so
             // their master key (the one we re-derive from the passphrase
             // each cold start) is wiped from RAM.
+            //
+            // A generated doctor report is the same class of file: cleartext,
+            // and holding hormone values, punctuality, bleeding episodes and
+            // whatever photos the user chose to include.
             runCatching { photos.purgeAllCache() }
             runCatching { voice.purgeAllCache() }
+            runCatching { pdfExports.purgeExports() }
             if (vault.currentMode == com.douxev.eggshell.security.VaultPrefs.Mode.PARANOID) {
                 vault.lock()
             }

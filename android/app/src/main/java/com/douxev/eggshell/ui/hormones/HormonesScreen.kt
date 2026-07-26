@@ -3,13 +3,16 @@ package com.douxev.eggshell.ui.hormones
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,18 +20,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -40,20 +40,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -69,6 +68,20 @@ import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.HormoneUnitPrefs
 import com.douxev.eggshell.data.HormonesRepository
+import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.components.ActionBand
+import com.douxev.eggshell.ui.components.CardRule
+import com.douxev.eggshell.ui.components.CardVariant
+import com.douxev.eggshell.ui.components.Decorative
+import com.douxev.eggshell.ui.components.EggCard
+import com.douxev.eggshell.ui.components.EggFab
+import com.douxev.eggshell.ui.components.EmptyState
+import com.douxev.eggshell.ui.components.MicroLabel
+import com.douxev.eggshell.ui.components.SectionTitle
+import com.douxev.eggshell.ui.components.Segmented
+import com.douxev.eggshell.ui.theme.EggColors
+import com.douxev.eggshell.ui.theme.EggDim
+import com.douxev.eggshell.ui.theme.EggShapes
 import uniffi.transition.HormoneMeasurement
 
 /** Measurement plus its display-time conversion to the user's preferred unit. */
@@ -81,8 +94,9 @@ data class DisplayMeasurement(
 enum class HormonesTab { Hormones, Weight }
 
 /** A dose taken inside the charted window — drawn as a dot on the curve so
- *  intakes and hormone levels correlate visually. */
-data class DoseMarker(val atMs: Long, val colorArgb: Long?)
+ *  intakes and hormone levels correlate visually. Always `tertiary`: §5.1
+ *  gives that role to "dose, medication" across every chart of the app. */
+data class DoseMarker(val atMs: Long)
 
 @HiltViewModel
 class HormonesViewModel @Inject constructor(
@@ -102,6 +116,11 @@ class HormonesViewModel @Inject constructor(
     val preferredUnit: StateFlow<String?> = _preferredUnit.asStateFlow()
     private val _doseMarkers = MutableStateFlow<List<DoseMarker>>(emptyList())
     val doseMarkers: StateFlow<List<DoseMarker>> = _doseMarkers.asStateFlow()
+
+    /** Instants at which a treatment changed, drawn as dashed verticals so a
+     *  jump in the curve can be read against the change that caused it. */
+    private val _treatmentChanges = MutableStateFlow<List<Long>>(emptyList())
+    val treatmentChanges: StateFlow<List<Long>> = _treatmentChanges.asStateFlow()
 
     private val _tab = MutableStateFlow(HormonesTab.Hormones)
     val tab: StateFlow<HormonesTab> = _tab.asStateFlow()
@@ -192,6 +211,8 @@ class HormonesViewModel @Inject constructor(
         if (h == null) {
             _measurements.value = emptyList()
             _preferredUnit.value = null
+            _doseMarkers.value = emptyList()
+            _treatmentChanges.value = emptyList()
             return
         }
         val target = if (h == HormoneCatalog.WEIGHT) {
@@ -215,21 +236,20 @@ class HormonesViewModel @Inject constructor(
                 displayUnit = if (converted != null) target!! else m.unit,
             )
         }
-        loadDoseMarkers(h, raw)
+        loadOverlays(h, raw)
     }
 
-    /** Doses taken inside the charted window, one marker per med per day —
-     *  daily treatments would otherwise stack dozens of dots on one spot. */
-    private suspend fun loadDoseMarkers(hormone: String, raw: List<HormoneMeasurement>) {
+    /** Doses taken inside the charted window (one marker per med per day —
+     *  daily treatments would otherwise stack dozens of dots on one spot) plus
+     *  the treatment changes of the same window. */
+    private suspend fun loadOverlays(hormone: String, raw: List<HormoneMeasurement>) {
         if (hormone == HormoneCatalog.WEIGHT || raw.size < 2) {
             _doseMarkers.value = emptyList()
+            _treatmentChanges.value = emptyList()
             return
         }
         val from = raw.minOf { it.atMs }
         val to = raw.maxOf { it.atMs }
-        val medColors = runCatching { meds.list(includeArchived = true) }
-            .getOrDefault(emptyList())
-            .associate { it.id to it.color }
         // Bucket by *local* calendar day — UTC buckets would split a 23:00 +
         // 01:30 same-night pair into two markers in UTC+2.
         val zone = java.time.ZoneId.systemDefault()
@@ -240,7 +260,12 @@ class HormonesViewModel @Inject constructor(
                 it.medicationId to
                     java.time.Instant.ofEpochMilli(it.takenAtMs).atZone(zone).toLocalDate()
             }
-            .map { DoseMarker(it.takenAtMs, medColors[it.medicationId]) }
+            .map { DoseMarker(it.takenAtMs) }
+        _treatmentChanges.value = runCatching { meds.listTreatmentChanges(from, to) }
+            .getOrDefault(emptyList())
+            .map { it.atMs }
+            .distinct()
+            .sorted()
     }
 }
 
@@ -249,15 +274,24 @@ class HormonesViewModel @Inject constructor(
 fun HormonesScreen(
     onAdd: () -> Unit,
     onImport: () -> Unit = {},
-    onOpenSettings: () -> Unit = {},
+    onBack: () -> Unit = {},
+    /** Which segment to open on — the launcher has a tile per family. */
+    initialTab: String = com.douxev.eggshell.ui.home.MeasuresTab.HORMONES,
     vm: HormonesViewModel = hiltViewModel(),
 ) {
     val hormones by vm.hormones.collectAsState()
     val selected by vm.selected.collectAsState()
     val measurements by vm.measurements.collectAsState()
+    val doseMarkers by vm.doseMarkers.collectAsState()
+    val treatmentChanges by vm.treatmentChanges.collectAsState()
     val tab by vm.tab.collectAsState()
     val weightTrackingEnabled by vm.weightTrackingEnabled.collectAsState()
     LaunchedEffect(Unit) { vm.refresh() }
+    LaunchedEffect(initialTab) {
+        if (initialTab == com.douxev.eggshell.ui.home.MeasuresTab.WEIGHT) {
+            vm.setTab(HormonesTab.Weight)
+        }
+    }
     // If the user turns off weight tracking while sitting on the Poids tab,
     // bounce them back to the Hormones tab so they aren't stuck on a hidden
     // section.
@@ -275,27 +309,20 @@ fun HormonesScreen(
     var editing by androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf<DisplayMeasurement?>(null)
     }
+    val isWeightTab = tab == HormonesTab.Weight
+    val startAdd = { if (isWeightTab) addWeightOpen = true else onAdd() }
 
     Scaffold(
-        floatingActionButton = {
-            // Hormones tab → existing dedicated add screen.
-            // Weight tab → quick inline dialog (single value + unit, that's it).
-            FloatingActionButton(
-                onClick = {
-                    when (tab) {
-                        HormonesTab.Hormones -> onAdd()
-                        HormonesTab.Weight -> { addWeightOpen = true }
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            ) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = when (tab) {
-                        HormonesTab.Hormones -> stringResource(R.string.hormones_new)
-                        HormonesTab.Weight -> stringResource(R.string.weight_add_fab)
-                    },
+        bottomBar = {
+            ActionBand {
+                EggFab(
+                    icon = Icons.Filled.Add,
+                    contentDescription = stringResource(
+                        if (isWeightTab) R.string.measures_add_weight
+                        else R.string.measures_add_measurement,
+                    ),
+                    label = stringResource(R.string.measures_add),
+                    onClick = startAdd,
                 )
             }
         },
@@ -304,108 +331,95 @@ fun HormonesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = EggDim.ScreenMargin),
+            verticalArrangement = Arrangement.spacedBy(EggDim.BlockGap),
         ) {
-            com.douxev.eggshell.ui.common.ScreenHeader(
-                title = stringResource(R.string.hormones_title),
-                onOpenSettings = onOpenSettings,
+            ScreenHeader(
+                title = stringResource(R.string.measures_title),
+                onBack = onBack,
+                actions = {
+                    IconButton(
+                        onClick = onImport,
+                        modifier = Modifier.size(EggDim.TouchTarget),
+                    ) {
+                        Icon(
+                            Icons.Filled.FileUpload,
+                            contentDescription = stringResource(R.string.measures_import_action),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
             )
 
-            // Tabs: Hormones / Poids. The Poids tab is only offered when
-            // the user has opted-in to weight tracking (Réglages → Plus →
-            // Suivi du poids).
+            // Hormones / Poids. Weight tracking is opt-in, and a one-option
+            // segmented control would be furniture — so the track only shows
+            // up once there are actually two segments.
             if (weightTrackingEnabled) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = tab == HormonesTab.Hormones,
-                        onClick = { vm.setTab(HormonesTab.Hormones) },
-                        label = { Text(stringResource(R.string.hormones_tab_hormones)) },
-                        shape = RoundedCornerShape(50),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        ),
-                    )
-                    FilterChip(
-                        selected = tab == HormonesTab.Weight,
-                        onClick = { vm.setTab(HormonesTab.Weight) },
-                        label = { Text(stringResource(R.string.hormones_tab_weight)) },
-                        shape = RoundedCornerShape(50),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        ),
-                    )
-                }
+                Segmented(
+                    options = listOf(
+                        stringResource(R.string.hormones_tab_hormones),
+                        stringResource(R.string.hormones_tab_weight),
+                    ),
+                    selectedIndex = if (isWeightTab) 1 else 0,
+                    onSelect = { vm.setTab(if (it == 1) HormonesTab.Weight else HormonesTab.Hormones) },
+                )
             }
 
-            // Hormone selector chips: only in the Hormones tab. The Poids
-            // tab has a single implicit kind ("weight") so we don't need a
-            // chip row above the chart.
-            if (tab == HormonesTab.Hormones && hormones.isNotEmpty()) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Analyte chips: only in the Hormones tab. Poids has one implicit
+            // kind, so a chip row above its chart would say nothing. Eleven
+            // analytes exist, hence the horizontal scroll.
+            if (!isWeightTab && hormones.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
                     hormones.forEach { h ->
                         FilterChip(
                             selected = h == selected,
                             onClick = { vm.select(h) },
                             label = { Text(HormoneCatalog.kindLabel(h)) },
-                            shape = RoundedCornerShape(50),
+                            shape = MeasureChipShape,
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
                             ),
                         )
                     }
                 }
             }
 
-            // OCR import shortcut — only on the Hormones tab; nobody scans a
-            // weight reading from a sheet of paper.
-            if (tab == HormonesTab.Hormones) {
-                androidx.compose.material3.OutlinedButton(
-                    onClick = onImport,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    androidx.compose.material3.Icon(
-                        Icons.Filled.PhotoLibrary,
-                        contentDescription = null,
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                    Text(stringResource(R.string.import_lab_entry))
-                }
-            }
-
             if (measurements.isNotEmpty()) {
                 val sorted = remember(measurements) { measurements.sortedBy { it.raw.atMs } }
-                val latest = sorted.last()
-                val prev = sorted.dropLast(1).lastOrNull()
-                val doseMarkers by vm.doseMarkers.collectAsState()
-                LatestCard(
-                    latest = latest,
-                    prev = prev,
+                CurveCard(
                     sortedAsc = sorted,
-                    doseMarkers = if (tab == HormonesTab.Weight) emptyList() else doseMarkers,
-                    weight = tab == HormonesTab.Weight,
+                    kindLabel = HormoneCatalog.kindLabel(selected ?: HormoneCatalog.WEIGHT),
+                    doseMarkers = if (isWeightTab) emptyList() else doseMarkers,
+                    treatmentChanges = if (isWeightTab) emptyList() else treatmentChanges,
+                    weight = isWeightTab,
                 )
-                Text(
-                    stringResource(R.string.hormones_history),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 4.dp, top = 6.dp),
-                )
-                HistoryCard(
-                    items = measurements.sortedByDescending { it.raw.atMs },
+                SectionTitle(stringResource(R.string.measures_readings))
+                ReadingsCard(
+                    items = remember(measurements) { measurements.sortedByDescending { it.raw.atMs } },
                     onItemClick = { entry -> editing = entry },
                 )
+            } else if (isWeightTab) {
+                EmptyState(
+                    message = stringResource(R.string.measures_empty_weight),
+                    actionLabel = stringResource(R.string.measures_empty_weight_action),
+                    onAction = { addWeightOpen = true },
+                )
             } else {
-                // Empty state copy depends on which tab the user is on.
-                when (tab) {
-                    HormonesTab.Weight -> EmptyWeightCard()
-                    HormonesTab.Hormones ->
-                        if (hormones.isEmpty()) EmptyHormonesCard() else EmptyHormonesCard()
-                }
+                EmptyState(
+                    message = stringResource(R.string.measures_empty_hormones),
+                    actionLabel = stringResource(R.string.measures_empty_hormones_action),
+                    onAction = onImport,
+                )
             }
 
-            Spacer(Modifier.height(96.dp))
+            Spacer(Modifier.height(12.dp))
         }
     }
 
@@ -436,37 +450,404 @@ fun HormonesScreen(
     }
 }
 
+// ---------------------------------------------------------------------------
+// The curve card
+// ---------------------------------------------------------------------------
+
 @Composable
-private fun EmptyHormonesCard() {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text(
-            stringResource(R.string.hormones_empty),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(24.dp),
-        )
+private fun CurveCard(
+    sortedAsc: List<DisplayMeasurement>,
+    kindLabel: String,
+    doseMarkers: List<DoseMarker>,
+    treatmentChanges: List<Long>,
+    weight: Boolean,
+) {
+    val latest = sortedAsc.last()
+    val prev = sortedAsc.dropLast(1).lastOrNull()
+    val headerFmt = remember { SimpleDateFormat("d MMMM", Locale.getDefault()) }
+    val axisFmt = remember { SimpleDateFormat("MMM yy", Locale.getDefault()) }
+
+    EggCard(variant = CardVariant.Low, padding = PaddingValues(18.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                MicroLabel(
+                    stringResource(
+                        if (weight) R.string.measures_last_weight_fmt
+                        else R.string.measures_last_value_fmt,
+                        headerFmt.format(Date(latest.raw.atMs)).uppercase(Locale.getDefault()),
+                    ),
+                )
+                Row(
+                    modifier = Modifier.padding(top = 2.dp),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        formatDouble(latest.displayValue),
+                        style = MaterialTheme.typography.displayMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        latest.displayUnit,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                }
+            }
+            if (prev != null) DeltaPill(latest.displayValue - prev.displayValue)
+        }
+
+        if (sortedAsc.size >= 2) {
+            val first = sortedAsc.first().raw.atMs
+            val last = latest.raw.atMs
+            val chartLabel = stringResource(
+                R.string.measures_chart_a11y_fmt,
+                kindLabel,
+                axisFmt.format(Date(first)),
+                axisFmt.format(Date(last)),
+                "${formatDouble(latest.displayValue)} ${latest.displayUnit}",
+            )
+            MeasureChart(
+                points = sortedAsc.map { it.raw.atMs to it.displayValue },
+                doseMarkers = doseMarkers,
+                treatmentChanges = treatmentChanges,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(132.dp)
+                    .padding(top = 12.dp)
+                    .semantics { contentDescription = chartLabel },
+            )
+            // The axis gradations carry the legend — there is no separate row
+            // under the plot (§5.1). The dates bound the X axis; the two series
+            // names sit on the same line, each in its own colour and spelled
+            // out, so nothing is told by hue alone.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MicroLabel(axisFmt.format(Date(first)).uppercase(Locale.getDefault()))
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (doseMarkers.isNotEmpty()) {
+                        AxisKey(
+                            label = stringResource(R.string.measures_legend_doses),
+                            color = MaterialTheme.colorScheme.tertiary,
+                            dashed = false,
+                        )
+                    }
+                    if (treatmentChanges.isNotEmpty()) {
+                        AxisKey(
+                            label = stringResource(R.string.measures_legend_change),
+                            color = MaterialTheme.colorScheme.secondary,
+                            dashed = true,
+                        )
+                    }
+                }
+                MicroLabel(axisFmt.format(Date(last)).uppercase(Locale.getDefault()))
+            }
+        } else {
+            Text(
+                stringResource(R.string.measures_chart_one_point),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+        }
     }
 }
 
+/**
+ * The delta pill. A rise is the one direction the handoff colours in
+ * `successContainer`; a fall stays neutral, because whether a level going down
+ * is good news depends entirely on the analyte and eggshell doesn't judge.
+ * The arrow glyph is written as text — `trending_up` is missing from the icon
+ * set the design system ships (§3.6).
+ */
 @Composable
-private fun EmptyWeightCard() {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth(),
+private fun DeltaPill(delta: Double) {
+    val rising = delta > 0.0
+    val flat = delta == 0.0
+    val magnitude = formatDouble(kotlin.math.abs(delta))
+    val label = stringResource(
+        when {
+            flat -> R.string.measures_delta_flat_fmt
+            rising -> R.string.measures_delta_up_fmt
+            else -> R.string.measures_delta_down_fmt
+        },
+        magnitude,
+    )
+    val a11y = when {
+        flat -> stringResource(R.string.measures_delta_flat_a11y)
+        rising -> stringResource(R.string.measures_delta_up_a11y_fmt, magnitude)
+        else -> stringResource(R.string.measures_delta_down_a11y_fmt, magnitude)
+    }
+    val container = if (rising) {
+        EggColors.successContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val content = if (rising) {
+        EggColors.onSuccessContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Box(
+        modifier = Modifier
+            .background(container, EggShapes.Pill)
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .semantics { contentDescription = a11y },
     ) {
-        Text(
-            stringResource(R.string.weight_empty),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(24.dp),
-        )
+        Text(label, style = MaterialTheme.typography.labelSmall, color = content)
     }
 }
+
+/** One axis gradation: the mark, then the word. */
+@Composable
+private fun AxisKey(label: String, color: Color, dashed: Boolean) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Decorative {
+            if (dashed) {
+                Box(
+                    modifier = Modifier
+                        .width(14.dp)
+                        .height(2.dp)
+                        .background(color),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .background(color, EggShapes.Pill),
+                )
+            }
+        }
+        MicroLabel(label, color = color)
+    }
+}
+
+/**
+ * Time-proportional area chart (§5.1). X follows the real draw dates, so a
+ * six-month gap looks like one. Dose markers ride the interpolated curve in
+ * `tertiary`; each treatment change is a dashed `secondary` vertical; the last
+ * point is filled and haloed.
+ */
+@Composable
+private fun MeasureChart(
+    points: List<Pair<Long, Double>>,
+    doseMarkers: List<DoseMarker>,
+    treatmentChanges: List<Long>,
+    modifier: Modifier,
+) {
+    val curve = MaterialTheme.colorScheme.primary
+    val doseColor = MaterialTheme.colorScheme.tertiary
+    val changeColor = MaterialTheme.colorScheme.secondary
+    val grid = EggColors.chartGrid
+
+    val values = points.map { it.second }
+    val min = values.min()
+    val max = values.max()
+    val range = (max - min).takeIf { it > 0.0 } ?: 1.0
+    val tMin = points.first().first
+    val tMax = points.last().first
+    val tRange = (tMax - tMin).takeIf { it > 0L } ?: 1L
+
+    Canvas(modifier = modifier) {
+        val padTop = 12.dp.toPx()
+        val padSide = 10.dp.toPx()
+        val baseline = size.height - 8.dp.toPx()
+        val plotWidth = (size.width - 2 * padSide).coerceAtLeast(1f)
+
+        fun xFor(t: Long): Float = padSide + plotWidth * ((t - tMin).toFloat() / tRange.toFloat())
+        fun yFor(v: Double): Float =
+            padTop + (baseline - padTop) * (1f - ((v - min) / range).toFloat())
+
+        // Three gradations, evenly spread over the plot.
+        repeat(3) { i ->
+            val y = padTop + (baseline - padTop) * (i + 1) / 4f
+            drawLine(
+                color = grid,
+                start = Offset(0f, y),
+                end = Offset(size.width, y),
+                strokeWidth = 1.dp.toPx(),
+            )
+        }
+
+        val line = Path()
+        val area = Path()
+        points.forEachIndexed { i, (t, v) ->
+            val x = xFor(t)
+            val y = yFor(v)
+            if (i == 0) {
+                line.moveTo(x, y)
+                area.moveTo(x, baseline)
+                area.lineTo(x, y)
+            } else {
+                line.lineTo(x, y)
+                area.lineTo(x, y)
+            }
+        }
+        area.lineTo(xFor(tMax), baseline)
+        area.close()
+
+        drawPath(
+            path = area,
+            brush = Brush.verticalGradient(
+                colors = listOf(curve.copy(alpha = 0.34f), curve.copy(alpha = 0f)),
+                startY = padTop,
+                endY = baseline,
+            ),
+        )
+        drawPath(
+            path = line,
+            color = curve,
+            style = Stroke(
+                width = 2.4.dp.toPx(),
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round,
+            ),
+        )
+
+        // Treatment changes: a dashed vertical the eye can line up with the
+        // bend of the curve.
+        val dash = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))
+        treatmentChanges.filter { it in tMin..tMax }.forEach { at ->
+            drawLine(
+                color = changeColor.copy(alpha = 0.8f),
+                start = Offset(xFor(at), padTop - 4.dp.toPx()),
+                end = Offset(xFor(at), baseline),
+                strokeWidth = 1.5.dp.toPx(),
+                pathEffect = dash,
+            )
+        }
+
+        // Linear interpolation of the curve's value at time t.
+        fun curveValueAt(t: Long): Double {
+            var i = points.indexOfLast { it.first <= t }
+            if (i < 0) i = 0
+            if (i >= points.lastIndex) return points.last().second
+            val (t0, v0) = points[i]
+            val (t1, v1) = points[i + 1]
+            if (t1 == t0) return v0
+            val f = (t - t0).toDouble() / (t1 - t0).toDouble()
+            return v0 + (v1 - v0) * f
+        }
+        doseMarkers.filter { it.atMs in tMin..tMax }.forEach { m ->
+            drawCircle(
+                color = doseColor,
+                radius = 3.4.dp.toPx(),
+                center = Offset(xFor(m.atMs), yFor(curveValueAt(m.atMs))),
+            )
+        }
+
+        // The end point is filled and slightly bigger, with a halo.
+        val endX = xFor(tMax)
+        val endY = yFor(values.last())
+        drawCircle(curve.copy(alpha = 0.22f), radius = 9.dp.toPx(), center = Offset(endX, endY))
+        drawCircle(curve, radius = 5.dp.toPx(), center = Offset(endX, endY))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The readings list
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun ReadingsCard(
+    items: List<DisplayMeasurement>,
+    onItemClick: (DisplayMeasurement) -> Unit,
+) {
+    val dateFmt = remember { SimpleDateFormat("d MMMM yyyy", Locale.getDefault()) }
+    val editLabel = stringResource(R.string.measures_reading_edit)
+    val manual = stringResource(R.string.measures_reading_manual)
+
+    EggCard(
+        variant = CardVariant.Low,
+        padding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
+    ) {
+        items.forEachIndexed { i, m ->
+            val date = dateFmt.format(Date(m.raw.atMs))
+            val value = formatDouble(m.displayValue)
+            // The subtitle carries the provenance, and the original unit
+            // whenever the display unit differs — so the user can always audit
+            // the conversion against what the sheet said.
+            val origin = m.raw.labName?.takeIf { it.isNotBlank() } ?: manual
+            val original = if (m.displayUnit != m.raw.unit) {
+                stringResource(
+                    R.string.measures_reading_original_fmt,
+                    formatDouble(m.raw.value),
+                    m.raw.unit,
+                )
+            } else {
+                null
+            }
+            val subtitle = if (original != null) {
+                stringResource(R.string.measures_reading_sub_fmt, origin, original)
+            } else {
+                origin
+            }
+            val rowLabel = stringResource(
+                R.string.measures_reading_a11y_fmt,
+                date,
+                value,
+                m.displayUnit,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = EggDim.TouchTarget)
+                    .clickable(onClickLabel = editLabel) { onItemClick(m) }
+                    .semantics(mergeDescendants = true) { contentDescription = rowLabel }
+                    .padding(vertical = 13.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        date,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    value,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    m.displayUnit,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (i < items.lastIndex) CardRule()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Add / edit dialogs — behaviour unchanged, restyled only (D6)
+// ---------------------------------------------------------------------------
 
 /**
  * Quick weight-entry dialog: one decimal field + kg/lb chip group + save.
@@ -575,26 +956,29 @@ private fun MeasurementDialog(
                     onValueChange = { raw = it.filter { c -> c.isDigit() || c == '.' || c == ',' }.take(6) },
                     label = { Text(stringResource(valueLabelRes)) },
                     singleLine = true,
+                    shape = EggShapes.Field,
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal,
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     unitOptions.forEach { u ->
                         FilterChip(
                             selected = u == unit,
                             onClick = { unit = u },
                             label = { Text(u) },
-                            shape = RoundedCornerShape(50),
+                            shape = MeasureChipShape,
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
                             ),
                         )
                     }
                 }
                 androidx.compose.material3.OutlinedButton(
                     onClick = { datePickerOpen = true },
+                    shape = EggShapes.Pill,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
@@ -671,247 +1055,6 @@ private fun MeasurementDialog(
                 }
             },
         )
-    }
-}
-
-@Composable
-private fun LatestCard(
-    latest: DisplayMeasurement,
-    prev: DisplayMeasurement?,
-    sortedAsc: List<DisplayMeasurement>,
-    doseMarkers: List<DoseMarker> = emptyList(),
-    weight: Boolean = false,
-) {
-    val color = MaterialTheme.colorScheme.primary
-    val dateFmt = remember { SimpleDateFormat("d MMM", Locale.getDefault()) }
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
-                stringResource(
-                    if (weight) R.string.weight_last_measure_fmt
-                    else R.string.hormones_last_measure_fmt,
-                    dateFmt.format(Date(latest.raw.atMs)),
-                ).uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    formatDouble(latest.displayValue),
-                    color = color,
-                    fontSize = 40.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    latest.displayUnit,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (prev != null) {
-                    Spacer(Modifier.width(12.dp))
-                    val delta = latest.displayValue - prev.displayValue
-                    val sign = if (delta >= 0) "+" else ""
-                    Text(
-                        "$sign${formatDouble(delta)} ${stringResource(R.string.hormones_vs_previous)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            if (sortedAsc.size >= 2) {
-                AreaChart(
-                    points = sortedAsc.map { it.raw.atMs to it.displayValue },
-                    doseMarkers = doseMarkers,
-                    color = color,
-                    fallbackMarkerColor = MaterialTheme.colorScheme.secondary,
-                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(172.dp)
-                        .padding(top = 6.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun HistoryCard(
-    items: List<DisplayMeasurement>,
-    onItemClick: (DisplayMeasurement) -> Unit = {},
-) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            val dateFmt = remember { SimpleDateFormat("d MMM yy", Locale.getDefault()) }
-            items.forEachIndexed { i, m ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onItemClick(m) }
-                        .padding(vertical = 13.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(MaterialTheme.colorScheme.primary),
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            dateFmt.format(Date(m.raw.atMs)),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (m.displayUnit != m.raw.unit) {
-                            // Show the original unit too so the user can audit
-                            // the conversion at a glance.
-                            Text(
-                                "${formatDouble(m.raw.value)} ${m.raw.unit}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            )
-                        }
-                    }
-                    Text(
-                        formatDouble(m.displayValue),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        " ${m.displayUnit}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (i < items.lastIndex) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * Time-proportional area chart. X positions follow the actual draw dates (so
- * a 6-month gap looks like one), date labels sit under the axis, and each
- * dose taken in the window shows as a small dot on the interpolated curve —
- * the visual link between intakes and hormone evolution.
- */
-@Composable
-private fun AreaChart(
-    points: List<Pair<Long, Double>>,
-    doseMarkers: List<DoseMarker>,
-    color: Color,
-    fallbackMarkerColor: Color,
-    labelColor: Color,
-    modifier: Modifier,
-) {
-    val values = points.map { it.second }
-    val min = values.min()
-    val max = values.max()
-    val range = (max - min).takeIf { it > 0.0 } ?: 1.0
-    val tMin = points.first().first
-    val tMax = points.last().first
-    val tRange = (tMax - tMin).takeIf { it > 0L } ?: 1L
-    val dateFmt = remember { SimpleDateFormat("d MMM", Locale.getDefault()) }
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val pad = 14f
-        val padBottom = 34f
-        fun xFor(t: Long): Float =
-            pad + (w - 2 * pad) * ((t - tMin).toFloat() / tRange.toFloat())
-        fun yFor(v: Double): Float =
-            pad + (h - pad - padBottom) * (1f - ((v - min) / range).toFloat())
-
-        val linePath = Path()
-        val areaPath = Path()
-        points.forEachIndexed { i, (t, v) ->
-            val x = xFor(t)
-            val y = yFor(v)
-            if (i == 0) {
-                linePath.moveTo(x, y)
-                areaPath.moveTo(x, h - padBottom)
-                areaPath.lineTo(x, y)
-            } else {
-                linePath.lineTo(x, y)
-                areaPath.lineTo(x, y)
-            }
-        }
-        areaPath.lineTo(xFor(tMax), h - padBottom)
-        areaPath.close()
-
-        drawPath(
-            path = areaPath,
-            brush = Brush.verticalGradient(
-                colors = listOf(color.copy(alpha = 0.28f), color.copy(alpha = 0f)),
-                startY = 0f,
-                endY = h - padBottom,
-            ),
-        )
-        drawPath(linePath, color, style = Stroke(width = 5f, cap = StrokeCap.Round))
-        drawCircle(color, radius = 8f, center = Offset(xFor(tMax), yFor(values.last())))
-
-        // Linear interpolation of the curve's value at time t.
-        fun curveValueAt(t: Long): Double {
-            var i = points.indexOfLast { it.first <= t }
-            if (i < 0) i = 0
-            if (i >= points.lastIndex) return points.last().second
-            val (t0, v0) = points[i]
-            val (t1, v1) = points[i + 1]
-            if (t1 == t0) return v0
-            val f = (t - t0).toDouble() / (t1 - t0).toDouble()
-            return v0 + (v1 - v0) * f
-        }
-        doseMarkers.filter { it.atMs in tMin..tMax }.forEach { m ->
-            val markerColor = m.colorArgb?.let { Color(it.toInt()) } ?: fallbackMarkerColor
-            drawCircle(
-                color = markerColor.copy(alpha = 0.9f),
-                radius = 5f,
-                center = Offset(xFor(m.atMs), yFor(curveValueAt(m.atMs))),
-            )
-        }
-
-        // Date labels: first, middle and last draw dates along the X axis.
-        val paint = android.graphics.Paint().apply {
-            textSize = 10.sp.toPx()
-            isAntiAlias = true
-            this.color = labelColor.toArgb()
-        }
-        val labelTs = buildList {
-            add(tMin)
-            if (tRange > 2 * 86_400_000L) add(tMin + tRange / 2)
-            add(tMax)
-        }.distinct()
-        val textY = h - 6f
-        drawIntoCanvas { canvas ->
-            labelTs.forEachIndexed { i, t ->
-                val label = dateFmt.format(Date(t))
-                val textW = paint.measureText(label)
-                val x = when (i) {
-                    0 -> pad
-                    labelTs.lastIndex -> xFor(t) - textW
-                    else -> xFor(t) - textW / 2
-                }
-                canvas.nativeCanvas.drawText(label, x, textY, paint)
-            }
-        }
     }
 }
 

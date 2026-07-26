@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The PDF handed to the doctor (§7). Nothing here is shown inside the app:
+  these are the words printed on the page. All-caps labels are written in caps
+  in the string, never produced by a transformation, so a translation can
+  decide otherwise.
+-->
+<resources>
+
+    <!-- ===== Banner, footer, head ===== -->
+    <string name="pdfdoc_banner">TRANSITION TRACKING — FOLLOW-UP REPORT</string>
+    <string name="pdfdoc_footer_fmt">eggshell %1$s — produced offline, no data transmitted.</string>
+    <string name="pdfdoc_title_fmt">Period from %1$s to %2$s</string>
+    <string name="pdfdoc_subtitle_fmt">%1$s · issued on %2$s · compiled from entries made by the person concerned</string>
+    <plurals name="pdfdoc_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+
+    <!-- ===== Section titles ===== -->
+    <string name="pdfdoc_s_treatments">CURRENT TREATMENTS</string>
+    <string name="pdfdoc_s_changes">CHANGES OVER THE PERIOD</string>
+    <string name="pdfdoc_s_regularity">DOSING REGULARITY</string>
+    <string name="pdfdoc_s_hormones">HORMONE LEVELS</string>
+    <string name="pdfdoc_s_weight">WEIGHT</string>
+    <string name="pdfdoc_s_feel">REPORTED WELL-BEING</string>
+    <string name="pdfdoc_s_bleeding">BLEEDING</string>
+    <string name="pdfdoc_s_voice">VOICE</string>
+    <string name="pdfdoc_s_questions">POINTS TO DISCUSS</string>
+    <string name="pdfdoc_s_photos">PROGRESS PHOTOS</string>
+
+    <!-- ===== 1. Treatments ===== -->
+    <string name="pdfdoc_col_molecule">MOLECULE</string>
+    <string name="pdfdoc_col_dose">DOSE</string>
+    <string name="pdfdoc_col_route">ROUTE</string>
+    <string name="pdfdoc_col_rhythm">SCHEDULE</string>
+    <string name="pdfdoc_col_since">SINCE</string>
+    <string name="pdfdoc_rhythm_daily_fmt">%1$d × / day — %2$s</string>
+    <string name="pdfdoc_rhythm_days_fmt">1 × every %1$d days — %2$s</string>
+    <string name="pdfdoc_rhythm_hours_fmt">every %1$d h</string>
+    <string name="pdfdoc_rhythm_minutes_fmt">every %1$d min</string>
+    <string name="pdfdoc_rhythm_none">No reminder set</string>
+    <string name="pdfdoc_hour_fmt">%1$d:00</string>
+    <string name="pdfdoc_hour_minute_fmt">%1$d:%2$02d</string>
+    <string name="pdfdoc_treatments_note">The “since” column gives the date the record was created in the app, which may be later than the real start of treatment.</string>
+
+    <!-- ===== 2. Changes ===== -->
+    <string name="pdfdoc_change_dose_fmt">%1$s: dose changed from %2$s to %3$s.</string>
+    <string name="pdfdoc_change_unit_fmt">%1$s: dose unit changed from %2$s to %3$s.</string>
+    <string name="pdfdoc_change_route_fmt">%1$s: route changed from %2$s to %3$s.</string>
+    <string name="pdfdoc_change_other_fmt">%1$s: %2$s changed from %3$s to %4$s.</string>
+    <string name="pdfdoc_value_unset">not set</string>
+
+    <!-- ===== 3. Regularity ===== -->
+    <string name="pdfdoc_stat_planned">Doses expected</string>
+    <string name="pdfdoc_stat_logged">Doses logged</string>
+    <string name="pdfdoc_stat_logged_fmt">%1$d · %2$d %%</string>
+    <string name="pdfdoc_stat_missed">Doses missed</string>
+    <string name="pdfdoc_stat_mean_delay">Average delay</string>
+    <string name="pdfdoc_stat_over_two_hours">Doses &gt; 2 h late</string>
+    <string name="pdfdoc_delay_minutes_fmt">%1$d min</string>
+    <string name="pdfdoc_delay_hours_fmt">%1$d h %2$02d</string>
+    <string name="pdfdoc_caption_punctuality_fmt">OFFSET FROM THE EXPECTED TIME, LAST %1$d DOSES</string>
+    <string name="pdfdoc_axis_on_time">on time</string>
+    <string name="pdfdoc_axis_hours_fmt">+%1$d h</string>
+    <string name="pdfdoc_axis_minutes_fmt">+%1$d min</string>
+    <string name="pdfdoc_axis_hours_minutes_fmt">+%1$d h %2$02d</string>
+    <string name="pdfdoc_axis_early_fmt">−%1$d min</string>
+    <string name="pdfdoc_axis_missed">missed</string>
+    <string name="pdfdoc_axis_missed_fmt">missed · %1$d</string>
+    <string name="pdfdoc_punct_estimate">Expected doses are replayed from the saved dosing schedules: this is an estimate, not a record. The axis scales to the largest delay of the period.</string>
+    <string name="pdfdoc_punct_none">No dose in this period could be matched to an expected time: no offset is computed, and no percentage is claimed.</string>
+    <plurals name="pdfdoc_punct_excluded">
+        <item quantity="one">%1$d dose logged without an expected time, excluded from the offset figures.</item>
+        <item quantity="other">%1$d doses logged without an expected time, excluded from the offset figures.</item>
+    </plurals>
+
+    <!-- ===== 4. Hormone levels ===== -->
+    <string name="pdfdoc_head_last_fmt">%1$s — LATEST VALUE</string>
+    <string name="pdfdoc_col_sample">SAMPLE</string>
+    <string name="pdfdoc_col_lab">LABORATORY</string>
+    <string name="pdfdoc_col_analyte">ANALYTE</string>
+    <string name="pdfdoc_col_value">VALUE</string>
+    <string name="pdfdoc_lab_manual">Entered by hand</string>
+    <string name="pdfdoc_caption_other_labs">OTHER RESULTS IN THE PERIOD</string>
+    <string name="pdfdoc_legend_plain_fmt">%1$s (%2$s)</string>
+    <string name="pdfdoc_legend_scaled_fmt">%1$s (%2$s, ×%3$d)</string>
+    <string name="pdfdoc_legend_axis_fmt">Time-proportional axis · %1$s → %2$s</string>
+    <string name="pdfdoc_marker_dose_fmt">↑ dose %1$s</string>
+    <string name="pdfdoc_hormones_note">Values are reported in the unit of the original laboratory report. No reference range is shown: it depends on the laboratory and on the therapeutic goal.</string>
+
+    <!-- ===== 5. Weight ===== -->
+    <string name="pdfdoc_weight_current">Current</string>
+    <string name="pdfdoc_weight_start">Start of period</string>
+    <string name="pdfdoc_weight_delta">Change</string>
+
+    <!-- ===== 6. Reported well-being ===== -->
+    <string name="pdfdoc_feel_intro_fmt">%1$s over %2$s. Scales from 0 to 10, filled in by the person themselves. Journal free text is not exported.</string>
+    <plurals name="pdfdoc_entries">
+        <item quantity="one">%1$d entry</item>
+        <item quantity="other">%1$d entries</item>
+    </plurals>
+    <string name="pdfdoc_col_indicator">INDICATOR</string>
+    <string name="pdfdoc_col_mean">AVERAGE</string>
+    <string name="pdfdoc_col_previous">PERIOD −1</string>
+    <string name="pdfdoc_col_trend">TREND</string>
+    <string name="pdfdoc_trend_stable">Stable</string>
+    <string name="pdfdoc_trend_up">Rising</string>
+    <string name="pdfdoc_trend_down">Falling</string>
+    <string name="pdfdoc_trend_slight_up">Slightly up</string>
+    <string name="pdfdoc_trend_slight_down">Slightly down</string>
+    <string name="pdfdoc_trend_steady_up_fmt">Rising steadily since %1$s</string>
+    <string name="pdfdoc_trend_steady_down_fmt">Falling steadily since %1$s</string>
+    <string name="pdfdoc_trend_new">First measured period</string>
+    <string name="pdfdoc_empty_cell">—</string>
+    <string name="pdfdoc_caption_mood_week">AVERAGE MOOD PER WEEK</string>
+    <string name="pdfdoc_caption_effects">MOST REPORTED EFFECTS</string>
+    <string name="pdfdoc_effect_days_fmt">%1$d d</string>
+
+    <!-- ===== Bleeding ===== -->
+    <string name="pdfdoc_col_start">START</string>
+    <string name="pdfdoc_col_end">END</string>
+    <string name="pdfdoc_col_duration">LENGTH</string>
+    <string name="pdfdoc_col_nature">TYPE</string>
+    <string name="pdfdoc_bleeding_period">Bleeding</string>
+    <string name="pdfdoc_bleeding_spotting">Spotting</string>
+    <string name="pdfdoc_bleeding_both">Bleeding and spotting</string>
+    <plurals name="pdfdoc_bleeding_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <string name="pdfdoc_bleeding_note_fmt">Average observed interval between two starts: %1$d days.</string>
+
+    <!-- ===== 7. Voice ===== -->
+    <string name="pdfdoc_caption_voice">MEASURED FUNDAMENTAL PITCH</string>
+    <string name="pdfdoc_voice_current">Current</string>
+    <string name="pdfdoc_voice_delta">Change</string>
+    <string name="pdfdoc_voice_count">Recordings</string>
+    <string name="pdfdoc_hz_fmt">%1$d Hz</string>
+    <string name="pdfdoc_voice_note">Fundamental pitch measured on the device and sensitive to recording conditions — read it as a trend, not as a phoniatric measurement.</string>
+
+    <!-- ===== Photos ===== -->
+    <string name="pdfdoc_photos_note">Photographs stored in the app, downscaled for printing. They are included only because they were ticked explicitly.</string>
+
+    <!-- ===== Nature of this document ===== -->
+    <string name="pdfdoc_disclaimer_lead">Nature of this document.</string>
+    <string name="pdfdoc_disclaimer_body">All data is entered by the person concerned in a personal application; it is neither verified nor timestamped by a third party. Laboratory results are copied out or read automatically from the laboratory reports, the originals of which are authoritative. This document is an aid to the consultation; it replaces neither a clinical examination nor a laboratory report.</string>
+
+</resources>

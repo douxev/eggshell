@@ -1,14 +1,15 @@
 import SwiftUI
 import TransitionCore
 
-// ===========================================================================
-// PUSHED screen: customizable-metric (slider) editor for a given `domain`
-// ("journal" or "bleeding"). Lists the active MetricDefinitions, lets you add
-// a custom slider, rename it / change its emojis, toggle it on/off, reorder it
-// (up/down buttons that swap sortOrder), and archive (soft-delete) custom ones.
-// Built-in gauges can only be toggled and reordered — never renamed or removed,
-// matching the Android MetricEditorScreen behaviour. All UI strings in French.
-// ===========================================================================
+// « Personnaliser les indicateurs » — the catalogue editor of one domain
+// (« journal » or « bleeding »). Reached from the Journal complet link and from
+// the Règles segment (D5).
+//
+// A built-in can be hidden and reordered but never renamed or removed: the five
+// reserved accents of §6.2 have to keep meaning the same thing in the calendar,
+// the history bars and the report. Anything you made yourself can be renamed,
+// re-emoji'd and archived — and archiving only stops drawing it. The values
+// already recorded are never touched, which is the whole reason hiding exists.
 
 @MainActor
 final class MetricEditorViewModel: ObservableObject {
@@ -24,6 +25,7 @@ final class MetricEditorViewModel: ObservableObject {
 
     func load(_ session: VaultService) async {
         loading = true
+        error = nil
         do {
             defs = try await session.listMetricDefinitions(domain: domain, includeArchived: false)
                 .sorted { $0.sortOrder < $1.sortOrder }
@@ -33,7 +35,7 @@ final class MetricEditorViewModel: ObservableObject {
         loading = false
     }
 
-    /// Adds a new custom slider with a unique key and the next free sortOrder.
+    /// Adds an indicator of your own, with a unique key and the next free rank.
     func add(label: String, left: String?, right: String?, session: VaultService) async {
         let nextOrder = (defs.map(\.sortOrder).max() ?? -1) + 1
         do {
@@ -47,25 +49,30 @@ final class MetricEditorViewModel: ObservableObject {
                     minValue: 0,
                     maxValue: 5,
                     sortOrder: nextOrder,
-                    createdAtMs: Time.nowMs()
-                )
-            )
+                    createdAtMs: Time.nowMs()))
             await load(session)
         } catch {
             self.error = describe(error)
         }
     }
 
-    func rename(_ def: MetricDefinition, label: String, left: String?, right: String?, session: VaultService) async {
-        await apply(def, label: label, left: left, right: right, sortOrder: def.sortOrder, enabled: def.enabled, session: session)
+    func rename(
+        _ def: MetricDefinition, label: String, left: String?, right: String?,
+        session: VaultService
+    ) async {
+        await apply(
+            def, label: label, left: left, right: right,
+            sortOrder: def.sortOrder, enabled: def.enabled, session: session)
     }
 
     func setEnabled(_ def: MetricDefinition, _ enabled: Bool, session: VaultService) async {
-        await apply(def, label: def.label, left: def.emojiLeft, right: def.emojiRight, sortOrder: def.sortOrder, enabled: enabled, session: session)
+        await apply(
+            def, label: def.label, left: def.emojiLeft, right: def.emojiRight,
+            sortOrder: def.sortOrder, enabled: enabled, session: session)
     }
 
-    /// Moves the definition at `index` by `delta` (-1 up, +1 down) by swapping
-    /// its sortOrder with the neighbour's, then persisting both rows.
+    /// Moves the definition at `index` by `delta` (−1 up, +1 down) by swapping
+    /// its rank with its neighbour's, then persisting both rows.
     func move(_ index: Int, _ delta: Int, session: VaultService) async {
         let other = index + delta
         guard defs.indices.contains(index), defs.indices.contains(other) else { return }
@@ -89,12 +96,16 @@ final class MetricEditorViewModel: ObservableObject {
         }
     }
 
-    private func apply(_ def: MetricDefinition, label: String, left: String?, right: String?, sortOrder: Int64, enabled: Bool, session: VaultService) async {
+    private func apply(
+        _ def: MetricDefinition, label: String, left: String?, right: String?,
+        sortOrder: Int64, enabled: Bool, session: VaultService
+    ) async {
         do {
             try await session.updateMetricDefinition(
                 def.id,
-                MetricDefinitionUpdate(label: label, emojiLeft: left, emojiRight: right, sortOrder: sortOrder, enabled: enabled)
-            )
+                MetricDefinitionUpdate(
+                    label: label, emojiLeft: left, emojiRight: right,
+                    sortOrder: sortOrder, enabled: enabled))
             await load(session)
         } catch {
             self.error = describe(error)
@@ -107,14 +118,15 @@ final class MetricEditorViewModel: ObservableObject {
             emojiLeft: def.emojiLeft,
             emojiRight: def.emojiRight,
             sortOrder: sortOrder,
-            enabled: def.enabled
-        )
+            enabled: def.enabled)
     }
 
     private static func makeKey() -> String {
         "custom_\(Time.nowMs())_\(UUID().uuidString.prefix(8))"
     }
 }
+
+// MARK: - Écran
 
 struct MetricEditorView: View {
     let domain: String
@@ -123,7 +135,6 @@ struct MetricEditorView: View {
     @Environment(\.palette) private var palette
     @StateObject private var vm: MetricEditorViewModel
 
-    // Sheet/alert state.
     @State private var adding = false
     @State private var editTarget: MetricDefinition?
     @State private var confirmDelete: MetricDefinition?
@@ -135,44 +146,53 @@ struct MetricEditorView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: Spacing.m) {
-                Text("Personnalise tes jauges : renomme-les, change leurs emojis, réordonne-les ou ajoute les tiennes.")
-                    .font(.eggCaption)
-                    .foregroundStyle(palette.onSurface.opacity(0.6))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                Text(intro)
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                if vm.loading {
-                    ProgressView().tint(palette.primary).frame(maxWidth: .infinity).padding()
-                } else if vm.defs.isEmpty {
-                    EmptyStateCard(text: "Aucune jauge", systemImage: "slider.horizontal.3")
-                } else {
-                    ForEach(Array(vm.defs.enumerated()), id: \.element.id) { index, def in
-                        metricRow(def, index: index)
-                    }
+                if let message = vm.error {
+                    ErrorCardView(message, retryLabel: "Réessayer") { reload() }
                 }
 
-                if let e = vm.error { ErrorBanner(message: e) }
+                if vm.loading {
+                    SkeletonBlock(height: 64, cornerRadius: Radius.listGroup)
+                    SkeletonBlock(height: 64, cornerRadius: Radius.listGroup)
+                } else if vm.defs.isEmpty {
+                    EmptyStateView(
+                        "Aucun indicateur pour l'instant. Crée le premier — un nom, deux emojis, "
+                            + "et il apparaîtra dans ta saisie.",
+                        systemImage: "slider.horizontal.3",
+                        actionLabel: "Ajouter un indicateur",
+                        action: { adding = true })
+                } else {
+                    ListGroup {
+                        ForEach(Array(vm.defs.enumerated()), id: \.element.id) { pair in
+                            metricRow(
+                                pair.element,
+                                index: pair.offset,
+                                showsSeparator: pair.offset < vm.defs.count - 1)
+                        }
+                    }
+                }
             }
-            .padding(Spacing.l)
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.top, Spacing.s)
+            .padding(.bottom, Metrics.blockGap)
         }
-        .navigationTitle("Jauges")
-        .overlay(alignment: .bottomTrailing) {
-            Button {
-                adding = true
-            } label: {
-                Image(systemName: "plus").font(.title2.weight(.semibold)).frame(width: 60, height: 60)
-            }
-            .glassProminentButton().tint(palette.primary)
-            .clipShape(Circle())
-            .padding(Spacing.xl)
+        .background(palette.surface.ignoresSafeArea())
+        .navigationTitle("Tes indicateurs")
+        .navigationBarTitleDisplayMode(.inline)
+        .eggActionBar {
+            ActionBarButton("Ajouter un indicateur", systemImage: "plus") { adding = true }
         }
-        .task { if let s = app.session { await vm.load(s) } }
+        .task { reload() }
         .sheet(isPresented: $adding) {
             MetricEditorSheet(initial: nil) { label, left, right in
                 adding = false
-                if let s = app.session {
-                    Task { await vm.add(label: label, left: left, right: right, session: s) }
-                }
+                guard let session = app.session else { return }
+                Task { await vm.add(label: label, left: left, right: right, session: session) }
             } onCancel: {
                 adding = false
             }
@@ -181,25 +201,37 @@ struct MetricEditorView: View {
             if let target = editTarget {
                 MetricEditorSheet(initial: target) { label, left, right in
                     editTarget = nil
-                    if let s = app.session {
-                        Task { await vm.rename(target, label: label, left: left, right: right, session: s) }
+                    guard let session = app.session else { return }
+                    Task {
+                        await vm.rename(
+                            target, label: label, left: left, right: right, session: session)
                     }
                 } onCancel: {
                     editTarget = nil
                 }
             }
         }
-        .alert("Supprimer la jauge ?", isPresented: deleteBinding, presenting: confirmDelete) { target in
-            Button("Supprimer", role: .destructive) {
-                if let s = app.session {
-                    Task { await vm.archive(target, session: s) }
+        .alert(
+            "Retirer cet indicateur ?", isPresented: deleteBinding, presenting: confirmDelete
+        ) { target in
+            Button("Retirer", role: .destructive) {
+                if let session = app.session {
+                    Task { await vm.archive(target, session: session) }
                 }
                 confirmDelete = nil
             }
             Button("Annuler", role: .cancel) { confirmDelete = nil }
         } message: { target in
-            Text("« \(MetricCatalog.displayLabel(target)) » sera retirée. Les valeurs déjà enregistrées sont conservées.")
+            Text("« \(MetricCatalog.displayLabel(target)) » ne sera plus proposé. "
+                    + "Tout ce que tu avais déjà noté reste intact.")
         }
+    }
+
+    private var intro: String {
+        let subject = domain == "bleeding" ? "tes règles" : "ton ressenti"
+        return "Choisis ce que tu veux suivre pour \(subject) : masque ce qui ne te parle pas, "
+            + "réordonne, ajoute les tiens. Masquer un indicateur ne supprime jamais "
+            + "les valeurs déjà notées."
     }
 
     private var deleteBinding: Binding<Bool> {
@@ -210,73 +242,109 @@ struct MetricEditorView: View {
         Binding(get: { editTarget != nil }, set: { if !$0 { editTarget = nil } })
     }
 
-    // MARK: - Row
+    private func reload() {
+        guard let session = app.session else { return }
+        Task { await vm.load(session) }
+    }
 
-    private func metricRow(_ def: MetricDefinition, index: Int) -> some View {
-        SectionCard(padding: Spacing.m) {
-            HStack(spacing: Spacing.s) {
+    // MARK: - Ligne
+
+    private func metricRow(
+        _ def: MetricDefinition, index: Int, showsSeparator: Bool
+    ) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: Spacing.m) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(metricTitle(def)).font(.eggCallout).foregroundStyle(palette.onSurface)
-                    if def.builtin {
-                        Text("Intégrée").font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.5))
+                    Text(title(def))
+                        .font(EggFont.titleS)
+                        .foregroundStyle(palette.onSurface)
+                    Text(def.builtin ? "Indicateur d'origine" : "Le tien")
+                        .font(EggFont.bodyS)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                }
+                Spacer(minLength: Spacing.s)
+
+                // One menu instead of four cramped icon buttons: every action
+                // keeps a full-size target and a spoken name (§10).
+                Menu {
+                    Button {
+                        if let session = app.session {
+                            Task { await vm.move(index, -1, session: session) }
+                        }
+                    } label: {
+                        Label("Monter", systemImage: "arrow.up")
                     }
-                }
-                Spacer()
+                    .disabled(index == 0)
 
-                iconButton(systemName: "arrow.up", enabled: index > 0) {
-                    if let s = app.session { Task { await vm.move(index, -1, session: s) } }
-                }
-                iconButton(systemName: "arrow.down", enabled: index < vm.defs.count - 1) {
-                    if let s = app.session { Task { await vm.move(index, +1, session: s) } }
-                }
+                    Button {
+                        if let session = app.session {
+                            Task { await vm.move(index, +1, session: session) }
+                        }
+                    } label: {
+                        Label("Descendre", systemImage: "arrow.down")
+                    }
+                    .disabled(index >= vm.defs.count - 1)
 
-                if !def.builtin {
-                    iconButton(systemName: "pencil", enabled: true) { editTarget = def }
-                    iconButton(systemName: "trash", enabled: true, tint: palette.error) { confirmDelete = def }
+                    if !def.builtin {
+                        Button { editTarget = def } label: {
+                            Label("Renommer", systemImage: "pencil")
+                        }
+                        Button(role: .destructive) { confirmDelete = def } label: {
+                            Label("Retirer", systemImage: "trash")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(palette.onSurfaceVariant)
+                        .frame(width: Metrics.touchTarget, height: Metrics.touchTarget)
+                        .contentShape(Rectangle())
                 }
+                .accessibilityLabel("Options de \(MetricCatalog.displayLabel(def))")
 
                 Toggle("", isOn: enabledBinding(def))
                     .labelsHidden()
                     .tint(palette.primary)
+                    .accessibilityLabel("Afficher \(MetricCatalog.displayLabel(def))")
+            }
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.vertical, Spacing.s)
+            .frame(minHeight: 56)
+
+            if showsSeparator {
+                Rectangle()
+                    .fill(palette.outlineVariant)
+                    .frame(height: 1)
+                    // Inset grouped lists start their hairline under the text
+                    // column, not at the screen margin (README §4).
+                    .padding(.leading, ListRowView.separatorInset)
             }
         }
-    }
-
-    private func iconButton(systemName: String, enabled: Bool, tint: Color? = nil, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(enabled ? (tint ?? palette.primary) : palette.onSurface.opacity(0.25))
-                .frame(width: 34, height: 34)
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
     }
 
     private func enabledBinding(_ def: MetricDefinition) -> Binding<Bool> {
         Binding(
             get: { def.enabled },
-            set: { newValue in
-                if let s = app.session {
-                    Task { await vm.setEnabled(def, newValue, session: s) }
-                }
-            }
-        )
+            set: { value in
+                guard let session = app.session else { return }
+                Task { await vm.setEnabled(def, value, session: session) }
+            })
     }
 
-    private func metricTitle(_ def: MetricDefinition) -> String {
+    private func title(_ def: MetricDefinition) -> String {
         let label = MetricCatalog.displayLabel(def)
-        let (le, re) = MetricCatalog.emojis(def)
-        let emojis = [le, re].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
-        return emojis.isEmpty ? label : "\(label)  \(emojis)"
+        let emojis = MetricCatalog.emojis(def)
+        let pair = [emojis.0, emojis.1]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        return pair.isEmpty ? label : "\(label)  \(pair)"
     }
 }
 
-// MARK: - Add/Edit sheet
+// MARK: - Feuille d'ajout / renommage
 
 private struct MetricEditorSheet: View {
-    @Environment(\.palette) private var palette
-
     let initial: MetricDefinition?
     let onSave: (_ label: String, _ left: String?, _ right: String?) -> Void
     let onCancel: () -> Void
@@ -304,23 +372,27 @@ private struct MetricEditorSheet: View {
         NavigationStack {
             Form {
                 Section("Nom") {
-                    TextField("Nom de la jauge", text: $label)
-                        .onChange(of: label) { _, newValue in
-                            if newValue.count > 40 { label = String(newValue.prefix(40)) }
+                    TextField("Sommeil, appétit, confiance…", text: $label)
+                        .onChange(of: label) { _, value in
+                            if value.count > 40 { label = String(value.prefix(40)) }
                         }
                 }
-                Section("Emojis (facultatif)") {
-                    TextField("Gauche", text: $left)
-                        .onChange(of: left) { _, newValue in
-                            if newValue.count > 4 { left = String(newValue.prefix(4)) }
+                Section {
+                    TextField("Bas de l'échelle", text: $left)
+                        .onChange(of: left) { _, value in
+                            if value.count > 4 { left = String(value.prefix(4)) }
                         }
-                    TextField("Droite", text: $right)
-                        .onChange(of: right) { _, newValue in
-                            if newValue.count > 4 { right = String(newValue.prefix(4)) }
+                    TextField("Haut de l'échelle", text: $right)
+                        .onChange(of: right) { _, value in
+                            if value.count > 4 { right = String(value.prefix(4)) }
                         }
+                } header: {
+                    Text("Emojis (facultatif)")
+                } footer: {
+                    Text("Deux emojis aident à retrouver le sens du curseur d'un coup d'œil.")
                 }
             }
-            .navigationTitle(initial == nil ? "Nouvelle jauge" : "Modifier la jauge")
+            .navigationTitle(initial == nil ? "Nouvel indicateur" : "Renommer")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -331,12 +403,12 @@ private struct MetricEditorSheet: View {
                         onSave(
                             trimmedLabel,
                             left.isEmpty ? nil : left,
-                            right.isEmpty ? nil : right
-                        )
+                            right.isEmpty ? nil : right)
                     }
                     .disabled(trimmedLabel.isEmpty)
                 }
             }
         }
+        .presentationDetents([.medium, .large])
     }
 }

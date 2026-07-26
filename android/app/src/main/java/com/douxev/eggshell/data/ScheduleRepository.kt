@@ -234,12 +234,22 @@ class ScheduleRepository @Inject constructor(
     suspend fun advanceToNextOccurrence(scheduleId: Long) = withContext(Dispatchers.IO) {
         val all = vault.requireSession().listActiveSchedules()
         val s = all.firstOrNull { it.id == scheduleId } ?: return@withContext
+        val now = System.currentTimeMillis()
+        // The dose that was just answered is the one sitting at `nextDueAtMs`,
+        // so the grid kinds have to step strictly past *it*, not past "now".
+        // Ticking a dose early — the 20 h pill swallowed at 18 h — left
+        // `nextDueAfter(now)` landing back on that very occurrence, and the
+        // alarm was re-armed for a dose already in the vault.
+        //
+        // "interval" is a different animal: its cadence is a countdown that the
+        // dose itself restarts, so it keeps measuring from now.
+        val after = if (s.kind == "interval") now else maxOf(now, s.nextDueAtMs)
         val next = NextDueCalculator.nextDueAfter(
             kind = s.kind,
             intervalMinutes = s.intervalMinutes?.toInt(),
             dailyHour = s.dailyHour?.toInt(),
             dailyMinute = s.dailyMinute?.toInt(),
-            afterMs = System.currentTimeMillis(),
+            afterMs = after,
             intervalDays = s.intervalDays?.toInt(),
             currentDueMs = s.nextDueAtMs,
         )
@@ -247,6 +257,16 @@ class ScheduleRepository @Inject constructor(
         prefs.setNextDue(scheduleId, next)
         alarmScheduler.schedule(scheduleId, next)
         refreshWidget()
+    }
+
+    /**
+     * "Décaler" — re-show this reminder in [delayMs] without moving the
+     * schedule. Same semantics as the notification's snooze action: the
+     * cadence is a prescription, postponing one occurrence must not shift it.
+     */
+    fun snoozeReminder(scheduleId: Long, delayMs: Long = AlarmScheduler.SNOOZE_MS) {
+        alarmScheduler.scheduleSnooze(scheduleId, System.currentTimeMillis() + delayMs)
+        notifications.cancelMed(scheduleId)
     }
 
     suspend fun setActive(scheduleId: Long, active: Boolean) = withContext(Dispatchers.IO) {
@@ -383,7 +403,11 @@ class ScheduleRepository @Inject constructor(
                         injectionSite = null,
                         notes = null,
                         status = p.status,
-                        scheduledAtMs = null,
+                        // The queue carries the time the dose was *due*, not
+                        // just when the tap happened: without it the offset
+                        // ("+1 h 47") could never be recovered for a dose
+                        // logged from a notification while the vault was shut.
+                        scheduledAtMs = p.scheduledAtMs,
                         scheduleId = p.scheduleId,
                     )
                 )

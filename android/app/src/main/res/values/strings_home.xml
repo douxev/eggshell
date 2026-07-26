@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Accueil (le seul écran racine), lanceur de modules et saisie rapide.
+  Refonte ergonomique — handoff §6.1 et §6.3.
+  Les libellés en petites capitales sont écrits en majuscules dans la chaîne,
+  jamais via une transformation : une traduction doit pouvoir en décider.
+-->
+<resources>
+    <!-- En-tête -->
+    <string name="home_settings">Réglages</string>
+
+    <!-- Carte de dose -->
+    <string name="home_next_dose">PROCHAINE PRISE · %1$s</string>
+    <string name="home_dose_ring_cd">%1$d dose(s) prise(s) sur %2$d aujourd’hui</string>
+    <string name="home_mark_taken">Marquer comme pris</string>
+    <string name="home_snooze">Décaler</string>
+    <string name="home_schedule_dose">Programmer une prise</string>
+    <string name="home_all_taken">Tout est pris ✓</string>
+    <string name="home_no_medication">Tu n’as pas encore de traitement. Ajoute-le et tes prises apparaîtront ici.</string>
+    <string name="home_no_medication_action">Ajouter un traitement</string>
+    <string name="home_no_schedule">Aucune prise programmée pour aujourd’hui.</string>
+    <string name="home_reminder_more">+%1$d rappels</string>
+    <string name="home_reminder_more_one">+1 rappel</string>
+    <string name="home_reminder_next">Puis %1$s, %2$s</string>
+    <string name="home_reminder_at">à %1$s</string>
+    <string name="home_reminder_tomorrow">demain</string>
+    <string name="home_reminder_in_days">dans %1$d j</string>
+
+    <!-- Carte de ressenti -->
+    <string name="home_mood_question">COMMENT TU TE SENS ?</string>
+    <string name="mood_face_1">Difficile</string>
+    <string name="mood_face_2">Moyen</string>
+    <string name="mood_face_3">Ça va</string>
+    <string name="mood_face_4">Bien</string>
+    <string name="mood_face_5">Très bien</string>
+    <string name="home_mood_detail">Noter en détail — curseurs, note, effets</string>
+
+    <!-- Titre de section + légende des familles -->
+    <string name="home_section_title">Ton suivi</string>
+    <string name="home_section_modules">Modules</string>
+    <string name="family_treatment">Traitement</string>
+    <string name="family_feeling">Ressenti</string>
+    <string name="family_evolution">Évolution</string>
+
+    <!-- Lanceur : les libellés tiennent sur une seule ligne -->
+    <string name="module_meds">Médics</string>
+    <string name="module_appointments">RDV</string>
+    <string name="module_journal">Journal</string>
+    <string name="module_bleeding">Règles</string>
+    <string name="module_labs">Analyses</string>
+    <string name="module_weight">Poids</string>
+    <string name="module_photos">Photos</string>
+    <string name="module_voice">Voix</string>
+
+    <!-- Pastilles -->
+    <string name="home_badge_pending_cd">%1$s, %2$d à faire</string>
+    <string name="home_badge_news_cd">%1$s, nouveauté</string>
+    <string name="home_badge_overflow">9+</string>
+
+    <!-- Bande d’action -->
+    <string name="home_fab_note">Noter</string>
+
+    <!-- Saisie rapide (feuille) -->
+    <string name="quicklog_subtitle">Un geste, depuis n’importe quel écran.</string>
+    <string name="quicklog_footer">Enregistré sur l’appareil, chiffré.</string>
+</resources>

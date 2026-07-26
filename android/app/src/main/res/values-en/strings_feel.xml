@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  "Feelings" area: journal, calendar, periods, correlations, summary and the
+  configurable trackers. Redesign — handoff §6.2, §6.7, §5.1.
+  Small-caps labels are uppercased in the string itself, never by a transform,
+  so a translation can decide otherwise.
+-->
+<resources>
+    <!-- Feelings screen -->
+    <string name="feel_title">Feelings</string>
+    <string name="feel_seg_journal">Journal</string>
+    <string name="feel_seg_bleeding">Periods</string>
+    <string name="feel_seg_correlations">Correlations</string>
+    <string name="feel_summary_subtitle">What moved, on one card</string>
+    <string name="feel_fab_journal">Log how you feel</string>
+    <string name="feel_fab_bleeding">Log a period day</string>
+    <string name="feel_empty_journal">Nothing logged yet. Two sliders and a word, and the curve starts to appear.</string>
+    <string name="feel_empty_bleeding_action">Log a period day</string>
+
+    <!-- Calendar -->
+    <string name="feel_calendar_legend_mood">Mood</string>
+    <string name="feel_cd_today">today</string>
+    <string name="feel_cd_selected">selected day</string>
+    <string name="feel_cd_mood_fmt">mood %1$s out of 10</string>
+    <string name="feel_cd_doses_fmt">%1$d dose(s) logged</string>
+    <string name="feel_cd_bleeding">period</string>
+
+    <!-- History -->
+    <string name="feel_entry_today_fmt">TODAY · %1$s</string>
+    <string name="feel_entry_yesterday_fmt">YESTERDAY · %1$s</string>
+    <string name="feel_entry_date_fmt">%1$s · %2$s</string>
+
+    <!-- Full journal (§6.2) -->
+    <string name="feel_full_title">How you feel</string>
+    <string name="feel_date_today_fmt">Today · %1$s</string>
+    <string name="feel_date_other_fmt">%1$s · %2$s</string>
+    <string name="feel_value_fmt">%1$d/%2$d</string>
+    <string name="feel_slider_cd_fmt">%1$s, %2$d out of %3$d</string>
+    <string name="feel_no_sliders">You have hidden every tracker. Turn one back on to log how you feel.</string>
+    <string name="feel_note_label">FREE NOTE</string>
+    <string name="feel_note_ghost">A word about your day…</string>
+    <string name="feel_effects_label">EFFECTS YOU FELT</string>
+    <string name="feel_effect_add">Add</string>
+    <string name="feel_effect_add_title">Add an effect</string>
+    <string name="feel_effect_hint">Fatigue, tension, nausea…</string>
+    <string name="feel_delete_title">Delete this entry?</string>
+    <string name="feel_delete_body">It will disappear from your journal and your charts. This cannot be undone.</string>
+
+    <!-- Periods -->
+    <string name="feel_bleeding_note_label">NOTE</string>
+    <string name="feel_bleeding_note_ghost">Anything you want to remember about this day…</string>
+    <string name="feel_bleeding_kind_label">KIND</string>
+    <string name="feel_bleeding_symptoms_label">SYMPTOMS</string>
+    <string name="feel_bleeding_delete_title">Delete this day?</string>
+    <string name="feel_bleeding_delete_body">It will disappear from the calendar and the history. This cannot be undone.</string>
+
+    <!-- Correlations (§5.1) -->
+    <string name="feel_corr_axis_mood">mood</string>
+    <string name="feel_corr_axis_doses">doses logged</string>
+    <string name="feel_corr_axis_late">late</string>
+    <string name="feel_corr_axis_missed_fmt">missed · %1$d</string>
+    <string name="feel_corr_axis_bleeding">period</string>
+    <string name="feel_corr_axis_changes_fmt">treatment changes · %1$d</string>
+    <string name="feel_corr_empty_action">Log how you feel</string>
+
+    <!-- Trackers -->
+    <string name="feel_metric_hidden">Hidden</string>
+    <string name="feel_metric_domain_journal">These sliders show up in your journal.</string>
+    <string name="feel_metric_domain_bleeding">These sliders show up when you log a period day.</string>
+</resources>

@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Appointments (§6.6) and doctor report (§6.12).
+  Small-caps labels are written uppercase inside the string, never through a
+  text transform: a translation has to be able to opt out.
+-->
+<resources>
+
+    <!-- ===== Appointments ===== -->
+    <string name="rdv_next_today">TODAY</string>
+    <string name="rdv_next_tomorrow">TOMORROW</string>
+    <plurals name="rdv_next_in_days">
+        <item quantity="one">IN %1$d DAY</item>
+        <item quantity="other">IN %1$d DAYS</item>
+    </plurals>
+    <string name="rdv_todo_label">TO ASK ABOUT</string>
+    <string name="rdv_todo_done">Done</string>
+    <string name="rdv_todo_pending">To do</string>
+    <string name="rdv_prepare_title">Prepare my visit</string>
+    <string name="rdv_prepare_sub_fmt">PDF report · %1$s</string>
+    <string name="rdv_later">Later</string>
+    <string name="rdv_past">Already past</string>
+    <string name="rdv_empty">Nothing booked yet. Note your next appointment and you can prepare it at your own pace.</string>
+    <string name="rdv_no_details">Appointment</string>
+    <string name="rdv_add">Add an appointment</string>
+    <string name="rdv_delete_title">Delete this appointment?</string>
+    <string name="rdv_delete_body">The appointment, its notes and its « to ask about » list will be erased. Any reminder is cancelled.</string>
+
+    <!-- ===== Doctor report — frame ===== -->
+    <string name="report_title">Doctor report</string>
+    <string name="report_intro_title">A PDF for your appointment</string>
+    <string name="report_intro_sub">Made on your device. You choose what goes in it, and who you hand it to.</string>
+    <string name="report_encrypted_note">The PDF is made offline, then handed to your phone’s share sheet. Nothing leaves until you send it.</string>
+
+    <!-- ===== Identity on the report (§7.4.2) ===== -->
+    <string name="report_identity_row">Identity on the report</string>
+    <string name="report_identity_set_fmt">%1$s · %2$s</string>
+    <string name="report_identity_none">Not filled in — the report won’t mention it</string>
+    <string name="report_identity_partial">One of the two is missing — the report won’t mention it</string>
+    <string name="report_identity_sheet_title">Identity on the report</string>
+    <string name="report_identity_sheet_sub">Both stay in the encrypted vault, like everything else, and appear at the top of the PDF you hand over. Leave them empty and the box simply isn’t printed.</string>
+    <string name="report_identity_field_name">Name</string>
+    <string name="report_identity_field_birth">DATE OF BIRTH</string>
+    <string name="report_identity_date_empty">Not filled in</string>
+    <string name="report_identity_erase">Erase both</string>
+    <string name="report_identity_save">Save</string>
+
+    <!-- ===== Period ===== -->
+    <string name="report_section_period">Period</string>
+    <string name="report_period_1m">1 month</string>
+    <string name="report_period_3m">3 months</string>
+    <string name="report_period_6m">6 months</string>
+    <string name="report_period_all">All</string>
+    <string name="report_period_custom">Custom</string>
+    <string name="report_range_fmt">%1$s → %2$s</string>
+    <string name="report_recap_fmt">%1$s · %2$s</string>
+    <string name="report_change">Change</string>
+    <string name="report_origin_1m">last month</string>
+    <string name="report_origin_3m">last 3 months</string>
+    <string name="report_origin_6m">last 6 months</string>
+    <string name="report_origin_all">your whole history</string>
+    <string name="report_origin_week1">last week</string>
+    <string name="report_origin_week2">last 2 weeks</string>
+    <string name="report_origin_last_visit">since your last visit</string>
+    <string name="report_origin_treatment">since treatment started</string>
+    <string name="report_origin_manual">custom period</string>
+
+    <!-- ===== « Custom period » sheet ===== -->
+    <string name="report_sheet_title">Custom period</string>
+    <string name="report_sheet_sub">Pick a shortcut, or both dates.</string>
+    <string name="report_shortcut_week1">1 week</string>
+    <string name="report_shortcut_week2">2 weeks</string>
+    <string name="report_shortcut_last_visit">Since my last visit</string>
+    <string name="report_shortcut_treatment">Since treatment started</string>
+    <string name="report_field_from">FROM</string>
+    <string name="report_field_to">TO</string>
+    <string name="report_volumes_fmt">%1$s · %2$s, %3$s, %4$s</string>
+    <string name="report_cancel">Cancel</string>
+    <string name="report_apply">Apply</string>
+
+    <!-- ===== Content ===== -->
+    <string name="report_section_content">Content</string>
+    <string name="report_check_all">Check all</string>
+    <string name="report_uncheck_all">Uncheck all</string>
+    <string name="report_empty_period">No data over this period</string>
+
+    <string name="report_mod_meds">Treatments &amp; regularity</string>
+    <string name="report_mod_hormones">Hormone levels</string>
+    <string name="report_mod_weight">Weight</string>
+    <string name="report_mod_feel">How you feel</string>
+    <string name="report_mod_feel_sub">Averages and reported effects, without the free text</string>
+    <string name="report_mod_questions">Questions to raise</string>
+    <string name="report_mod_questions_sub_fmt">%1$s from the %2$s appointment</string>
+    <string name="report_mod_questions_none">No upcoming appointment</string>
+    <string name="report_mod_bleeding">Periods</string>
+    <string name="report_mod_voice">Voice</string>
+    <string name="report_mod_voice_sub_fmt">Average pitch · %1$s</string>
+    <string name="report_mod_photos">Progress photos</string>
+    <string name="report_mod_photos_sub">Never included by default</string>
+
+    <!-- ===== Counts ===== -->
+    <plurals name="report_count_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <plurals name="report_count_molecules">
+        <item quantity="one">%1$d medicine · adherence and delays</item>
+        <item quantity="other">%1$d medicines · adherence and delays</item>
+    </plurals>
+    <plurals name="report_count_labs">
+        <item quantity="one">%1$d result</item>
+        <item quantity="other">%1$d results</item>
+    </plurals>
+    <plurals name="report_count_labs_sub">
+        <item quantity="one">%1$d result · charts and table</item>
+        <item quantity="other">%1$d results · charts and table</item>
+    </plurals>
+    <plurals name="report_count_weights">
+        <item quantity="one">%1$d weigh-in</item>
+        <item quantity="other">%1$d weigh-ins</item>
+    </plurals>
+    <plurals name="report_count_doses">
+        <item quantity="one">%1$d dose</item>
+        <item quantity="other">%1$d doses</item>
+    </plurals>
+    <plurals name="report_count_feel">
+        <item quantity="one">%1$d journal entry</item>
+        <item quantity="other">%1$d journal entries</item>
+    </plurals>
+    <plurals name="report_count_notes">
+        <item quantity="one">%1$d note</item>
+        <item quantity="other">%1$d notes</item>
+    </plurals>
+    <plurals name="report_count_bleeding_days">
+        <item quantity="one">%1$d day of bleeding</item>
+        <item quantity="other">%1$d days of bleeding</item>
+    </plurals>
+    <plurals name="report_count_clips">
+        <item quantity="one">%1$d recording</item>
+        <item quantity="other">%1$d recordings</item>
+    </plurals>
+
+    <!-- ===== Action band ===== -->
+    <plurals name="report_generate_fmt">
+        <item quantity="one">Generate · %1$d page</item>
+        <item quantity="other">Generate · %1$d pages</item>
+    </plurals>
+    <string name="report_nothing">Nothing to export</string>
+    <string name="report_generating">Preparing…</string>
+    <string name="report_error">The PDF could not be made. Try again in a moment.</string>
+    <string name="report_retry">Try again</string>
+
+</resources>

@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Rendez-vous (§6.6) et rapport médecin (§6.12).
+  Les libellés en petites capitales sont écrits en majuscules dans la chaîne,
+  jamais via une transformation : une traduction doit pouvoir en décider.
+-->
+<resources>
+
+    <!-- ===== Rendez-vous ===== -->
+    <string name="rdv_next_today">AUJOURD’HUI</string>
+    <string name="rdv_next_tomorrow">DEMAIN</string>
+    <plurals name="rdv_next_in_days">
+        <item quantity="one">DANS %1$d JOUR</item>
+        <item quantity="other">DANS %1$d JOURS</item>
+    </plurals>
+    <string name="rdv_todo_label">À DEMANDER</string>
+    <string name="rdv_todo_done">Fait</string>
+    <string name="rdv_todo_pending">À faire</string>
+    <string name="rdv_prepare_title">Préparer ma consultation</string>
+    <string name="rdv_prepare_sub_fmt">Rapport PDF · %1$s</string>
+    <string name="rdv_later">Plus tard</string>
+    <string name="rdv_past">Déjà passés</string>
+    <string name="rdv_empty">Rien de prévu pour l’instant. Note ton prochain rendez-vous, tu pourras le préparer tranquillement.</string>
+    <string name="rdv_no_details">Rendez-vous</string>
+    <string name="rdv_add">Ajouter un rendez-vous</string>
+    <string name="rdv_delete_title">Supprimer ce rendez-vous ?</string>
+    <string name="rdv_delete_body">Le rendez-vous, ses notes et sa liste « à demander » seront effacés. Le rappel associé est annulé.</string>
+
+    <!-- ===== Rapport médecin — cadre ===== -->
+    <string name="report_title">Rapport médecin</string>
+    <string name="report_intro_title">Un PDF pour ta consultation</string>
+    <string name="report_intro_sub">Fabriqué sur l’appareil. Tu choisis ce qu’il contient, et à qui tu le donnes.</string>
+    <string name="report_encrypted_note">Le PDF est fabriqué hors ligne puis passé au partage du téléphone. Rien ne part tant que tu ne l’envoies pas.</string>
+
+    <!-- ===== Identité sur le rapport (§7.4.2) ===== -->
+    <string name="report_identity_row">Identité sur le rapport</string>
+    <string name="report_identity_set_fmt">%1$s · %2$s</string>
+    <string name="report_identity_none">Non renseignée — le rapport n’en parlera pas</string>
+    <string name="report_identity_partial">Il manque une des deux — le rapport n’en parlera pas</string>
+    <string name="report_identity_sheet_title">Identité sur le rapport</string>
+    <string name="report_identity_sheet_sub">Ces deux informations restent dans le coffre chiffré, comme tout le reste, et s’affichent en tête du PDF que tu remets. Si tu les laisses vides, le cadre n’est simplement pas imprimé.</string>
+    <string name="report_identity_field_name">Nom</string>
+    <string name="report_identity_field_birth">DATE DE NAISSANCE</string>
+    <string name="report_identity_date_empty">Non renseignée</string>
+    <string name="report_identity_erase">Effacer les deux</string>
+    <string name="report_identity_save">Enregistrer</string>
+
+    <!-- ===== Période ===== -->
+    <string name="report_section_period">Période</string>
+    <string name="report_period_1m">1 mois</string>
+    <string name="report_period_3m">3 mois</string>
+    <string name="report_period_6m">6 mois</string>
+    <string name="report_period_all">Tout</string>
+    <string name="report_period_custom">Personnalisé</string>
+    <string name="report_range_fmt">%1$s → %2$s</string>
+    <string name="report_recap_fmt">%1$s · %2$s</string>
+    <string name="report_change">Changer</string>
+    <string name="report_origin_1m">1 dernier mois</string>
+    <string name="report_origin_3m">3 derniers mois</string>
+    <string name="report_origin_6m">6 derniers mois</string>
+    <string name="report_origin_all">tout l’historique</string>
+    <string name="report_origin_week1">1 dernière semaine</string>
+    <string name="report_origin_week2">2 dernières semaines</string>
+    <string name="report_origin_last_visit">depuis la dernière consultation</string>
+    <string name="report_origin_treatment">depuis le début du traitement</string>
+    <string name="report_origin_manual">période personnalisée</string>
+
+    <!-- ===== Feuille « Période personnalisée » ===== -->
+    <string name="report_sheet_title">Période personnalisée</string>
+    <string name="report_sheet_sub">Choisis un raccourci, ou les deux dates.</string>
+    <string name="report_shortcut_week1">1 semaine</string>
+    <string name="report_shortcut_week2">2 semaines</string>
+    <string name="report_shortcut_last_visit">Depuis la dernière consultation</string>
+    <string name="report_shortcut_treatment">Depuis le début du traitement</string>
+    <string name="report_field_from">DU</string>
+    <string name="report_field_to">AU</string>
+    <string name="report_volumes_fmt">%1$s · %2$s, %3$s, %4$s</string>
+    <string name="report_cancel">Annuler</string>
+    <string name="report_apply">Appliquer</string>
+
+    <!-- ===== Contenu ===== -->
+    <string name="report_section_content">Contenu</string>
+    <string name="report_check_all">Tout cocher</string>
+    <string name="report_uncheck_all">Tout décocher</string>
+    <string name="report_empty_period">Aucune donnée sur la période</string>
+
+    <string name="report_mod_meds">Traitements &amp; régularité</string>
+    <string name="report_mod_hormones">Taux hormonaux</string>
+    <string name="report_mod_weight">Poids</string>
+    <string name="report_mod_feel">Ressenti</string>
+    <string name="report_mod_feel_sub">Moyennes et effets signalés, sans le texte libre</string>
+    <string name="report_mod_questions">Questions à aborder</string>
+    <string name="report_mod_questions_sub_fmt">%1$s du rendez-vous du %2$s</string>
+    <string name="report_mod_questions_none">Aucun rendez-vous à venir</string>
+    <string name="report_mod_bleeding">Règles</string>
+    <string name="report_mod_voice">Voix</string>
+    <string name="report_mod_voice_sub_fmt">Hauteur moyenne · %1$s</string>
+    <string name="report_mod_photos">Photos d’évolution</string>
+    <string name="report_mod_photos_sub">Jamais incluses par défaut</string>
+
+    <!-- ===== Décomptes ===== -->
+    <plurals name="report_count_days">
+        <item quantity="one">%1$d jour</item>
+        <item quantity="other">%1$d jours</item>
+    </plurals>
+    <plurals name="report_count_molecules">
+        <item quantity="one">%1$d molécule · observance et retards</item>
+        <item quantity="other">%1$d molécules · observance et retards</item>
+    </plurals>
+    <plurals name="report_count_labs">
+        <item quantity="one">%1$d relevé</item>
+        <item quantity="other">%1$d relevés</item>
+    </plurals>
+    <plurals name="report_count_labs_sub">
+        <item quantity="one">%1$d relevé · courbes et tableau</item>
+        <item quantity="other">%1$d relevés · courbes et tableau</item>
+    </plurals>
+    <plurals name="report_count_weights">
+        <item quantity="one">%1$d pesée</item>
+        <item quantity="other">%1$d pesées</item>
+    </plurals>
+    <plurals name="report_count_doses">
+        <item quantity="one">%1$d prise</item>
+        <item quantity="other">%1$d prises</item>
+    </plurals>
+    <plurals name="report_count_feel">
+        <item quantity="one">%1$d entrée de ressenti</item>
+        <item quantity="other">%1$d entrées de ressenti</item>
+    </plurals>
+    <plurals name="report_count_notes">
+        <item quantity="one">%1$d note</item>
+        <item quantity="other">%1$d notes</item>
+    </plurals>
+    <plurals name="report_count_bleeding_days">
+        <item quantity="one">%1$d jour de saignement</item>
+        <item quantity="other">%1$d jours de saignement</item>
+    </plurals>
+    <plurals name="report_count_clips">
+        <item quantity="one">%1$d enregistrement</item>
+        <item quantity="other">%1$d enregistrements</item>
+    </plurals>
+
+    <!-- ===== Bande d’action ===== -->
+    <plurals name="report_generate_fmt">
+        <item quantity="one">Générer · %1$d page</item>
+        <item quantity="other">Générer · %1$d pages</item>
+    </plurals>
+    <string name="report_nothing">Rien à exporter</string>
+    <string name="report_generating">Préparation…</string>
+    <string name="report_error">Le PDF n’a pas pu être fabriqué. Réessaie dans un instant.</string>
+    <string name="report_retry">Réessayer</string>
+
+</resources>

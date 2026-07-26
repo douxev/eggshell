@@ -9,7 +9,6 @@ struct EggshellApp: App {
     @StateObject private var security = SecurityFlags()
     @StateObject private var whatsNew = WhatsNewStore()
     @StateObject private var labReminders = LabReminderStore()
-    @StateObject private var tabRouter = TabRouter()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -25,7 +24,6 @@ struct EggshellApp: App {
             .environmentObject(security)
             .environmentObject(whatsNew)
             .environmentObject(labReminders)
-            .environmentObject(tabRouter)
             .task {
                 NotificationCoordinator.shared.configure()
                 await app.bootstrap()

@@ -1,44 +1,41 @@
 package com.douxev.eggshell.ui.hormones
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import com.douxev.eggshell.R
+import com.douxev.eggshell.data.HormoneUnitPrefs
+import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.components.CardVariant
+import com.douxev.eggshell.ui.components.EggCard
+import com.douxev.eggshell.ui.theme.EggDim
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import com.douxev.eggshell.R
-import com.douxev.eggshell.data.HormoneUnitPrefs
 
 @HiltViewModel
 class HormoneUnitsViewModel @Inject constructor(
@@ -80,8 +77,8 @@ class HormoneUnitsViewModel @Inject constructor(
 
 /**
  * Unit catalog grouped by hormone. We restrict each hormone to the units that
- * make clinical sense — e.g. estradiol is reported in pg/mL or pmol/L; SHBG
- * has its own scale. Showing all 7 units everywhere would just confuse.
+ * make sense for it — estradiol is reported in pg/mL or pmol/L, SHBG has its
+ * own scale. Offering all seven units everywhere would only confuse.
  */
 private val UNITS_FOR_HORMONE: Map<String, List<String>> = mapOf(
     "estradiol" to listOf("pg/mL", "pmol/L"),
@@ -94,7 +91,8 @@ private val UNITS_FOR_HORMONE: Map<String, List<String>> = mapOf(
     "other" to listOf("pg/mL", "pmol/L", "ng/dL", "nmol/L", "ng/mL", "mIU/mL"),
 )
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+/** Sub-screen of « Apparence & langue »: how a lab value is displayed. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HormoneUnitsScreen(
     onBack: () -> Unit,
@@ -102,91 +100,94 @@ fun HormoneUnitsScreen(
 ) {
     val selections by vm.selections.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.hormones_units_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back),
-                        )
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    Scaffold(containerColor = MaterialTheme.colorScheme.surface) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(
+                start = EggDim.ScreenMargin,
+                end = EggDim.ScreenMargin,
+                bottom = 40.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(EggDim.RowGap),
         ) {
             item {
-                Text(
-                    stringResource(R.string.hormones_units_hint),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 8.dp),
+                ScreenHeader(
+                    title = stringResource(R.string.hormones_units_title),
+                    onBack = onBack,
                 )
+            }
+            item {
+                EggCard(variant = CardVariant.Low) {
+                    Text(
+                        stringResource(R.string.hormones_units_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             items(HormoneCatalog.KINDS, key = { it }) { hormone ->
                 val units = UNITS_FOR_HORMONE[hormone] ?: return@items
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                val current = selections[hormone] ?: HormoneUnitsViewModel.Choice.Default
+                val defaultUnit = vm.defaultFor(hormone)
+                EggCard(
+                    variant = CardVariant.Low,
+                    padding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    Text(
+                        HormoneCatalog.kindLabel(hormone),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 10.dp),
                     ) {
-                        Text(
-                            HormoneCatalog.kindLabel(hormone),
-                            style = MaterialTheme.typography.titleMedium,
+                        UnitChip(
+                            selected = current is HormoneUnitsViewModel.Choice.Default,
+                            label = stringResource(R.string.hormones_units_default) +
+                                defaultUnit?.let { " · $it" }.orEmpty(),
+                            onClick = {
+                                vm.setChoice(hormone, HormoneUnitsViewModel.Choice.Default)
+                            },
                         )
-                        val current = selections[hormone] ?: HormoneUnitsViewModel.Choice.Default
-                        val defaultUnit = vm.defaultFor(hormone)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = current is HormoneUnitsViewModel.Choice.Default,
-                                onClick = { vm.setChoice(hormone, HormoneUnitsViewModel.Choice.Default) },
-                                label = {
-                                    val suffix = defaultUnit?.let { " · $it" }.orEmpty()
-                                    Text(stringResource(R.string.hormones_units_default) + suffix)
+                        UnitChip(
+                            selected = current is HormoneUnitsViewModel.Choice.AsRecorded,
+                            label = stringResource(R.string.hormones_units_as_recorded),
+                            onClick = {
+                                vm.setChoice(hormone, HormoneUnitsViewModel.Choice.AsRecorded)
+                            },
+                        )
+                        units.forEach { u ->
+                            UnitChip(
+                                selected = current is HormoneUnitsViewModel.Choice.Unit &&
+                                    current.name == u,
+                                label = u,
+                                onClick = {
+                                    vm.setChoice(hormone, HormoneUnitsViewModel.Choice.Unit(u))
                                 },
-                                shape = RoundedCornerShape(50),
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                ),
                             )
-                            FilterChip(
-                                selected = current is HormoneUnitsViewModel.Choice.AsRecorded,
-                                onClick = { vm.setChoice(hormone, HormoneUnitsViewModel.Choice.AsRecorded) },
-                                label = { Text(stringResource(R.string.hormones_units_as_recorded)) },
-                                shape = RoundedCornerShape(50),
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                ),
-                            )
-                            units.forEach { u ->
-                                FilterChip(
-                                    selected = current is HormoneUnitsViewModel.Choice.Unit && current.name == u,
-                                    onClick = { vm.setChoice(hormone, HormoneUnitsViewModel.Choice.Unit(u)) },
-                                    label = { Text(u) },
-                                    shape = RoundedCornerShape(50),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    ),
-                                )
-                            }
                         }
                     }
                 }
             }
+            item { Spacer(Modifier.height(8.dp)) }
         }
     }
 }
 
+/** Filter chip species: 10 dp radius, distinct from the round period pills (D4). */
+@Composable
+private fun UnitChip(selected: Boolean, label: String, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        shape = RoundedCornerShape(10.dp),
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
+    )
+}

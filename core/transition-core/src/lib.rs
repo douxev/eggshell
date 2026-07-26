@@ -10,6 +10,7 @@ pub mod journal;
 pub mod medication;
 pub mod metrics;
 pub mod photos;
+pub mod settings;
 pub mod vault;
 pub mod voice;
 

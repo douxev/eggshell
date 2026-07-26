@@ -339,6 +339,18 @@ interface Vault {
     [Throws=TransitionError]
     void delete_appointment(i64 id);
 
+    // In-vault key/value settings — the only encrypted store the apps have for
+    // small values. Anything identifying goes here, never in the platforms'
+    // own preference files.
+    [Throws=TransitionError]
+    string? get_setting(string key);
+
+    [Throws=TransitionError]
+    void set_setting(string key, string value);
+
+    [Throws=TransitionError]
+    void delete_setting(string key);
+
     // Generic blob encryption (photos, future audio).
     [Throws=TransitionError]
     bytes encrypt_blob(bytes plaintext);

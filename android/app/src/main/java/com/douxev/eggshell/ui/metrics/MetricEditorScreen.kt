@@ -1,28 +1,23 @@
 package com.douxev.eggshell.ui.metrics
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,7 +26,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -55,7 +49,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.MetricsRepository
+import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.common.metricEmojis
 import com.douxev.eggshell.ui.common.metricLabel
+import com.douxev.eggshell.ui.components.ActionBand
+import com.douxev.eggshell.ui.components.CardVariant
+import com.douxev.eggshell.ui.components.EggCard
+import com.douxev.eggshell.ui.components.EggFab
+import com.douxev.eggshell.ui.components.IconTile
+import com.douxev.eggshell.ui.components.TypeBadge
+import com.douxev.eggshell.ui.theme.EggDim
 import uniffi.transition.MetricDefinition
 import uniffi.transition.MetricDefinitionUpdate
 import uniffi.transition.NewMetricDefinition
@@ -146,52 +149,66 @@ private fun MetricDefinition.toUpdate() = MetricDefinitionUpdate(
     enabled = enabled,
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * « Personnaliser les indicateurs » — the one place a slider is hidden,
+ * reordered, renamed or created.
+ *
+ * Hiding never destroys anything: an entry keeps the value it was given, the
+ * form simply stops asking for it.
+ */
 @Composable
 fun MetricEditorScreen(
     onBack: () -> Unit,
     vm: MetricEditorViewModel = hiltViewModel(),
 ) {
     val defs by vm.defs.collectAsState()
-    // null = closed; a definition = edit it; the sentinel below = add new.
     var editTarget by remember { mutableStateOf<MetricDefinition?>(null) }
     var adding by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<MetricDefinition?>(null) }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.metric_editor_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back),
-                        )
-                    }
-                },
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { adding = true }) {
-                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.metric_editor_add))
+        containerColor = MaterialTheme.colorScheme.surface,
+        bottomBar = {
+            ActionBand {
+                EggFab(
+                    icon = Icons.Filled.Add,
+                    contentDescription = stringResource(R.string.metric_editor_add),
+                    onClick = { adding = true },
+                )
             }
         },
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(padding),
+            contentPadding = PaddingValues(
+                start = EggDim.ScreenMargin,
+                end = EggDim.ScreenMargin,
+                bottom = 12.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                stringResource(R.string.metric_editor_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            defs.forEachIndexed { index, def ->
+            item(key = "metric-header") {
+                ScreenHeader(
+                    title = stringResource(R.string.metric_editor_title),
+                    onBack = onBack,
+                )
+            }
+            item(key = "metric-hint") {
+                Text(
+                    stringResource(
+                        if (vm.domain == MetricsRepository.DOMAIN_BLEEDING) {
+                            R.string.feel_metric_domain_bleeding
+                        } else {
+                            R.string.feel_metric_domain_journal
+                        },
+                    ) + " " + stringResource(R.string.metric_editor_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            itemsIndexed(defs, key = { _, def -> "metric-${def.id}" }) { index, def ->
                 MetricRow(
                     def = def,
                     isFirst = index == 0,
@@ -203,7 +220,6 @@ fun MetricEditorScreen(
                     onDelete = { confirmDelete = def }.takeIf { !def.builtin },
                 )
             }
-            Box(modifier = Modifier.height(80.dp))
         }
     }
 
@@ -228,7 +244,10 @@ fun MetricEditorScreen(
             text = { Text(stringResource(R.string.metric_editor_delete_body, target.label)) },
             confirmButton = {
                 TextButton(onClick = { vm.delete(target); confirmDelete = null }) {
-                    Text(stringResource(R.string.action_delete))
+                    Text(
+                        stringResource(R.string.action_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             },
             dismissButton = {
@@ -251,33 +270,69 @@ private fun MetricRow(
     onEdit: (() -> Unit)?,
     onDelete: (() -> Unit)?,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = RoundedCornerShape(16.dp),
-    ) {
+    val (left, right) = metricEmojis(def)
+    EggCard(variant = CardVariant.Low, padding = PaddingValues(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(metricLabel(def), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-            IconButton(onClick = onMoveUp, enabled = !isFirst) {
-                Icon(Icons.Filled.ArrowUpward, contentDescription = stringResource(R.string.metric_editor_move_up))
+            IconTile(size = 40.dp) {
+                Text(
+                    listOfNotNull(left, right).joinToString(""),
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
-            IconButton(onClick = onMoveDown, enabled = !isLast) {
-                Icon(Icons.Filled.ArrowDownward, contentDescription = stringResource(R.string.metric_editor_move_down))
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        metricLabel(def),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    // The word says it too, never the switch position alone.
+                    if (!def.enabled) TypeBadge(stringResource(R.string.feel_metric_hidden))
+                }
+            }
+            IconButton(
+                onClick = onMoveUp,
+                enabled = !isFirst,
+                modifier = Modifier.size(EggDim.TouchTarget),
+            ) {
+                Icon(
+                    Icons.Filled.ArrowUpward,
+                    contentDescription = stringResource(R.string.metric_editor_move_up),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(
+                onClick = onMoveDown,
+                enabled = !isLast,
+                modifier = Modifier.size(EggDim.TouchTarget),
+            ) {
+                Icon(
+                    Icons.Filled.ArrowDownward,
+                    contentDescription = stringResource(R.string.metric_editor_move_down),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             if (onEdit != null) {
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.action_edit))
+                IconButton(onClick = onEdit, modifier = Modifier.size(EggDim.TouchTarget)) {
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = stringResource(R.string.action_edit),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             if (onDelete != null) {
-                IconButton(onClick = onDelete) {
+                IconButton(onClick = onDelete, modifier = Modifier.size(EggDim.TouchTarget)) {
                     Icon(
                         Icons.Filled.Delete,
                         contentDescription = stringResource(R.string.action_delete),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = MaterialTheme.colorScheme.error,
                     )
                 }
             }

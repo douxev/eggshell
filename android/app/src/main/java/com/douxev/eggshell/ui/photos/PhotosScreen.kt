@@ -1,10 +1,15 @@
 package com.douxev.eggshell.ui.photos
 
+import android.app.Activity
 import android.content.ContentValues
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.provider.MediaStore
+import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,11 +29,11 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
@@ -38,22 +43,19 @@ import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -68,27 +70,50 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.PhotosRepository
+import com.douxev.eggshell.ui.common.PrivacyNote
+import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.components.ActionBand
+import com.douxev.eggshell.ui.components.CardVariant
+import com.douxev.eggshell.ui.components.EggCard
+import com.douxev.eggshell.ui.components.EggFab
+import com.douxev.eggshell.ui.components.EmptyState
+import com.douxev.eggshell.ui.components.MicroLabel
+import com.douxev.eggshell.ui.components.SectionTitle
+import com.douxev.eggshell.ui.components.Segmented
+import com.douxev.eggshell.ui.components.SkeletonBlock
+import com.douxev.eggshell.ui.theme.EggDim
+import com.douxev.eggshell.ui.theme.EggShapes
 import uniffi.transition.PhotoRecord
 
 @HiltViewModel
@@ -98,12 +123,16 @@ class PhotosViewModel @Inject constructor(
     private val _items = MutableStateFlow<List<PhotoRecord>>(emptyList())
     val items: StateFlow<List<PhotoRecord>> = _items.asStateFlow()
 
+    private val _loading = MutableStateFlow(true)
+    val loading: StateFlow<Boolean> = _loading.asStateFlow()
+
     init { refresh() }
 
     fun refresh() {
         viewModelScope.launch {
             _items.value = runCatching { repo.list() }.getOrDefault(emptyList())
                 .sortedByDescending { it.atMs }
+            _loading.value = false
         }
     }
 
@@ -130,86 +159,153 @@ class PhotosViewModel @Inject constructor(
 
 private enum class PhotoTab { Gallery, Compare }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Photos (§6.10). Two ways in: the whole library as a grid, or the two ends of
+ * it side by side. Compare is where the point of the module lives — a single
+ * shot says nothing, the pair does — so it gets the span card that spells the
+ * distance out in months.
+ *
+ * `FLAG_SECURE` is forced for as long as this screen is on top, whatever the
+ * global screenshot preference says: the privacy note promises exactly that,
+ * and a promise made in a string has to be true in the window flags.
+ */
 @Composable
 fun PhotosScreen(
-    onOpenSettings: () -> Unit = {},
+    onBack: () -> Unit = {},
     vm: PhotosViewModel = hiltViewModel(),
 ) {
     val items by vm.items.collectAsState()
+    val loading by vm.loading.collectAsState()
     LaunchedEffect(Unit) { vm.refresh() }
+
     var tab by rememberSaveable { mutableStateOf(PhotoTab.Gallery) }
-    var lightboxId by remember { mutableStateOf<Long?>(null) }
+    var lightboxId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var pendingDelete by remember { mutableStateOf<PhotoRecord?>(null) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
     val savedMsg = stringResource(R.string.photos_saved_to_gallery)
+    val saveFailedMsg = stringResource(R.string.media_photos_save_failed)
+    val deletedMsg = stringResource(R.string.media_photos_deleted)
+
+    ForceSecureWindow()
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { vm.import(it) } }
+    val pick = {
+        picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
+
+    val tabs = listOf(
+        stringResource(R.string.photos_tab_gallery),
+        stringResource(R.string.photos_tab_compare),
+    )
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
         snackbarHost = { SnackbarHost(snackbar) },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    picker.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                    )
-                },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            ) {
-                Icon(
-                    Icons.Filled.AddAPhoto,
-                    contentDescription = stringResource(R.string.photos_add),
+        bottomBar = {
+            ActionBand {
+                EggFab(
+                    icon = Icons.Filled.AddAPhoto,
+                    contentDescription = stringResource(R.string.media_photos_add),
+                    onClick = { pick() },
                 )
             }
         },
     ) { padding ->
-        Column(
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
+                .padding(padding),
+            contentPadding = PaddingValues(
+                start = EggDim.ScreenMargin,
+                end = EggDim.ScreenMargin,
+                bottom = 12.dp,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            com.douxev.eggshell.ui.common.ScreenHeader(
-                title = stringResource(R.string.photos_title),
-                onOpenSettings = onOpenSettings,
-                modifier = Modifier.padding(top = 2.dp),
-            )
+            val full = GridItemSpan(2)
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = tab == PhotoTab.Gallery,
-                    onClick = { tab = PhotoTab.Gallery },
-                    label = { Text(stringResource(R.string.photos_tab_gallery)) },
-                    shape = RoundedCornerShape(50),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    ),
-                )
-                FilterChip(
-                    selected = tab == PhotoTab.Compare,
-                    onClick = { tab = PhotoTab.Compare },
-                    label = { Text(stringResource(R.string.photos_tab_compare)) },
-                    shape = RoundedCornerShape(50),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    ),
+            item(key = "photos-header", span = { full }) {
+                ScreenHeader(title = stringResource(R.string.module_photos), onBack = onBack)
+            }
+            item(key = "photos-tabs", span = { full }) {
+                Segmented(
+                    options = tabs,
+                    selectedIndex = if (tab == PhotoTab.Gallery) 0 else 1,
+                    onSelect = { tab = if (it == 0) PhotoTab.Gallery else PhotoTab.Compare },
                 )
             }
 
-            Box(modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 16.dp)) {
-                if (items.isEmpty()) {
-                    EmptyState()
-                } else when (tab) {
-                    PhotoTab.Gallery -> GalleryGrid(items, vm, onOpen = { lightboxId = it.id })
-                    PhotoTab.Compare -> CompareView(items, vm)
+            when {
+                loading && items.isEmpty() -> {
+                    items(4, key = { "photos-skeleton-$it" }) {
+                        SkeletonBlock(
+                            height = 200.dp,
+                            shape = RoundedCornerShape(16.dp),
+                        )
+                    }
                 }
+
+                tab == PhotoTab.Gallery -> {
+                    if (items.isEmpty()) {
+                        item(key = "photos-empty", span = { full }) {
+                            EmptyState(
+                                message = stringResource(R.string.media_photos_empty),
+                                actionLabel = stringResource(R.string.media_photos_add),
+                                onAction = { pick() },
+                            )
+                        }
+                    } else {
+                        item(key = "photos-section", span = { full }) {
+                            SectionTitle(text = stringResource(R.string.media_photos_section))
+                        }
+                        items(items, key = { "photo-${it.id}" }) { record ->
+                            GalleryTile(
+                                record = record,
+                                vm = vm,
+                                onClick = { lightboxId = record.id },
+                            )
+                        }
+                    }
+                }
+
+                else -> {
+                    val oldest = items.lastOrNull()
+                    val newest = items.firstOrNull()
+                    if (oldest == null || newest == null || oldest.id == newest.id) {
+                        item(key = "photos-compare-empty", span = { full }) {
+                            EmptyState(
+                                message = stringResource(R.string.media_photos_compare_empty),
+                                actionLabel = stringResource(R.string.media_photos_add),
+                                onAction = { pick() },
+                            )
+                        }
+                    } else {
+                        item(key = "photos-compare", span = { full }) {
+                            ComparePair(
+                                oldest = oldest,
+                                newest = newest,
+                                vm = vm,
+                                onOpen = { lightboxId = it.id },
+                            )
+                        }
+                        item(key = "photos-span", span = { full }) {
+                            SpanCard(oldest = oldest, newest = newest, total = items.size)
+                        }
+                    }
+                }
+            }
+
+            item(key = "photos-privacy", span = { full }) {
+                PrivacyNote(
+                    text = stringResource(R.string.media_photos_privacy),
+                    icon = Icons.Filled.VisibilityOff,
+                )
             }
         }
     }
@@ -236,21 +332,76 @@ fun PhotosScreen(
             },
             onSave = {
                 scope.launch {
-                    val bytes = vm.decryptBytes(opened) ?: return@launch
-                    val saved = savePhotoToGallery(ctx, bytes, opened.atMs)
-                    if (saved) snackbar.showSnackbar(savedMsg)
+                    val bytes = vm.decryptBytes(opened)
+                    val saved = bytes != null && savePhotoToGallery(ctx, bytes, opened.atMs)
+                    snackbar.showSnackbar(if (saved) savedMsg else saveFailedMsg)
                 }
             },
-            onDelete = {
-                vm.delete(opened)
-                lightboxId = null
+            onDelete = { pendingDelete = opened },
+        )
+    }
+
+    // §5.4: every destructive action goes through an AlertDialog. Deleting the
+    // photo is the one thing on this screen the vault cannot undo.
+    val doomed = pendingDelete
+    if (doomed != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(R.string.media_photos_delete_title)) },
+            text = { Text(stringResource(R.string.media_photos_delete_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.delete(doomed)
+                        pendingDelete = null
+                        lightboxId = null
+                        scope.launch { snackbar.showSnackbar(deletedMsg) }
+                    },
+                ) {
+                    Text(
+                        stringResource(R.string.action_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             },
         )
     }
 }
 
+/**
+ * Holds `FLAG_SECURE` on the activity window while this screen is composed, and
+ * only drops it on the way out if we were the ones who set it — the global
+ * screenshot preference owns the flag the rest of the time.
+ */
+@Composable
+private fun ForceSecureWindow() {
+    val activity = LocalContext.current.findActivity()
+    DisposableEffect(activity) {
+        val window = activity?.window
+        val alreadySecure = window != null &&
+            (window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE) != 0
+        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        onDispose {
+            if (window != null && !alreadySecure) {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 private fun savePhotoToGallery(
-    ctx: android.content.Context,
+    ctx: Context,
     bytes: ByteArray,
     atMs: Long,
 ): Boolean {
@@ -272,78 +423,30 @@ private fun savePhotoToGallery(
 }
 
 @Composable
-private fun EmptyState() {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 24.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Filled.PhotoLibrary,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-            Text(
-                stringResource(R.string.photos_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun GalleryGrid(
-    items: List<PhotoRecord>,
-    vm: PhotosViewModel,
-    onOpen: (PhotoRecord) -> Unit,
-) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(bottom = 96.dp),
-    ) {
-        items(items, key = { it.id }) { record ->
-            GalleryTile(record, vm, onClick = { onOpen(record) })
-        }
-    }
-}
-
-@Composable
 private fun GalleryTile(record: PhotoRecord, vm: PhotosViewModel, onClick: () -> Unit) {
     val day = remember(record.atMs) {
         SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(record.atMs))
     }
-    val month = remember(record.atMs) {
-        SimpleDateFormat("MMM yy", Locale.getDefault()).format(Date(record.atMs)).uppercase()
+    val year = remember(record.atMs) {
+        SimpleDateFormat("yyyy", Locale.getDefault()).format(Date(record.atMs))
     }
-    Column(modifier = Modifier.clickable(onClick = onClick)) {
+    val longDate = remember(record.atMs) {
+        SimpleDateFormat("d MMMM yyyy", Locale.getDefault()).format(Date(record.atMs))
+    }
+    Column(
+        modifier = Modifier.clickable(
+            onClickLabel = stringResource(R.string.media_photos_open, longDate),
+            onClick = onClick,
+        ),
+    ) {
         PhotoThumb(
             record = record,
             vm = vm,
+            contentDescription = stringResource(R.string.media_photos_photo, longDate),
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(3f / 4f)
-                .clip(RoundedCornerShape(18.dp)),
+                .clip(RoundedCornerShape(16.dp)),
         )
         Row(
             modifier = Modifier
@@ -352,120 +455,130 @@ private fun GalleryTile(record: PhotoRecord, vm: PhotosViewModel, onClick: () ->
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(day, style = MaterialTheme.typography.titleSmall)
             Text(
-                month,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
+                day,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
             )
+            MicroLabel(year)
         }
     }
 }
 
+/**
+ * The two ends of the library, 3:4 and side by side. Pairing is automatic —
+ * oldest on the left, newest on the right — and the newest caption carries
+ * `primary` because that column is the one the user came to look at.
+ */
 @Composable
-private fun CompareView(items: List<PhotoRecord>, vm: PhotosViewModel) {
-    // Pick oldest + newest as the default comparison.
-    val first = items.lastOrNull()
-    val last = items.firstOrNull()
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        if (first == null || last == null || first.id == last.id) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    stringResource(R.string.photos_compare_not_enough),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(20.dp),
-                )
-            }
-            return@Column
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ComparePane(record = first, vm = vm, label = stringResource(R.string.photos_compare_before),
-                modifier = Modifier.weight(1f))
-            ComparePane(record = last, vm = vm, label = stringResource(R.string.photos_compare_after),
-                modifier = Modifier.weight(1f))
-        }
-        val months = monthsBetween(first.atMs, last.atMs)
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            ),
-            shape = RoundedCornerShape(24.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    stringResource(R.string.photos_compare_span_fmt, months),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    stringResource(R.string.photos_compare_span_sub),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
-                )
-            }
-        }
+private fun ComparePair(
+    oldest: PhotoRecord,
+    newest: PhotoRecord,
+    vm: PhotosViewModel,
+    onOpen: (PhotoRecord) -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ComparePane(
+            record = oldest,
+            vm = vm,
+            caption = stringResource(R.string.media_photos_before, monthYear(oldest.atMs)),
+            captionColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            onOpen = { onOpen(oldest) },
+            modifier = Modifier.weight(1f),
+        )
+        ComparePane(
+            record = newest,
+            vm = vm,
+            caption = stringResource(R.string.media_photos_now, monthYear(newest.atMs)),
+            captionColor = MaterialTheme.colorScheme.primary,
+            onOpen = { onOpen(newest) },
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
 @Composable
-private fun ComparePane(record: PhotoRecord, vm: PhotosViewModel, label: String, modifier: Modifier) {
-    val day = remember(record.atMs) {
-        SimpleDateFormat("d MMM yy", Locale.getDefault()).format(Date(record.atMs))
+private fun ComparePane(
+    record: PhotoRecord,
+    vm: PhotosViewModel,
+    caption: String,
+    captionColor: Color,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val longDate = remember(record.atMs) {
+        SimpleDateFormat("d MMMM yyyy", Locale.getDefault()).format(Date(record.atMs))
     }
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier = modifier.clickable(
+            onClickLabel = stringResource(R.string.media_photos_open, longDate),
+            onClick = onOpen,
+        ),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         PhotoThumb(
             record = record,
             vm = vm,
+            contentDescription = stringResource(R.string.media_photos_photo, longDate),
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(3f / 4f)
-                .clip(RoundedCornerShape(18.dp)),
+                .clip(RoundedCornerShape(16.dp)),
         )
-        Text(day, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-        Box(
-            modifier = Modifier
-                .padding(top = 4.dp)
-                .clip(RoundedCornerShape(50))
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .padding(horizontal = 10.dp, vertical = 2.dp),
-        ) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
+        MicroLabel(
+            text = caption,
+            color = captionColor,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
 @Composable
-private fun PhotoThumb(record: PhotoRecord, vm: PhotosViewModel, modifier: Modifier) {
-    var bitmap by remember(record.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(record.id) {
-        scope.launch {
-            val bytes = vm.decryptBytes(record) ?: return@launch
-            bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        }
+private fun SpanCard(oldest: PhotoRecord, newest: PhotoRecord, total: Int) {
+    val months = remember(oldest.atMs, newest.atMs) { monthsBetween(oldest.atMs, newest.atMs) }
+    val days = remember(oldest.atMs, newest.atMs) { daysBetween(oldest.atMs, newest.atMs) }
+    // Under a month the month count would read « 0 mois », which says nothing:
+    // the first weeks are exactly when people look most often, so count days.
+    val headline = if (months >= 1) {
+        pluralStringResource(R.plurals.media_photos_span_months, months, months)
+    } else {
+        pluralStringResource(R.plurals.media_photos_span_days, days, days)
     }
-    val bg = MaterialTheme.colorScheme.surfaceContainerHigh
-    Box(modifier = modifier.background(bg)) {
+    EggCard(variant = CardVariant.Primary) {
+        Text(
+            headline,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            pluralStringResource(R.plurals.media_photos_span_sub, total, total),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+@Composable
+private fun PhotoThumb(
+    record: PhotoRecord,
+    vm: PhotosViewModel,
+    contentDescription: String,
+    modifier: Modifier,
+    maxPx: Int = 720,
+) {
+    var bitmap by remember(record.id) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(record.id) {
+        val bytes = vm.decryptBytes(record) ?: return@LaunchedEffect
+        // Full-size decode of a dozen 12 Mpx JPEGs would blow the heap while
+        // scrolling; the grid never shows more than a few hundred pixels wide.
+        bitmap = withContext(Dispatchers.Default) { decodeSampled(bytes, maxPx) }
+    }
+    Box(modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
         bitmap?.let {
             Image(
                 bitmap = it.asImageBitmap(),
-                contentDescription = stringResource(R.string.photos_locked),
+                contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -473,11 +586,38 @@ private fun PhotoThumb(record: PhotoRecord, vm: PhotosViewModel, modifier: Modif
     }
 }
 
-private fun monthsBetween(fromMs: Long, toMs: Long): Int {
-    val days = ((toMs - fromMs) / 86_400_000L).toInt()
-    return (days / 30).coerceAtLeast(0)
+private fun decodeSampled(bytes: ByteArray, maxPx: Int): Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    var sample = 1
+    val longest = maxOf(bounds.outWidth, bounds.outHeight)
+    while (longest / (sample * 2) >= maxPx) sample *= 2
+    return BitmapFactory.decodeByteArray(
+        bytes, 0, bytes.size,
+        BitmapFactory.Options().apply { inSampleSize = sample },
+    )
 }
 
+private fun monthYear(atMs: Long): String =
+    SimpleDateFormat("MMM yyyy", Locale.getDefault()).format(Date(atMs)).uppercase()
+
+private fun monthsBetween(fromMs: Long, toMs: Long): Int {
+    val from = Calendar.getInstance().apply { timeInMillis = fromMs }
+    val to = Calendar.getInstance().apply { timeInMillis = toMs }
+    var months = (to.get(Calendar.YEAR) - from.get(Calendar.YEAR)) * 12 +
+        (to.get(Calendar.MONTH) - from.get(Calendar.MONTH))
+    if (to.get(Calendar.DAY_OF_MONTH) < from.get(Calendar.DAY_OF_MONTH)) months--
+    return months.coerceAtLeast(0)
+}
+
+private fun daysBetween(fromMs: Long, toMs: Long): Int =
+    ((toMs - fromMs) / 86_400_000L).toInt().coerceAtLeast(0)
+
+/**
+ * Full-screen viewer: pinch-zoom, pan, double-tap, and the three actions that
+ * existed before the refonte. Its own window needs `FLAG_SECURE` too — the
+ * activity flag does not cover a dialog window.
+ */
 @Composable
 private fun PhotoLightbox(
     record: PhotoRecord,
@@ -487,13 +627,10 @@ private fun PhotoLightbox(
     onSave: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    var bitmap by remember(record.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    val scope = rememberCoroutineScope()
+    var bitmap by remember(record.id) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(record.id) {
-        scope.launch {
-            val bytes = vm.decryptBytes(record) ?: return@launch
-            bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        }
+        val bytes = vm.decryptBytes(record) ?: return@LaunchedEffect
+        bitmap = withContext(Dispatchers.Default) { decodeSampled(bytes, 2048) }
     }
     val dateLabel = remember(record.atMs) {
         SimpleDateFormat("EEEE d MMMM yyyy", Locale.getDefault()).format(Date(record.atMs))
@@ -523,22 +660,34 @@ private fun PhotoLightbox(
     val topInset = systemBarsPad.calculateTopPadding().coerceAtLeast(24.dp)
     val bottomInset = systemBarsPad.calculateBottomPadding().coerceAtLeast(40.dp)
 
-    androidx.compose.ui.window.Dialog(
+    Dialog(
         onDismissRequest = onClose,
-        properties = androidx.compose.ui.window.DialogProperties(
+        properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = true,
             dismissOnClickOutside = false,
             decorFitsSystemWindows = false,
         ),
     ) {
+        val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+        DisposableEffect(dialogWindow) {
+            dialogWindow?.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE,
+            )
+            onDispose { }
+        }
         // Column layout, not Box+align: this guarantees the bottom action row
         // sits at the natural bottom of a finite Column, with the image area
         // expanding to fill the middle.
+        //
+        // The backdrop is `scrim` — black in all 15 palettes — so the chrome on
+        // top of it can't borrow `onSurface`: every control carries its own
+        // tonal surface instead, which keeps it legible in light *and* dark.
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xF2000000)),
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.94f)),
         ) {
             // Top bar: close + date
             Row(
@@ -547,27 +696,37 @@ private fun PhotoLightbox(
                     .padding(top = topInset)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                IconButton(
+                Surface(
                     onClick = onClose,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(Color(0x66FFFFFF)),
+                    modifier = Modifier.size(EggDim.TouchTarget),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
                 ) {
-                    Icon(
-                        Icons.Filled.Close,
-                        contentDescription = stringResource(R.string.action_back),
-                        tint = Color.White,
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = stringResource(
+                                R.string.media_photos_viewer_close,
+                            ),
+                        )
+                    }
+                }
+                Surface(
+                    shape = EggShapes.Pill,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ) {
+                    Text(
+                        dateLabel.replaceFirstChar {
+                            if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     )
                 }
-                Text(
-                    dateLabel.replaceFirstChar {
-                        if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
-                    },
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(start = 12.dp).weight(1f),
-                )
             }
 
             // Image: takes all remaining vertical space between the bars.
@@ -588,57 +747,60 @@ private fun PhotoLightbox(
                 bitmap?.let {
                     Image(
                         bitmap = it.asImageBitmap(),
-                        contentDescription = stringResource(R.string.photos_locked),
+                        contentDescription = stringResource(
+                            R.string.media_photos_photo, dateLabel,
+                        ),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = 8.dp)
-                            .androidx_graphicsLayer(scale, offsetX, offsetY),
+                            .graphicsLayer(
+                                scaleX = scale,
+                                scaleY = scale,
+                                translationX = offsetX,
+                                translationY = offsetY,
+                            ),
                     )
                 }
             }
 
-            // Bottom action bar: explicit bottom padding equal to system nav
-            // inset (or 40dp fallback). The Column layout above guarantees
-            // this row is at the bottom of the parent, so the only thing
-            // that can hide it is the gesture handle / nav bar.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = bottomInset)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+            // Bottom action band: it reserves its strip on a real surface
+            // rather than floating over the photo, and carries explicit bottom
+            // padding equal to the system nav inset (or a 40 dp fallback) —
+            // Compose dialogs have reported zero insets on several devices.
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = EggShapes.Sheet,
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                LightboxAction(
-                    icon = Icons.Filled.Share,
-                    label = stringResource(R.string.photos_share),
-                    onClick = onShare,
-                )
-                LightboxAction(
-                    icon = Icons.Filled.Download,
-                    label = stringResource(R.string.photos_save),
-                    onClick = onSave,
-                )
-                LightboxAction(
-                    icon = Icons.Filled.Delete,
-                    label = stringResource(R.string.action_delete),
-                    onClick = onDelete,
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = bottomInset)
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    LightboxAction(
+                        icon = Icons.Filled.Share,
+                        label = stringResource(R.string.photos_share),
+                        onClick = onShare,
+                    )
+                    LightboxAction(
+                        icon = Icons.Filled.Download,
+                        label = stringResource(R.string.photos_save),
+                        onClick = onSave,
+                    )
+                    LightboxAction(
+                        icon = Icons.Filled.Delete,
+                        label = stringResource(R.string.action_delete),
+                        tint = MaterialTheme.colorScheme.error,
+                        onClick = onDelete,
+                    )
+                }
             }
         }
     }
 }
-
-private fun Modifier.androidx_graphicsLayer(
-    scale: Float,
-    offsetX: Float,
-    offsetY: Float,
-): Modifier = this.graphicsLayer(
-    scaleX = scale,
-    scaleY = scale,
-    translationX = offsetX,
-    translationY = offsetY,
-)
 
 private fun Modifier.pointerInputDoubleTap(onDoubleTap: () -> Unit): Modifier =
     this.pointerInput(Unit) {
@@ -647,27 +809,29 @@ private fun Modifier.pointerInputDoubleTap(onDoubleTap: () -> Unit): Modifier =
 
 @Composable
 private fun LightboxAction(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     onClick: () -> Unit,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.clickable(onClickLabel = label, onClick = onClick),
     ) {
         Box(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(Color(0x33FFFFFF)),
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = label, tint = Color.White)
+            Icon(icon, contentDescription = null, tint = tint)
         }
         Text(
             label,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 4.dp),
         )
     }

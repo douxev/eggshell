@@ -1,76 +1,72 @@
 import SwiftUI
 import TransitionCore
 
-// ===========================================================================
-// PUSHED screen — create or edit a bleeding / cycle entry. Fields: a date+time
-// picker (past only, editable when editing too), the kind (Saignement vs
-// Spotting, both deselectable → "non précisé"), a free-text note, and the
-// customizable "bleeding" metric sliders. The scalar fields live on the
-// BleedingEntry; the slider values live in the "bleeding" metric domain keyed
-// by the (stable) entry id, so editing updates in place and the values are
-// replaced wholesale. Create only: a « Plusieurs jours » range mode logs one
-// entry per day at 12:00 local in one action (addBleedingEntries), all sharing
-// the same kind/note/slider values. Mirrors android AddBleedingEntryScreen.
-// ===========================================================================
+// « Noter mes règles » — one day or a whole span, new or edited.
+//
+// The kind chips are deselectable on purpose: tapping the selected one again
+// clears it back to « non précisé », because not knowing is an honest answer and
+// the form must not force a category. « Plusieurs jours » writes one entry per
+// day at noon local — noon keeps each entry inside its calendar day across every
+// DST shift — and each day stays individually editable afterwards.
 
 @MainActor
 final class AddBleedingEntryViewModel: ObservableObject {
     @Published var loading = true
-    /// True while a save/delete is in flight — gates the toolbar buttons so a
-    /// double-tap can't commit a multi-day range twice.
+    /// True while a save/delete is in flight — gates the action bar so a
+    /// double-tap can't commit a multi-day span twice.
     @Published var saving = false
     /// Edit mode only: true once the entry (and its slider values) actually
     /// loaded. Saving an unseeded form would move the entry to today and wipe
-    /// its sliders.
+    /// its indicators.
     @Published var entryLoaded = false
     @Published var error: String?
 
-    // Scalar fields
     @Published var date = Date()
-    // nil = non précisé, true = spotting, false = saignement complet.
+    /// nil = non précisé, true = spotting, false = règles.
     @Published var isSpotting: Bool?
     @Published var freeText = ""
 
-    // Range mode (create only): log « cette semaine = règles » in one action.
+    /// Span mode (create only): log « cette semaine = règles » in one action.
     @Published var rangeMode = false
     @Published var rangeStart = Date()
     @Published var rangeEnd = Date()
 
-    // Customizable metric sliders for the "bleeding" domain.
+    /// The configurable indicators of the « bleeding » domain.
     @Published var definitions: [MetricDefinition] = []
     @Published var values: [Int64: UInt32] = [:]
 
-    /// Days in the selected span, inclusive; 0 when the range is inverted.
+    /// Days in the selected span, inclusive; 0 when the span is inverted.
     var rangeDayCount: Int {
         let cal = Calendar.current
         let start = cal.startOfDay(for: rangeStart)
         let end = cal.startOfDay(for: rangeEnd)
-        guard let days = cal.dateComponents([.day], from: start, to: end).day, days >= 0 else { return 0 }
+        guard let days = cal.dateComponents([.day], from: start, to: end).day, days >= 0 else {
+            return 0
+        }
         return days + 1
     }
 
     func load(_ session: VaultService, entryId: Int64?) async {
         loading = true
+        error = nil
         do {
-            let defs = try await session.listMetricDefinitions(domain: "bleeding")
-                .filter { $0.enabled }
-            definitions = defs
+            definitions = try await session.listMetricDefinitions(domain: "bleeding")
+                .filter { $0.enabled && !$0.archived }
+                .sorted { $0.sortOrder < $1.sortOrder }
 
             if let id = entryId {
-                // Seed slider values from the stored ones before reading the
-                // entry, then fall back to each definition's midpoint.
+                // Seed the sliders from what was stored before reading the entry,
+                // then let `MetricSliderColumn` rest the untouched ones.
                 let stored = try await session.listMetricValues(entryDomain: "bleeding", entryId: id)
-                var seeded: [Int64: UInt32] = [:]
-                for v in stored { seeded[v.metricId] = v.value }
-                values = seeded
+                values = Dictionary(uniqueKeysWithValues: stored.map { ($0.metricId, $0.value) })
 
-                if let e = try await session.getBleedingEntry(id) {
-                    date = Date(timeIntervalSince1970: Double(e.atMs) / 1000.0)
-                    isSpotting = e.isSpotting
-                    freeText = e.freeText ?? ""
+                if let entry = try await session.getBleedingEntry(id) {
+                    date = Date(timeIntervalSince1970: Double(entry.atMs) / 1000)
+                    isSpotting = entry.isSpotting
+                    freeText = entry.freeText ?? ""
                     entryLoaded = true
                 } else {
-                    self.error = "Entrée introuvable."
+                    error = "Cette entrée n'existe plus."
                 }
             }
         } catch {
@@ -85,14 +81,12 @@ final class AddBleedingEntryViewModel: ObservableObject {
         defer { saving = false }
         do {
             let text = freeText.trimmingCharacters(in: .whitespacesAndNewlines)
-            let metricValues = definitions.compactMap { def -> MetricValue? in
-                guard let v = values[def.id] else { return nil }
-                return MetricValue(metricId: def.id, value: v)
+            let metricValues: [MetricValue] = definitions.compactMap { def in
+                guard let raw = values[def.id] else { return nil }
+                return MetricValue(metricId: def.id, value: raw)
             }
 
             if rangeMode && entryId == nil {
-                // One entry per day at 12:00 local — noon keeps each entry
-                // inside its calendar day across every DST shift.
                 let cal = Calendar.current
                 let endDay = cal.startOfDay(for: rangeEnd)
                 var day = cal.startOfDay(for: rangeStart)
@@ -103,15 +97,17 @@ final class AddBleedingEntryViewModel: ObservableObject {
                         atMs: Int64(noon.timeIntervalSince1970 * 1000),
                         isSpotting: isSpotting,
                         freeText: text.isEmpty ? nil : text))
-                    day = cal.date(byAdding: .day, value: 1, to: day) ?? day.addingTimeInterval(86_400)
+                    day = cal.date(byAdding: .day, value: 1, to: day)
+                        ?? day.addingTimeInterval(86_400)
                 }
                 let saved = try await session.addBleedingEntries(entries)
-                // Slider writes are best-effort: the days are committed, and
-                // surfacing an error here would invite a retry that duplicates
-                // the whole span. Each day stays individually editable.
+                // The indicator writes are best effort: the days are already
+                // committed, and surfacing an error here would invite a retry
+                // that duplicates the whole span.
                 do {
-                    for e in saved {
-                        try await session.replaceMetricValues(entryDomain: "bleeding", entryId: e.id, values: metricValues)
+                    for entry in saved {
+                        try await session.replaceMetricValues(
+                            entryDomain: "bleeding", entryId: entry.id, values: metricValues)
                     }
                 } catch { /* non-fatal, see above */ }
                 return true
@@ -122,14 +118,15 @@ final class AddBleedingEntryViewModel: ObservableObject {
                 isSpotting: isSpotting,
                 freeText: text.isEmpty ? nil : text)
 
-            // Non-destructive: update keeps the id (and its slider values) stable.
+            // Non-destructive: an update keeps the id, and with it the values.
             let saved: BleedingEntry
             if let id = entryId {
                 saved = try await session.updateBleedingEntry(id, entry)
             } else {
                 saved = try await session.addBleedingEntry(entry)
             }
-            try await session.replaceMetricValues(entryDomain: "bleeding", entryId: saved.id, values: metricValues)
+            try await session.replaceMetricValues(
+                entryDomain: "bleeding", entryId: saved.id, values: metricValues)
             return true
         } catch {
             self.error = describe(error)
@@ -151,6 +148,8 @@ final class AddBleedingEntryViewModel: ObservableObject {
     }
 }
 
+// MARK: - Écran
+
 struct AddBleedingEntryView: View {
     let entryId: Int64?
 
@@ -160,135 +159,213 @@ struct AddBleedingEntryView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var vm = AddBleedingEntryViewModel()
 
+    @State private var confirmDelete = false
+    @State private var savedTick = 0
+
     init(entryId: Int64?) {
         self.entryId = entryId
     }
 
+    /// The segmented selector speaks in indices; the model speaks in a mode.
+    private var modeIndex: Binding<Int> {
+        Binding(
+            get: { vm.rangeMode ? 1 : 0 },
+            set: { vm.rangeMode = $0 == 1 })
+    }
+
+    private var canSave: Bool {
+        guard !vm.loading, !vm.saving else { return false }
+        if entryId != nil { return vm.entryLoaded }
+        return !vm.rangeMode || vm.rangeDayCount >= 1
+    }
+
     var body: some View {
         ScrollView {
-            VStack(spacing: Spacing.l) {
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                if entryId == nil {
+                    SegmentedSelector(
+                        options: ["Un jour", "Plusieurs jours"],
+                        selection: modeIndex,
+                        accessibilityLabel: "Ce que tu notes")
+                }
+
                 if vm.loading {
-                    ProgressView().tint(palette.primary).frame(maxWidth: .infinity).padding()
+                    SkeletonBlock(height: 88, cornerRadius: Radius.card)
+                    SkeletonBlock(height: 164, cornerRadius: Radius.card)
                 } else {
-                    if entryId == nil { modeCard }
                     if vm.rangeMode && entryId == nil { rangeCard } else { dateCard }
-                    kindCard
-                    if !vm.definitions.isEmpty { metricsCard }
-                    metricEditorLink
-                    notesCard
+                    kindBlock
+                    if !vm.definitions.isEmpty { slidersCard }
+                    customizeLink
+                    noteBox
                 }
-                if let e = vm.error { ErrorBanner(message: e) }
+
+                if let message = vm.error {
+                    ErrorCardView(message)
+                }
             }
-            .padding(Spacing.l)
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.top, Spacing.s)
+            .padding(.bottom, Metrics.blockGap)
         }
-        .navigationTitle(entryId == nil ? "Nouvelle entrée" : "Modifier l'entrée")
+        .background(palette.surface.ignoresSafeArea())
+        .navigationTitle(entryId == nil ? "Noter mes règles" : "Modifier")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Enregistrer") {
-                    if let session = app.session {
-                        Task { if await vm.save(session, entryId: entryId) { dismiss() } }
-                    }
-                }
-                .disabled(vm.loading || vm.saving ||
-                    (entryId != nil && !vm.entryLoaded) ||
-                    (entryId == nil && vm.rangeMode && vm.rangeDayCount < 1))
+        .eggActionBar {
+            ActionBarButton("Enregistrer", systemImage: "checkmark", enabled: canSave) { save() }
+        }
+        .overlay(alignment: .bottom) {
+            if savedTick > 0 {
+                SnackbarView(message: "Enregistré ✓")
+                    .padding(.bottom, Metrics.actionBarHeight + Spacing.m)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            if let id = entryId {
+        }
+        .sensoryFeedback(.success, trigger: savedTick)
+        .toolbar {
+            if entryId != nil {
                 ToolbarItem(placement: .destructiveAction) {
-                    Button("Supprimer", role: .destructive) {
-                        if let session = app.session {
-                            Task { if await vm.delete(session, entryId: id) { dismiss() } }
-                        }
-                    }
+                    Button("Supprimer", role: .destructive) { confirmDelete = true }
+                        .disabled(vm.saving)
                 }
             }
         }
-        .task { if let s = app.session { await vm.load(s, entryId: entryId) } }
+        .alert("Supprimer ce jour ?", isPresented: $confirmDelete) {
+            Button("Supprimer", role: .destructive) { delete() }
+            Button("Annuler", role: .cancel) {}
+        } message: {
+            Text("Ce jour disparaîtra de ton calendrier. C'est définitif.")
+        }
+        .task { if let session = app.session { await vm.load(session, entryId: entryId) } }
     }
 
-    private var modeCard: some View {
-        Picker("Mode", selection: $vm.rangeMode) {
-            Text("Un jour").tag(false)
-            Text("Plusieurs jours").tag(true)
-        }
-        .pickerStyle(.segmented)
-    }
+    // MARK: Quand
 
     private var dateCard: some View {
-        SectionCard {
-            Text("Date").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            // An entry can only be back-dated — cap the picker at now.
-            DatePicker("Date", selection: $vm.date, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
+        EggCard(variant: .low, spacing: Spacing.s) {
+            MicroLabel("QUAND")
+            // Back-datable, never post-dated: the log records what happened.
+            DatePicker(
+                "Quand", selection: $vm.date, in: ...Date(),
+                displayedComponents: [.date, .hourAndMinute])
                 .labelsHidden()
                 .tint(palette.primary)
-                .environment(\.locale, Locale(identifier: "fr"))
+                .environment(\.locale, Locale(identifier: "fr_FR"))
         }
     }
 
     private var rangeCard: some View {
-        SectionCard {
-            Text("Période").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            DatePicker("Début", selection: $vm.rangeStart, in: ...Date(), displayedComponents: [.date])
+        EggCard(variant: .low, spacing: Spacing.s) {
+            MicroLabel("DU PREMIER AU DERNIER JOUR")
+            DatePicker("Début", selection: $vm.rangeStart, in: ...Date(),
+                       displayedComponents: [.date])
                 .font(.eggBody)
                 .tint(palette.primary)
-                .environment(\.locale, Locale(identifier: "fr"))
-            DatePicker("Fin", selection: $vm.rangeEnd, in: ...Date(), displayedComponents: [.date])
+                .environment(\.locale, Locale(identifier: "fr_FR"))
+            DatePicker("Fin", selection: $vm.rangeEnd, in: ...Date(),
+                       displayedComponents: [.date])
                 .font(.eggBody)
                 .tint(palette.primary)
-                .environment(\.locale, Locale(identifier: "fr"))
+                .environment(\.locale, Locale(identifier: "fr_FR"))
             if vm.rangeDayCount >= 1 {
-                Text("\(vm.rangeDayCount) jours seront enregistrés.")
-                    .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
+                Text(vm.rangeDayCount == 1
+                        ? "Un jour sera noté."
+                        : "\(vm.rangeDayCount) jours seront notés, un par jour. "
+                            + "Tu pourras retoucher chacun.")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Le dernier jour arrive avant le premier — inverse-les.")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.error)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    private var kindCard: some View {
-        SectionCard {
-            Text("Type").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            HStack(spacing: Spacing.s) {
-                ChoiceChip(label: "Règles", selected: vm.isSpotting == false) {
-                    vm.isSpotting = (vm.isSpotting == false) ? nil : false
+    // MARK: Type
+
+    private var kindBlock: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            MicroLabel("CE QUE C'EST")
+            HStack(spacing: 7) {
+                PillView("Règles", selected: vm.isSpotting == false) {
+                    vm.isSpotting = vm.isSpotting == false ? nil : false
                 }
-                ChoiceChip(label: "Spotting", selected: vm.isSpotting == true) {
-                    vm.isSpotting = (vm.isSpotting == true) ? nil : true
+                PillView("Spotting", selected: vm.isSpotting == true) {
+                    vm.isSpotting = vm.isSpotting == true ? nil : true
                 }
+            }
+            if vm.isSpotting == nil {
+                Text("Tu peux laisser les deux de côté : ce jour restera « non précisé ».")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    private var metricsCard: some View {
-        SectionCard {
-            Text("Métriques").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            MetricSlidersView(definitions: vm.definitions, values: $vm.values)
+    // MARK: Curseurs
+
+    private var slidersCard: some View {
+        EggCard(variant: .low, paddingH: 18, paddingV: 18, spacing: Spacing.m) {
+            MetricSliderColumn(definitions: vm.definitions, values: $vm.values)
         }
     }
 
-    private var metricEditorLink: some View {
+    private var customizeLink: some View {
         Button {
             router.push(.metricEditor(domain: "bleeding"))
         } label: {
-            HStack {
-                Image(systemName: "slider.horizontal.3").foregroundStyle(palette.primary)
-                Text("Personnaliser les métriques").font(.eggCallout).foregroundStyle(palette.primary)
-                Spacer()
-                Image(systemName: "chevron.right").font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.4))
+            HStack(spacing: 9) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("Personnaliser les indicateurs")
+                    .font(EggFont.micro)
+                    .tracking(0.5)
+                Spacer(minLength: 0)
             }
-            .padding(Spacing.l)
-            .frame(maxWidth: .infinity)
-            .glassCard(cornerRadius: Corner.large)
+            .foregroundStyle(palette.primary)
+            .frame(minHeight: Metrics.touchTarget)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
-    private var notesCard: some View {
-        SectionCard {
-            Text("Note").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            TextField("Notes libres…", text: $vm.freeText, axis: .vertical)
+    // MARK: Note
+
+    private var noteBox: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            MicroLabel("NOTE LIBRE")
+            TextField("Ce que tu veux garder en tête…", text: $vm.freeText, axis: .vertical)
                 .font(.eggBody)
                 .foregroundStyle(palette.onSurface)
+                .tint(palette.primary)
                 .lineLimit(3...8)
         }
+        .padding(.horizontal, Metrics.screenMargin)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.field, style: .continuous)
+                .stroke(palette.outlineVariant, lineWidth: 1))
+    }
+
+    // MARK: Actions
+
+    private func save() {
+        guard let session = app.session else { return }
+        Task {
+            guard await vm.save(session, entryId: entryId) else { return }
+            withAnimation(.easeOut(duration: 0.18)) { savedTick += 1 }
+            try? await Task.sleep(nanoseconds: 750_000_000)
+            dismiss()
+        }
+    }
+
+    private func delete() {
+        guard let session = app.session, let id = entryId else { return }
+        Task { if await vm.delete(session, entryId: id) { dismiss() } }
     }
 }

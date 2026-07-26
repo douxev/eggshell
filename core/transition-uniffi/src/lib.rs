@@ -509,6 +509,18 @@ impl Vault {
         self.inner.delete_appointment(id)
     }
 
+    pub fn get_setting(&self, key: String) -> Result<Option<String>, TransitionError> {
+        self.inner.get_setting(key)
+    }
+
+    pub fn set_setting(&self, key: String, value: String) -> Result<(), TransitionError> {
+        self.inner.set_setting(key, value)
+    }
+
+    pub fn delete_setting(&self, key: String) -> Result<(), TransitionError> {
+        self.inner.delete_setting(key)
+    }
+
     pub fn encrypt_blob(&self, plaintext: Vec<u8>) -> Result<Vec<u8>, TransitionError> {
         self.inner.encrypt_blob(plaintext)
     }

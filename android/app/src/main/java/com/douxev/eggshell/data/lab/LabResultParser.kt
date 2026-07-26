@@ -61,12 +61,37 @@ object LabResultParser {
     /** Pseudo-kind for the paired blood-pressure reading. */
     private const val BP = "bp"
 
-    /** A number (decimal point or comma) followed by an allowed unit token. */
-    private val VALUE_UNIT_REGEX = Regex(
-        "(\\d{1,5}[.,]?\\d{0,3})\\s*" +
-            "(pg/mL|pg/ml|pmol/L|pmol/l|ng/dL|ng/dl|nmol/L|nmol/l|ng/mL|ng/ml|" +
+    /** The unit tokens a reading may legitimately carry, as a regex alternation. */
+    private const val UNIT_ALTERNATION =
+        "(pg/mL|pg/ml|pmol/L|pmol/l|ng/dL|ng/dl|nmol/L|nmol/l|ng/mL|ng/ml|" +
             "mIU/mL|mIU/ml|miu/ml|µIU/mL|µIU/ml|uIU/mL|uIU/ml|UI/L|ui/l|IU/L|iu/l|" +
-            "g/dL|g/dl|g/100\\s*mL|g/100\\s*ml|%)",
+            "g/dL|g/dl|g/100\\s*mL|g/100\\s*ml|%)"
+
+    /**
+     * A number (decimal point or comma) followed by an allowed unit token.
+     *
+     * The lookbehind refuses a number that begins in the middle of a possibly
+     * misread one. Without it « 1O,2 ng/mL » yields a perfectly clean-looking
+     * 2 and « I2,5 mIU/mL » a clean 2,5 — a fabricated value, silently stored,
+     * in a document a doctor will read. Refusing them here sends the line to
+     * the doubtful pass below, where the user gets to see the raw string.
+     */
+    private val VALUE_UNIT_REGEX = Regex(
+        "(?<![\\d.,OoIiLlSsB])(\\d{1,5}[.,]?\\d{0,3})\\s*$UNIT_ALTERNATION",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * Same shape as [VALUE_UNIT_REGEX], but tolerant of the glyphs OCR keeps
+     * confusing with digits (O→0, l/I→1, S→5, B→8). Only tried once the strict
+     * pass has come up empty, and anything it finds is flagged doubtful so the
+     * preview shows the raw string and leaves the row switched off.
+     *
+     * The leading lookbehind refuses a token glued to a word, which is what
+     * stops the tail of « Œstradiol » from being read as a number.
+     */
+    private val SLOPPY_VALUE_UNIT_REGEX = Regex(
+        "(?<![\\p{L}\\d.,])([\\dOoIiLlSsB]{1,5}[.,]?[\\dOoIiLlSsB]{0,3})\\s*$UNIT_ALTERNATION",
         RegexOption.IGNORE_CASE,
     )
 
@@ -107,6 +132,13 @@ object LabResultParser {
         val hormone: String,
         val value: Double,
         val unit: String,
+        /** The exact substring the number was read from, kept verbatim so the
+         *  preview can quote what the document actually said. */
+        val raw: String = "",
+        /** True when the raw token mixed letters into the number and we had to
+         *  repair it to parse. The value is a guess: the preview shows [raw] in
+         *  `error` and starts with the row switched off. */
+        val doubtful: Boolean = false,
     )
 
     /** Everything we managed to pull out of a single OCR pass. */
@@ -115,11 +147,15 @@ object LabResultParser {
         /** Best-guess "date of the lab draw". Null when no date could be
          *  recognised in the document; callers should default to "now". */
         val dateMs: Long?,
+        /** Laboratory named on the letterhead, when we recognise one. Feeds the
+         *  reading's provenance so the doctor report can tell an import from a
+         *  value typed in by hand. Null when nothing was recognised. */
+        val labName: String? = null,
     )
 
     fun parse(text: String): ParseResult {
         val lines = text.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
-        if (lines.isEmpty()) return ParseResult(emptyList(), null)
+        if (lines.isEmpty()) return ParseResult(emptyList(), null, null)
 
         val results = LinkedHashMap<String, ParsedValue>() // dedup by hormone, preserve insertion order
         for ((i, line) in lines.withIndex()) {
@@ -133,8 +169,12 @@ object LabResultParser {
                     ?: (i + 1).takeIf { it < lines.size }?.let { matchBp(lines[it]) }
                     ?: (i + 2).takeIf { it < lines.size }?.let { matchBp(lines[it]) }
                 if (pair != null) {
-                    results["bp_systolic"] = ParsedValue("bp_systolic", pair.first, "mmHg")
-                    results["bp_diastolic"] = ParsedValue("bp_diastolic", pair.second, "mmHg")
+                    results["bp_systolic"] = ParsedValue(
+                        "bp_systolic", pair.first, "mmHg", raw = trimNumber(pair.first),
+                    )
+                    results["bp_diastolic"] = ParsedValue(
+                        "bp_diastolic", pair.second, "mmHg", raw = trimNumber(pair.second),
+                    )
                 }
                 continue
             }
@@ -146,10 +186,55 @@ object LabResultParser {
                 ?: (i + 1).takeIf { it < lines.size }?.let { matchValue(lines[it], hormone) }
                 ?: (i + 2).takeIf { it < lines.size }?.let { matchValue(lines[it], hormone) }
             if (candidate != null) {
-                results[hormone] = ParsedValue(hormone, candidate.first, candidate.second)
+                results[hormone] = ParsedValue(
+                    hormone = hormone,
+                    value = candidate.value,
+                    unit = candidate.unit,
+                    raw = candidate.raw,
+                    doubtful = candidate.doubtful,
+                )
             }
         }
-        return ParseResult(values = results.values.toList(), dateMs = extractDate(text))
+        return ParseResult(
+            values = results.values.toList(),
+            dateMs = extractDate(text),
+            labName = detectLabName(lines),
+        )
+    }
+
+    /** Lab chains common enough on French reports to be worth naming exactly.
+     *  Anything else falls back to the letterhead's « Laboratoire … » line. */
+    private val LAB_CHAINS = listOf(
+        "Biogroup", "Cerballiance", "Synlab", "Eurofins", "Unilabs", "Bioclinic",
+        "Labazur", "Inovie", "Dyomedea", "Biopath", "Oriade", "Novescia",
+        "Labosud", "Laborizon", "Bioesterel", "Biomnis", "Labcorp",
+        "Quest Diagnostics",
+    )
+
+    /** « Laboratoire de biologie médicale Saint-Roch », « LABORATOIRE DUPONT »… */
+    private val LAB_LINE_REGEX = Regex(
+        "(laboratoire(?:\\s+de\\s+biologie(?:\\s+m[ée]dicale)?)?[^,;|(]{0,40})",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * Reads the laboratory off the letterhead. Only the top of the document is
+     * scanned: further down, « laboratoire » shows up in footnotes and in
+     * reference-range disclaimers, which name nothing useful.
+     */
+    internal fun detectLabName(lines: List<String>): String? {
+        val head = lines.take(20)
+        for (line in head) {
+            LAB_CHAINS.firstOrNull { line.contains(it, ignoreCase = true) }?.let { return it }
+        }
+        for (line in head) {
+            val hit = LAB_LINE_REGEX.find(line)?.groupValues?.get(1)
+                ?.trim()?.trimEnd('-', '–', ':', '.')?.trim()
+                ?: continue
+            // A bare "Laboratoire" with nothing behind it names nobody.
+            if (hit.length > 14) return hit.take(48)
+        }
+        return null
     }
 
     /**
@@ -223,14 +308,53 @@ object LabResultParser {
         "hematocrit" to setOf("%"),
     )
 
-    private fun matchValue(line: String, kind: String): Pair<Double, String>? {
+    /** One reading pulled off a line, with what the document literally showed. */
+    private data class ValueHit(
+        val value: Double,
+        val unit: String,
+        val raw: String,
+        val doubtful: Boolean,
+    )
+
+    private fun matchValue(line: String, kind: String): ValueHit? {
         val allowed = ALLOWED_UNITS[kind] ?: HORMONE_UNITS
         for (m in VALUE_UNIT_REGEX.findAll(line)) {
             val value = m.groupValues[1].replace(',', '.').toDoubleOrNull() ?: continue
             val unit = normalizeUnit(m.groupValues[2])
-            if (unit in allowed) return value to unit
+            if (unit in allowed) return ValueHit(value, unit, m.groupValues[1], doubtful = false)
+        }
+        // Nothing clean here. Retry tolerating the classic OCR confusions, and
+        // hand the result back marked doubtful: we would rather show the user
+        // « 1O,2 » and let them decide than silently store a fabricated 10.2.
+        for (m in SLOPPY_VALUE_UNIT_REGEX.findAll(line)) {
+            val token = m.groupValues[1]
+            // "ol", "Il", "SS" — a scrap of a word, not a misread number.
+            if (token.none { it.isDigit() }) continue
+            val value = repairDigits(token).replace(',', '.').toDoubleOrNull() ?: continue
+            val unit = normalizeUnit(m.groupValues[2])
+            if (unit in allowed) return ValueHit(value, unit, token, doubtful = true)
         }
         return null
+    }
+
+    /** Undo the glyph confusions OCR makes inside a number. Keep the character
+     *  set in step with [SLOPPY_VALUE_UNIT_REGEX]. */
+    private fun repairDigits(token: String): String = buildString {
+        for (c in token) append(
+            when (c) {
+                'O', 'o' -> '0'
+                'I', 'i', 'L', 'l' -> '1'
+                'S', 's' -> '5'
+                'B' -> '8'
+                else -> c
+            },
+        )
+    }
+
+    /** "128.0" → "128", for the raw string we quote back at the user. */
+    private fun trimNumber(v: Double): String {
+        val s = v.toString()
+        return if (s.endsWith(".0")) s.dropLast(2) else s
     }
 
     /**

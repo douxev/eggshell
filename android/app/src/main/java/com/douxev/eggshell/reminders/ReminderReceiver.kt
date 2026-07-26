@@ -4,7 +4,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import dagger.hilt.android.AndroidEntryPoint
+import java.time.Instant
+import java.time.ZoneId
 import javax.inject.Inject
+import kotlin.math.roundToLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -135,6 +138,10 @@ class ReminderReceiver : BroadcastReceiver() {
      * locked, we can't touch the encrypted dose log, so we queue the tap
      * (sealed) and commit it on the next real unlock, and just advance the
      * alarm so the user doesn't get re-pinged for the same dose.
+     *
+     * Either way the **prescribed time travels with the tap** — that is what
+     * makes the offset ("+1 h 47") computable later. The offset itself is never
+     * stored, only the two timestamps.
      */
     private fun handleMark(context: Context, intent: Intent, status: String) {
         val scheduleId = intent.getLongExtra(AlarmScheduler.EXTRA_SCHEDULE_ID, -1L)
@@ -149,24 +156,33 @@ class ReminderReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val now = System.currentTimeMillis()
                 if (vault.isUnlocked) {
                     runCatching {
-                        val med = vault.requireSession().listActiveSchedules()
+                        val sched = vault.requireSession().listActiveSchedules()
                             .firstOrNull { it.id == scheduleId }
-                            ?.let { sched -> medications.get(sched.medicationId) }
-                        if (med != null) {
+                        val med = sched?.let { medications.get(it.medicationId) }
+                        if (sched != null && med != null) {
                             val taken = status == "taken"
                             medications.logDose(
                                 uniffi.transition.NewDoseEvent(
                                     medicationId = med.id,
-                                    takenAtMs = System.currentTimeMillis(),
+                                    takenAtMs = now,
                                     dose = if (taken) med.defaultDose else null,
                                     doseUnit = if (taken) med.defaultDoseUnit else null,
                                     route = if (taken) med.route else null,
                                     injectionSite = null,
                                     notes = null,
                                     status = status,
-                                    scheduledAtMs = null,
+                                    scheduledAtMs = DueOccurrence.nearest(
+                                        kind = sched.kind,
+                                        intervalMinutes = sched.intervalMinutes?.toInt(),
+                                        dailyHour = sched.dailyHour?.toInt(),
+                                        dailyMinute = sched.dailyMinute?.toInt(),
+                                        intervalDays = sched.intervalDays?.toInt(),
+                                        anchorMs = sched.nextDueAtMs,
+                                        atMs = now,
+                                    ),
                                     scheduleId = scheduleId,
                                 )
                             )
@@ -179,14 +195,27 @@ class ReminderReceiver : BroadcastReceiver() {
                     // real unlock. This works in every security mode, including
                     // Paranoid / passphrase, since the queue defers all DB
                     // writes. We need the medication id to log against later —
-                    // it lives in the plain alarm mirror, not the DB.
-                    val medId = ReminderPrefs(context).get(scheduleId)?.medicationId ?: -1L
+                    // it lives in the plain alarm mirror, not the DB, and so
+                    // does the cadence we derive the prescribed time from.
+                    val entry = ReminderPrefs(context).get(scheduleId)
+                    val medId = entry?.medicationId ?: -1L
                     val queued = medId >= 0 && pendingDoses.add(
                         PendingDosePrefs.Pending(
                             scheduleId = scheduleId,
                             medicationId = medId,
-                            takenAtMs = System.currentTimeMillis(),
+                            takenAtMs = now,
                             status = status,
+                            scheduledAtMs = entry?.let {
+                                DueOccurrence.nearest(
+                                    kind = it.kind,
+                                    intervalMinutes = it.intervalMinutes,
+                                    dailyHour = it.dailyHour,
+                                    dailyMinute = it.dailyMinute,
+                                    intervalDays = it.intervalDays,
+                                    anchorMs = it.nextDueAtMs,
+                                    atMs = now,
+                                )
+                            },
                         )
                     )
                     val toast = if (queued) {
@@ -245,4 +274,80 @@ class ReminderReceiver : BroadcastReceiver() {
         if (appointmentId < 0) return
         notifier.showAppointment(appointmentId)
     }
+}
+
+/**
+ * Which occurrence of a schedule an intake answers.
+ *
+ * You cannot simply read a schedule's `next_due_at_ms` and call it the
+ * prescribed time: by the time the user taps "Pris" on the notification,
+ * [ReminderReceiver.handleMed] has already advanced both the plain mirror and
+ * the DB row to the *following* occurrence. So we replay the cadence and keep
+ * the occurrence closest to the intake — which is exactly the rule
+ * [com.douxev.eggshell.data.PlannedDoses] uses when it pairs occurrences with
+ * intakes, so the writer and the reader can never disagree.
+ *
+ * Returns null when the schedule carries no usable cadence: no prescribed time
+ * is far better than a made-up one (D2).
+ */
+internal object DueOccurrence {
+
+    fun nearest(
+        kind: String,
+        intervalMinutes: Int?,
+        dailyHour: Int?,
+        dailyMinute: Int?,
+        intervalDays: Int?,
+        anchorMs: Long,
+        atMs: Long,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): Long? = when (kind) {
+        "interval" -> {
+            val cadence = (intervalMinutes ?: 0).toLong() * 60_000L
+            if (cadence <= 0L) {
+                null
+            } else {
+                // Pure arithmetic: an "every N hours" schedule has no wall-clock
+                // anchor to preserve across a DST change.
+                val steps = ((atMs - anchorMs).toDouble() / cadence).roundToLong()
+                anchorMs + steps * cadence
+            }
+        }
+        "daily", "days_interval" -> {
+            val hour = dailyHour
+            val minute = dailyMinute
+            val step = if (kind == "days_interval") (intervalDays ?: 0).toLong() else 1L
+            if (hour == null || minute == null || step <= 0L) {
+                null
+            } else {
+                // plusDays/minusDays keep the wall-clock HH:MM across DST, which
+                // is what a daily reminder means to the person taking it.
+                var at = Instant.ofEpochMilli(anchorMs).atZone(zone)
+                    .withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+                var guard = 0
+                while (at.toInstant().toEpochMilli() > atMs && guard++ < MAX_STEPS) {
+                    at = at.minusDays(step)
+                }
+                while (
+                    at.plusDays(step).toInstant().toEpochMilli() <= atMs && guard++ < MAX_STEPS
+                ) {
+                    at = at.plusDays(step)
+                }
+                val previous = at.toInstant().toEpochMilli()
+                val next = at.plusDays(step).toInstant().toEpochMilli()
+                if (atMs - previous <= next - atMs) previous else next
+            }
+        }
+        else -> null
+    }
+
+    /** Half a cadence — outside it, an intake answers no occurrence at all. */
+    fun toleranceMs(kind: String, intervalMinutes: Int?, intervalDays: Int?): Long = when (kind) {
+        "interval" -> (intervalMinutes?.toLong() ?: DAY_MINUTES) * 60_000L
+        "days_interval" -> (intervalDays?.toLong() ?: 1L) * 86_400_000L
+        else -> 86_400_000L
+    }.coerceAtLeast(60_000L) / 2L
+
+    private const val MAX_STEPS = 4000
+    private const val DAY_MINUTES = 24L * 60L
 }

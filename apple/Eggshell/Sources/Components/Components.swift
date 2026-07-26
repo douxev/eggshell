@@ -1,6 +1,9 @@
 import SwiftUI
 
-// Shared building blocks. Screens compose these so the look stays uniform.
+// Pre-refonte building blocks, kept while the screens are rewritten one by one
+// against the new kit (`EggKit.swift`, `ListRows.swift`, `Controls.swift`,
+// `Charts.swift`). ~120 call sites still reach for `SectionCard`, so these types
+// stay until the last screen has moved; new code should use the kit.
 
 /// Status for add/edit forms. Mirrors the Android Idle/Submitting/Done/Error pattern.
 enum FormStatus: Equatable {
@@ -26,7 +29,7 @@ struct ScreenHeader: View {
                 NavigationLink(value: Route.settingsHub) {
                     Image(systemName: "gearshape")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(palette.onSurface.opacity(0.7))
+                        .foregroundStyle(palette.onSurfaceVariant)
                         .padding(8)
                 }
                 .buttonStyle(.plain)
@@ -58,11 +61,11 @@ struct EmptyStateCard: View {
             if let systemImage {
                 Image(systemName: systemImage)
                     .font(.system(size: 28))
-                    .foregroundStyle(palette.onSurface.opacity(0.4))
+                    .foregroundStyle(palette.onSurfaceVariant.opacity(0.7))
             }
             Text(text)
                 .font(.eggCallout)
-                .foregroundStyle(palette.onSurface.opacity(0.6))
+                .foregroundStyle(palette.onSurfaceVariant)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -131,10 +134,11 @@ struct TabScaffold<Content: View>: View {
                     ScreenHeader(title: title)
                     content()
                         .padding(.horizontal, Spacing.l)
-                    Color.clear.frame(height: 80) // FAB clearance
+                    // Reserves the band an anchored action bar lives in.
+                    Color.clear.frame(height: Metrics.actionBarHeight)
                 }
             }
         }
-        // Route destinations are registered once per NavigationStack in HomeTabView.
+        // Route destinations are registered once, on the root stack (AppShell).
     }
 }

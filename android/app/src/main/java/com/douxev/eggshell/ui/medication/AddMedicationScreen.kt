@@ -1,5 +1,6 @@
 package com.douxev.eggshell.ui.medication
 
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,27 +15,28 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -50,7 +52,12 @@ import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.MedicationRepository
 import com.douxev.eggshell.reminders.MedAliasPrefs
+import com.douxev.eggshell.ui.common.ScreenHeader
 import com.douxev.eggshell.ui.common.clickToDismissKeyboard
+import com.douxev.eggshell.ui.components.ActionBand
+import com.douxev.eggshell.ui.components.SectionTitle
+import com.douxev.eggshell.ui.theme.EggDim
+import com.douxev.eggshell.ui.theme.EggShapes
 import uniffi.transition.Medication
 import uniffi.transition.NewMedication
 import uniffi.transition.NewTreatmentChange
@@ -146,10 +153,10 @@ class AddMedicationViewModel @Inject constructor(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddMedicationScreen(
     onDone: (Long) -> Unit,
+    onBack: (() -> Unit)? = null,
     vm: AddMedicationViewModel = hiltViewModel(),
 ) {
     val status by vm.status.collectAsState()
@@ -180,7 +187,7 @@ fun AddMedicationScreen(
             name = m.name
             kind = m.kind
             route = m.route
-            dose = m.defaultDose?.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() }.orEmpty()
+            dose = m.defaultDose?.let { formatDoseValue(it) }.orEmpty()
             unit = m.defaultDoseUnit.orEmpty()
             notes = m.notes.orEmpty()
             notifAlias = loadedAlias.orEmpty()
@@ -190,38 +197,74 @@ fun AddMedicationScreen(
     }
 
     val canSubmit = name.isNotBlank() && status != AddMedicationViewModel.Status.Submitting
+    // No caller passes a back callback yet: the pushed screen falls back to the
+    // system dispatcher, which pops exactly the same way the arrow should.
+    val dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    val goBack: () -> Unit = onBack ?: { dispatcher?.onBackPressed() }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
+        containerColor = MaterialTheme.colorScheme.surface,
+        bottomBar = {
+            ActionBand(alignment = Alignment.Center) {
+                Button(
+                    enabled = canSubmit,
+                    shape = EggShapes.Pill,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        vm.submit(
+                            NewMedication(
+                                name = name.trim(),
+                                kind = kind,
+                                route = route,
+                                defaultDose = dose.replace(',', '.').toDoubleOrNull(),
+                                defaultDoseUnit = unit.ifBlank { null },
+                                color = color,
+                                notes = notes.ifBlank { null },
+                            ),
+                            notifAlias = notifAlias.ifBlank { null },
+                        )
+                    },
+                ) {
                     Text(
                         stringResource(
-                            if (vm.isEditing) R.string.med_edit_title else R.string.med_add_title
+                            if (vm.isEditing) R.string.action_save else R.string.med_create
                         )
                     )
                 }
-            )
-        }
+            }
+        },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .clickToDismissKeyboard()
-                .padding(horizontal = 24.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = EggDim.ScreenMargin),
+            verticalArrangement = Arrangement.spacedBy(EggDim.BlockGap),
         ) {
+            ScreenHeader(
+                title = stringResource(
+                    if (vm.isEditing) R.string.med_edit_title else R.string.med_add_title
+                ),
+                onBack = goBack,
+            )
+
+            SectionTitle(stringResource(R.string.meds_section_identity))
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
                 label = { Text(stringResource(R.string.med_field_name)) },
                 singleLine = true,
+                shape = EggShapes.Field,
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Text(stringResource(R.string.med_field_kind), style = MaterialTheme.typography.labelLarge)
+            Text(
+                stringResource(R.string.med_field_kind),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             ChipGroup(
                 options = MedicationCatalog.KINDS,
                 selected = kind,
@@ -229,7 +272,11 @@ fun AddMedicationScreen(
                 onSelected = { kind = it },
             )
 
-            Text(stringResource(R.string.med_field_route), style = MaterialTheme.typography.labelLarge)
+            Text(
+                stringResource(R.string.med_field_route),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             ChipGroup(
                 options = MedicationCatalog.ROUTES,
                 selected = route,
@@ -237,12 +284,14 @@ fun AddMedicationScreen(
                 onSelected = { route = it },
             )
 
+            SectionTitle(stringResource(R.string.meds_section_dose))
             OutlinedTextField(
                 value = dose,
                 onValueChange = { dose = it.filter { c -> c.isDigit() || c == '.' || c == ',' } },
                 label = { Text(stringResource(R.string.med_field_default_dose)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
+                shape = EggShapes.Field,
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
@@ -250,52 +299,36 @@ fun AddMedicationScreen(
                 onValueChange = { unit = it },
                 label = { Text(stringResource(R.string.med_field_dose_unit)) },
                 singleLine = true,
+                shape = EggShapes.Field,
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
                 label = { Text(stringResource(R.string.med_field_notes)) },
+                shape = EggShapes.Field,
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            SectionTitle(stringResource(R.string.meds_section_notification))
             OutlinedTextField(
                 value = notifAlias,
                 onValueChange = { notifAlias = it.take(40) },
                 label = { Text(stringResource(R.string.med_field_notif_alias)) },
                 supportingText = { Text(stringResource(R.string.med_field_notif_alias_hint)) },
                 singleLine = true,
+                shape = EggShapes.Field,
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Text(stringResource(R.string.med_field_color), style = MaterialTheme.typography.labelLarge)
+            SectionTitle(stringResource(R.string.meds_section_color))
             ColorSwatchPicker(selected = color, onSelected = { color = it })
-
-            Button(
-                enabled = canSubmit,
-                onClick = {
-                    vm.submit(
-                        NewMedication(
-                            name = name.trim(),
-                            kind = kind,
-                            route = route,
-                            defaultDose = dose.replace(',', '.').toDoubleOrNull(),
-                            defaultDoseUnit = unit.ifBlank { null },
-                            color = color,
-                            notes = notes.ifBlank { null },
-                        ),
-                        notifAlias = notifAlias.ifBlank { null },
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(if (vm.isEditing) R.string.action_save else R.string.med_create))
-            }
 
             error?.let {
                 Text(
                     stringResource(R.string.med_error_prefix, it),
                     color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
@@ -318,9 +351,10 @@ private fun ColorSwatchPicker(selected: Long?, onSelected: (Long?) -> Unit) {
         modifier = Modifier.fillMaxWidth(),
     ) {
         // "None" option.
+        val noneLabel = stringResource(R.string.meds_color_none_cd)
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(EggDim.TouchTarget)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 .border(
@@ -329,15 +363,19 @@ private fun ColorSwatchPicker(selected: Long?, onSelected: (Long?) -> Unit) {
                             else MaterialTheme.colorScheme.outlineVariant,
                     shape = CircleShape,
                 )
-                .clickable { onSelected(null) },
+                .clickable { onSelected(null) }
+                .semantics { contentDescription = noneLabel },
             contentAlignment = Alignment.Center,
         ) {
             Text("∅", style = MaterialTheme.typography.bodyMedium)
         }
-        MED_COLOR_SWATCHES.forEach { swatch ->
+        MED_COLOR_SWATCHES.forEachIndexed { index, swatch ->
+            // A swatch has no name a translator could write, so the accessible
+            // label numbers them — the value itself is the user's own choice.
+            val label = stringResource(R.string.meds_color_swatch_cd, index + 1)
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(EggDim.TouchTarget)
                     .clip(CircleShape)
                     .background(Color(swatch))
                     .border(
@@ -346,13 +384,18 @@ private fun ColorSwatchPicker(selected: Long?, onSelected: (Long?) -> Unit) {
                                 else MaterialTheme.colorScheme.outlineVariant,
                         shape = CircleShape,
                     )
-                    .clickable { onSelected(swatch) },
+                    .clickable { onSelected(swatch) }
+                    .semantics { contentDescription = label },
             )
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+/**
+ * The filter-chip row of the Médics forms. D4: a filter chip is a different
+ * species from a period pill — radius 10, not 100.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ChipGroup(
     options: List<String>,
@@ -370,7 +413,10 @@ internal fun ChipGroup(
                 selected = opt == selected,
                 onClick = { onSelected(opt) },
                 label = { Text(labelOf(opt)) },
+                shape = ChipGroupShape,
             )
         }
     }
 }
+
+private val ChipGroupShape = RoundedCornerShape(10.dp)

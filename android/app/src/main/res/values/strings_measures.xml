@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Zone « Mesures » (§6.8) et « Importer une analyse » (§6.9).
+  Les libellés en petites capitales sont écrits en majuscules ici : une
+  traduction doit pouvoir refuser la capitale, donc jamais de textTransform.
+-->
+<resources>
+
+    <!-- ==== Mesures ==================================================== -->
+    <string name="measures_title">Mesures</string>
+    <string name="measures_import_action">Importer une analyse</string>
+
+    <string name="measures_last_value_fmt">DERNIÈRE VALEUR · %1$s</string>
+    <string name="measures_last_weight_fmt">DERNIÈRE PESÉE · %1$s</string>
+
+    <string name="measures_delta_up_fmt">↗ %1$s</string>
+    <string name="measures_delta_down_fmt">↘ %1$s</string>
+    <string name="measures_delta_flat_fmt">→ %1$s</string>
+    <string name="measures_delta_up_a11y_fmt">En hausse de %1$s depuis le relevé précédent</string>
+    <string name="measures_delta_down_a11y_fmt">En baisse de %1$s depuis le relevé précédent</string>
+    <string name="measures_delta_flat_a11y">Identique au relevé précédent</string>
+
+    <string name="measures_legend_doses">Prises notées</string>
+    <string name="measures_legend_change">Changement de dose</string>
+    <string name="measures_chart_a11y_fmt">Courbe de %1$s, de %2$s à %3$s. Dernière valeur %4$s.</string>
+    <string name="measures_chart_one_point">Encore un relevé et la courbe se dessine.</string>
+
+    <string name="measures_readings">Relevés</string>
+    <string name="measures_reading_manual">Saisi à la main</string>
+    <string name="measures_reading_sub_fmt">%1$s · %2$s</string>
+    <string name="measures_reading_original_fmt">%1$s %2$s</string>
+    <string name="measures_reading_edit">Modifier ce relevé</string>
+    <string name="measures_reading_a11y_fmt">%1$s, %2$s %3$s</string>
+
+    <string name="measures_add">Ajouter</string>
+    <string name="measures_add_measurement">Ajouter un relevé</string>
+    <string name="measures_add_weight">Noter un poids</string>
+
+    <string name="measures_empty_hormones">Tes analyses n’ont pas encore de courbe. Ajoute un résultat, ou importe directement le PDF de ton labo.</string>
+    <string name="measures_empty_hormones_action">Importer une analyse</string>
+    <string name="measures_empty_weight">Note ton poids de temps en temps : la courbe se dessine toute seule.</string>
+    <string name="measures_empty_weight_action">Noter un poids</string>
+
+    <!-- ==== Nouveau relevé (saisie manuelle) =========================== -->
+    <string name="measures_new_title">Nouveau relevé</string>
+    <string name="measures_new_hint">Recopie ce que dit ta feuille : la valeur est gardée exactement comme tu la saisis.</string>
+
+    <!-- ==== Importer une analyse — les 4 étapes ======================== -->
+    <string name="ocr_title">Importer une analyse</string>
+    <string name="ocr_offline">Hors ligne</string>
+    <string name="ocr_progress_a11y_fmt">Étape %1$d sur 4</string>
+
+    <string name="ocr_step1_caption">1 / 4 · CHOISIS TON FICHIER</string>
+    <string name="ocr_step2_caption">2 / 4 · LECTURE EN COURS</string>
+    <string name="ocr_step3_caption">3 / 4 · VÉRIFIE CE QU’ON A LU</string>
+    <string name="ocr_step4_caption">4 / 4 · C’EST ENREGISTRÉ</string>
+
+    <string name="ocr_step1_title">Ton bilan reste ici</string>
+    <string name="ocr_step1_body">Choisis le PDF que ton labo t’a envoyé, ou une photo de la feuille. Tout est lu sur ton téléphone, sans connexion.</string>
+    <string name="ocr_step1_hint">On reconnaît l’œstradiol, la testostérone, la progestérone, la LH, la FSH, la prolactine, la SHBG, l’hémoglobine, l’hématocrite et la tension.</string>
+    <string name="ocr_pick">Choisir un fichier</string>
+
+    <string name="ocr_step2_title">On lit ton document…</string>
+    <string name="ocr_step2_body">Ça se passe entièrement sur ton téléphone. Une photo demande parfois quelques secondes de plus qu’un PDF.</string>
+
+    <string name="ocr_date_label">Date de prélèvement</string>
+    <string name="ocr_date_edit">Modifier</string>
+    <string name="ocr_date_a11y_fmt">Date de prélèvement : %1$s. Modifier.</string>
+    <string name="ocr_uncertain_fmt">Lecture incertaine · « %1$s »</string>
+    <string name="ocr_keep_fmt">Garder %1$s</string>
+    <string name="ocr_privacy">Le PDF a été lu sur l’appareil. Rien n’est envoyé, et le fichier d’origine n’est pas conservé.</string>
+    <string name="ocr_save_none">Rien à enregistrer</string>
+
+    <string name="ocr_step4_title">C’est enregistré</string>
+    <string name="ocr_step4_note">Le fichier d’origine n’a pas été gardé, et rien n’a quitté ton téléphone.</string>
+    <string name="ocr_step4_done">Voir mes mesures</string>
+
+    <!-- Deux erreurs distinctes : PDF verrouillé, ou lecture impossible. -->
+    <string name="ocr_locked_title">Ce PDF est protégé</string>
+    <string name="ocr_locked_body">Beaucoup de labos verrouillent leurs PDF. Tape le mot de passe qu’ils t’ont donné : il sert une seule fois, et il n’est jamais enregistré.</string>
+    <string name="ocr_locked_label">Mot de passe du PDF</string>
+    <string name="ocr_locked_wrong">Ce mot de passe n’a pas fonctionné. Réessaie.</string>
+    <string name="ocr_locked_unlock">Déverrouiller</string>
+
+    <string name="ocr_failed_title">Je n’arrive pas à lire ce document</string>
+    <string name="ocr_failed_body">Le fichier est peut-être trop flou, ou sa mise en page trop inhabituelle. Tu peux réessayer avec une photo plus nette, ou saisir les valeurs toi-même.</string>
+    <string name="ocr_failed_none_title">Aucune valeur reconnue</string>
+    <string name="ocr_failed_none_body">Le document s’ouvre bien, mais je n’y ai rien reconnu. Essaie une autre page, ou saisis les valeurs toi-même.</string>
+    <string name="ocr_retry">Choisir un autre fichier</string>
+    <string name="ocr_manual">Saisir à la main</string>
+
+    <!-- L’enregistrement lui-même a échoué : on reste sur l’aperçu, valeurs intactes. -->
+    <string name="ocr_save_failed_title">Ça n’est pas passé</string>
+    <string name="ocr_save_failed_body">Rien n’est perdu : ce qu’on a lu est toujours là. Réessaie l’enregistrement.</string>
+
+    <!-- Provenance écrite dans le relevé quand le labo n’a pas été reconnu. -->
+    <string name="ocr_lab_fallback">PDF importé</string>
+
+    <plurals name="ocr_detected">
+        <item quantity="one">%d valeur détectée</item>
+        <item quantity="other">%d valeurs détectées</item>
+    </plurals>
+    <plurals name="ocr_save">
+        <item quantity="one">Enregistrer %d valeur</item>
+        <item quantity="other">Enregistrer %d valeurs</item>
+    </plurals>
+    <plurals name="ocr_step4_body">
+        <item quantity="one">%d valeur a rejoint tes mesures.</item>
+        <item quantity="other">%d valeurs ont rejoint tes mesures.</item>
+    </plurals>
+    <plurals name="ocr_save_failed_partial">
+        <item quantity="one">%d valeur avait déjà rejoint tes mesures : elle est décochée pour ne pas être enregistrée deux fois.</item>
+        <item quantity="other">%d valeurs avaient déjà rejoint tes mesures : elles sont décochées pour ne pas être enregistrées deux fois.</item>
+    </plurals>
+
+</resources>

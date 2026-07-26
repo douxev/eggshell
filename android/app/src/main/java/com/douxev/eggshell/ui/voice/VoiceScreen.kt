@@ -1,60 +1,71 @@
 package com.douxev.eggshell.ui.voice
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -72,6 +83,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.VoiceRepository
+import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.components.CardRule
+import com.douxev.eggshell.ui.components.CardVariant
+import com.douxev.eggshell.ui.components.Decorative
+import com.douxev.eggshell.ui.components.EggCard
+import com.douxev.eggshell.ui.components.EmptyState
+import com.douxev.eggshell.ui.components.ErrorCard
+import com.douxev.eggshell.ui.components.MicroLabel
+import com.douxev.eggshell.ui.components.SectionTitle
+import com.douxev.eggshell.ui.components.SkeletonBlock
+import com.douxev.eggshell.ui.components.StatusPill
+import com.douxev.eggshell.ui.theme.EggColors
+import com.douxev.eggshell.ui.theme.EggDim
+import com.douxev.eggshell.ui.theme.EggShapes
 import uniffi.transition.VoiceClip
 
 @HiltViewModel
@@ -90,10 +115,10 @@ class VoiceViewModel @Inject constructor(
         val phase: Phase = Phase.Idle,
         val recordingMs: Long = 0L,
         val playingId: String? = null,
-        val error: String? = null,
+        val loading: Boolean = true,
+        val failed: Boolean = false,
     ) {
         val recording: Boolean get() = phase == Phase.Recording
-        val processing: Boolean get() = phase == Phase.Processing
     }
 
     private val _state = MutableStateFlow(State())
@@ -104,7 +129,8 @@ class VoiceViewModel @Inject constructor(
     }
 
     suspend fun refresh() {
-        _state.value = _state.value.copy(clips = repo.list())
+        val clips = runCatching { repo.list() }.getOrDefault(emptyList())
+        _state.value = _state.value.copy(clips = clips, loading = false)
     }
 
     fun startRecording() {
@@ -112,10 +138,10 @@ class VoiceViewModel @Inject constructor(
         runCatching { repo.startRecording() }
             .onSuccess {
                 _state.value = _state.value.copy(
-                    phase = Phase.Recording, recordingMs = 0L, error = null,
+                    phase = Phase.Recording, recordingMs = 0L, failed = false,
                 )
             }
-            .onFailure { _state.value = _state.value.copy(error = it.message) }
+            .onFailure { _state.value = _state.value.copy(failed = true) }
     }
 
     fun tickRecording(ms: Long) {
@@ -127,14 +153,14 @@ class VoiceViewModel @Inject constructor(
     fun stopRecording() {
         // Bail if the user double-taps while we're already wrapping up.
         if (_state.value.phase != Phase.Recording) return
-        // Flip the UI to "Processing" immediately so the button shows a
-        // spinner and ignores further taps. The actual encrypt + pitch-detect
-        // work then runs on the IO dispatcher and can take a few seconds.
+        // Flip the UI to "Processing" immediately so the button stops taking
+        // taps. The actual encrypt + pitch-detect work then runs on the IO
+        // dispatcher and can take a few seconds.
         _state.value = _state.value.copy(phase = Phase.Processing, recordingMs = 0L)
         viewModelScope.launch {
-            runCatching { repo.stopRecording() }
-                .onFailure { _state.value = _state.value.copy(error = it.message) }
-            _state.value = _state.value.copy(phase = Phase.Idle, clips = repo.list())
+            val ok = runCatching { repo.stopRecording() }.isSuccess
+            _state.value = _state.value.copy(phase = Phase.Idle, failed = !ok)
+            refresh()
         }
     }
 
@@ -143,6 +169,10 @@ class VoiceViewModel @Inject constructor(
             repo.cancelRecording()
             _state.value = _state.value.copy(phase = Phase.Idle, recordingMs = 0L)
         }
+    }
+
+    fun dismissFailure() {
+        _state.value = _state.value.copy(failed = false)
     }
 
     fun togglePlay(entry: VoiceClip) {
@@ -168,7 +198,7 @@ class VoiceViewModel @Inject constructor(
                 repo.stopPlayback()
                 _state.value = _state.value.copy(playingId = null)
             }
-            repo.delete(entry)
+            runCatching { repo.delete(entry) }
             refresh()
         }
     }
@@ -185,21 +215,44 @@ class VoiceViewModel @Inject constructor(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Voix (§6.11). One curve, one big button, one list. No action band: the thing
+ * you came to do is the 96 dp button in the middle of the screen, not a FAB in
+ * the corner.
+ */
 @Composable
 fun VoiceScreen(
     onBack: () -> Unit,
-    onOpenSettings: () -> Unit = {},
     vm: VoiceViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    var micDenied by rememberSaveable { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<VoiceClip?>(null) }
+    val deletedMsg = stringResource(R.string.media_voice_deleted)
+
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted -> if (granted) vm.startRecording() }
+    ) { granted ->
+        micDenied = !granted
+        if (granted) vm.startRecording()
+    }
+    val onRecordTap = {
+        when (state.phase) {
+            VoiceViewModel.Phase.Recording -> vm.stopRecording()
+            VoiceViewModel.Phase.Idle -> {
+                micDenied = false
+                permLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+            VoiceViewModel.Phase.Processing -> Unit
+        }
+    }
 
-    // Recording timer
+    // Recording timer. The 100 ms cadence is what makes the seconds tick
+    // visibly rather than jumping — it's the only feedback that the mic is
+    // actually live.
     LaunchedEffect(state.recording) {
         if (state.recording) {
             val start = System.currentTimeMillis()
@@ -211,221 +264,315 @@ fun VoiceScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.voice_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back),
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(
-                            Icons.Filled.MoreHoriz,
-                            contentDescription = stringResource(R.string.more_title),
-                        )
-                    }
-                },
-            )
-        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .padding(padding),
+            contentPadding = PaddingValues(
+                start = EggDim.ScreenMargin,
+                end = EggDim.ScreenMargin,
+                bottom = 40.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Spacer(Modifier.height(4.dp))
-            PitchTrendCard(clips = state.clips)
+            item(key = "voice-header") {
+                ScreenHeader(title = stringResource(R.string.module_voice), onBack = onBack)
+            }
+
+            item(key = "voice-trend") { PitchTrendCard(clips = state.clips) }
+
             // Visible reminder that this is a local estimate sensitive to
-            // capture conditions — we don't want users overreading a noisy
-            // 5 Hz wobble as a real F0 change.
+            // capture conditions — we don't want anyone reading a noisy 5 Hz
+            // wobble as a real change in their voice.
             if (state.clips.any { it.pitchHz != null }) {
-                Text(
-                    stringResource(R.string.voice_pitch_disclaimer),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp),
+                item(key = "voice-disclaimer") {
+                    Text(
+                        stringResource(R.string.voice_pitch_disclaimer),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    )
+                }
+            }
+
+            item(key = "voice-recorder") {
+                RecorderCard(
+                    phase = state.phase,
+                    recordingMs = state.recordingMs,
+                    onToggle = onRecordTap,
                 )
             }
 
-            RecorderCard(
-                phase = state.phase,
-                recordingMs = state.recordingMs,
-                onToggle = {
-                    when (state.phase) {
-                        VoiceViewModel.Phase.Recording -> vm.stopRecording()
-                        VoiceViewModel.Phase.Idle ->
-                            permLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                        VoiceViewModel.Phase.Processing -> { /* ignore */ }
-                    }
-                },
-            )
+            if (micDenied) {
+                item(key = "voice-mic-denied") {
+                    ErrorCard(
+                        message = stringResource(R.string.media_voice_mic_denied),
+                        retryLabel = stringResource(R.string.action_open_settings),
+                        onRetry = {
+                            val intent = Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", ctx.packageName, null),
+                            )
+                            runCatching { ctx.startActivity(intent) }
+                        },
+                    )
+                }
+            }
+            if (state.failed) {
+                item(key = "voice-error") {
+                    ErrorCard(
+                        message = stringResource(R.string.media_voice_error),
+                        retryLabel = stringResource(R.string.media_voice_error_retry),
+                        onRetry = {
+                            vm.dismissFailure()
+                            onRecordTap()
+                        },
+                    )
+                }
+            }
 
-            Text(
-                stringResource(R.string.voice_section_clips),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            item(key = "voice-clips-title") {
+                SectionTitle(text = stringResource(R.string.media_voice_section_clips))
+            }
+
             if (state.clips.isEmpty()) {
-                Text(
-                    stringResource(R.string.voice_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                item(key = "voice-empty") {
+                    if (state.loading) {
+                        SkeletonBlock(height = 132.dp, shape = EggShapes.Card)
+                    } else {
+                        EmptyState(
+                            message = stringResource(R.string.media_voice_empty),
+                            actionLabel = stringResource(R.string.media_voice_empty_action),
+                            onAction = onRecordTap,
+                        )
+                    }
+                }
             } else {
-                state.clips.forEach { clip ->
-                    ClipRow(
-                        clip = clip,
-                        playing = state.playingId == clip.id,
-                        onPlay = { vm.togglePlay(clip) },
-                        onShare = {
+                item(key = "voice-clips") {
+                    ClipList(
+                        clips = state.clips,
+                        playingId = state.playingId,
+                        onPlay = { vm.togglePlay(it) },
+                        onShare = { clip ->
                             scope.launch {
                                 val file = vm.decryptToCache(clip) ?: return@launch
                                 val uri = androidx.core.content.FileProvider.getUriForFile(
                                     ctx, "${ctx.packageName}.fileprovider", file,
                                 )
-                                val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                val send = Intent(Intent.ACTION_SEND).apply {
                                     type = "audio/m4a"
-                                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
-                                ctx.startActivity(android.content.Intent.createChooser(send, null))
+                                ctx.startActivity(Intent.createChooser(send, null))
                             }
                         },
-                        onDelete = { vm.delete(clip) },
+                        onDelete = { pendingDelete = it },
                     )
                 }
             }
-            Spacer(Modifier.height(48.dp))
         }
     }
-}
 
-@Composable
-private fun PitchTrendCard(clips: List<VoiceClip>) {
-    // Show the latest clip's F0 as the headline and the delta vs. the very
-    // first analysed clip — that's the trans-HRT voice training signal: how
-    // far has F0 risen since you started tracking?
-    val withPitch = remember(clips) { clips.filter { it.pitchHz != null } }
-    val latest = withPitch.firstOrNull()?.pitchHz
-    val earliest = withPitch.lastOrNull()?.pitchHz
-    val deltaHz = if (latest != null && earliest != null && withPitch.size >= 2) latest - earliest else null
-
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    if (latest != null) stringResource(R.string.voice_pitch_label)
-                    else stringResource(R.string.voice_clips_count_label),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                )
-                if (latest != null) {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            latest.toString(),
-                            fontSize = 34.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Hz", style = MaterialTheme.typography.bodyMedium)
-                    }
+    // §5.4: deleting a clip is destructive and the vault has no undo.
+    val doomed = pendingDelete
+    if (doomed != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(R.string.media_voice_delete_title)) },
+            text = { Text(stringResource(R.string.media_voice_delete_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.delete(doomed)
+                        pendingDelete = null
+                        scope.launch { snackbar.showSnackbar(deletedMsg) }
+                    },
+                ) {
                     Text(
-                        when {
-                            deltaHz == null -> stringResource(R.string.voice_clips_count_fmt, clips.size)
-                            deltaHz > 0 -> stringResource(R.string.voice_pitch_delta_up, deltaHz)
-                            deltaHz < 0 -> stringResource(R.string.voice_pitch_delta_down, -deltaHz)
-                            else -> stringResource(R.string.voice_pitch_delta_flat)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
-                    )
-                } else {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            clips.size.toString(),
-                            fontSize = 34.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            stringResource(R.string.voice_clips_unit),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                    Text(
-                        stringResource(R.string.voice_clips_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
+                        stringResource(R.string.action_delete),
+                        color = MaterialTheme.colorScheme.error,
                     )
                 }
-            }
-            Box(modifier = Modifier
-                .padding(start = 12.dp)
-                .size(width = 130.dp, height = 48.dp)) {
-                PitchSparkline(
-                    pitches = withPitch.mapNotNull { it.pitchHz }.reversed(),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-        }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 }
 
 /**
- * Tiny sparkline of pitch over time. Falls back to a decorative waveform
- * when we don't have enough analysed clips yet to draw a trend.
+ * The headline is the latest measured pitch; the pill is the distance from the
+ * very first analysed clip, which is the question people actually come to this
+ * screen with. A falling pitch is never drawn in `error` — down is a goal for
+ * some people and a non-event for others; the glyph and the sign say which way
+ * it went, and the colour stays neutral.
  */
 @Composable
-private fun PitchSparkline(pitches: List<Int>, color: Color) {
-    if (pitches.size < 2) {
-        StaticWaveform(color = color, n = 30)
+private fun PitchTrendCard(clips: List<VoiceClip>) {
+    val withPitch = remember(clips) { clips.filter { it.pitchHz != null } }
+    val latest = withPitch.firstOrNull()?.pitchHz
+    val earliest = withPitch.lastOrNull()?.pitchHz
+    val deltaHz = if (latest != null && earliest != null && withPitch.size >= 2) {
+        latest - earliest
+    } else {
+        null
+    }
+    val latestDate = withPitch.firstOrNull()?.atMs
+
+    EggCard(variant = CardVariant.Low, padding = PaddingValues(18.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                MicroLabel(
+                    if (latest != null && latestDate != null) {
+                        stringResource(R.string.media_voice_pitch_label, dayMonth(latestDate))
+                    } else {
+                        stringResource(R.string.voice_clips_count_label)
+                    },
+                )
+                Row(
+                    modifier = Modifier.padding(top = 2.dp),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        (latest ?: clips.size).toString(),
+                        style = MaterialTheme.typography.displayMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        if (latest != null) {
+                            stringResource(R.string.media_voice_hz)
+                        } else {
+                            pluralStringResource(R.plurals.media_voice_clips_unit, clips.size)
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                }
+            }
+            if (deltaHz != null) DeltaPill(deltaHz)
+        }
+
+        Box(modifier = Modifier.padding(top = 12.dp)) {
+            // Oldest first, and each point keeps its timestamp: the X axis is
+            // proportional to time, never to the index (§5.1). Two clips a year
+            // apart must not sit as close as two clips a day apart.
+            PitchSparkline(
+                points = withPitch.reversed().mapNotNull { clip ->
+                    clip.pitchHz?.let { clip.atMs to it }
+                },
+            )
+        }
+
+        if (deltaHz == null) {
+            Text(
+                stringResource(R.string.media_voice_trend_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeltaPill(deltaHz: Int) {
+    val glyph = stringResource(
+        when {
+            deltaHz > 0 -> R.string.media_voice_delta_glyph_up
+            deltaHz < 0 -> R.string.media_voice_delta_glyph_down
+            else -> R.string.media_voice_delta_glyph_flat
+        },
+    )
+    val value = when {
+        deltaHz > 0 -> stringResource(R.string.media_voice_delta_up, deltaHz)
+        deltaHz < 0 -> stringResource(R.string.media_voice_delta_down, -deltaHz)
+        else -> stringResource(R.string.media_voice_delta_flat)
+    }
+    val described = when {
+        deltaHz > 0 -> stringResource(R.string.media_voice_delta_up_cd, deltaHz)
+        deltaHz < 0 -> stringResource(R.string.media_voice_delta_down_cd, -deltaHz)
+        else -> stringResource(R.string.media_voice_delta_flat_cd)
+    }
+    val container = when {
+        deltaHz > 0 -> EggColors.successContainer
+        deltaHz < 0 -> MaterialTheme.colorScheme.secondaryContainer
+        else -> MaterialTheme.colorScheme.surfaceContainerHighest
+    }
+    val content = when {
+        deltaHz > 0 -> EggColors.onSuccessContainer
+        deltaHz < 0 -> MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    StatusPill(
+        label = "$glyph $value",
+        container = container,
+        content = content,
+        modifier = Modifier.clearAndSetSemantics { contentDescription = described },
+    )
+}
+
+/**
+ * Pitch over time. Below two analysed clips there is no trend to tell, so the
+ * card keeps a decorative waveform rather than a lie or a hole.
+ */
+@Composable
+private fun PitchSparkline(points: List<Pair<Long, Int>>) {
+    val color = MaterialTheme.colorScheme.primary
+    if (points.size < 2) {
+        Decorative { StaticWaveform(color = color, n = 34, height = 56.dp) }
         return
     }
-    val min = pitches.min().toFloat()
-    val max = pitches.max().toFloat()
-    val range = (max - min).coerceAtLeast(1f)
-    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxWidth().height(48.dp)) {
-        val w = size.width
-        val h = size.height
-        val step = w / (pitches.size - 1)
-        val pad = 6f
-        val points = pitches.mapIndexed { i, v ->
-            val x = i * step
-            val y = h - pad - ((v - min) / range) * (h - 2 * pad)
-            androidx.compose.ui.geometry.Offset(x, y)
+    val pitches = points.map { it.second }
+    val min = pitches.min()
+    val max = pitches.max()
+    val range = (max - min).coerceAtLeast(1).toFloat()
+    val firstMs = points.first().first
+    val spanMs = (points.last().first - firstMs).coerceAtLeast(1L).toFloat()
+    val described = stringResource(
+        R.string.media_voice_sparkline_cd, points.size, min, max,
+    )
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clearAndSetSemantics { contentDescription = described },
+    ) {
+        val pad = 7.dp.toPx()
+        // The terminal dot is drawn at the last X, so the plot is inset by its
+        // radius on both sides — otherwise it would be sliced in half.
+        val xPad = 5.dp.toPx()
+        val plotted = points.map { (atMs, hz) ->
+            Offset(
+                x = xPad + ((atMs - firstMs) / spanMs) * (size.width - 2 * xPad),
+                y = size.height - pad - ((hz - min) / range) * (size.height - 2 * pad),
+            )
         }
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(points[0].x, points[0].y)
-            points.drop(1).forEach { lineTo(it.x, it.y) }
+        val path = Path().apply {
+            moveTo(plotted[0].x, plotted[0].y)
+            plotted.drop(1).forEach { lineTo(it.x, it.y) }
         }
         drawPath(
             path,
             color,
-            style = androidx.compose.ui.graphics.drawscope.Stroke(
-                width = 2.5f.dp.toPx(),
-                cap = androidx.compose.ui.graphics.StrokeCap.Round,
-            ),
+            style = Stroke(width = 2.4.dp.toPx(), cap = StrokeCap.Round),
         )
-        drawCircle(color, radius = 3.5f.dp.toPx(), center = points.last())
+        // Terminal point, filled and slightly larger — the graphic grammar of
+        // §5.1 for "this is where you are now".
+        drawCircle(color, radius = 4.2.dp.toPx(), center = plotted.last())
     }
 }
 
@@ -435,81 +582,105 @@ private fun RecorderCard(
     recordingMs: Long,
     onToggle: () -> Unit,
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
+    val recording = phase == VoiceViewModel.Phase.Recording
+    val processing = phase == VoiceViewModel.Phase.Processing
+    // A slow breath while the mic is live: the only moving thing on the screen,
+    // so there is no doubt about which state we're in.
+    val scale by animateFloatAsState(if (recording) 1.05f else 1f, label = "rec-scale")
+    val container = if (recording) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+    val onContainer = if (recording) {
+        MaterialTheme.colorScheme.onError
+    } else {
+        MaterialTheme.colorScheme.onPrimary
+    }
+    val buttonLabel = stringResource(if (recording) R.string.voice_stop else R.string.voice_record)
+
+    EggCard(variant = CardVariant.Primary) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            val scale by animateFloatAsState(
-                if (phase == VoiceViewModel.Phase.Recording) 1.06f else 1f,
-                label = "rec-scale",
-            )
-            val container = when (phase) {
-                VoiceViewModel.Phase.Recording -> MaterialTheme.colorScheme.error
-                VoiceViewModel.Phase.Processing -> MaterialTheme.colorScheme.surfaceContainerHighest
-                VoiceViewModel.Phase.Idle -> MaterialTheme.colorScheme.primary
-            }
-            Box(
-                modifier = Modifier
-                    .size((76 * scale).dp)
-                    .clip(CircleShape)
-                    .background(container),
-                contentAlignment = Alignment.Center,
+            Surface(
+                onClick = onToggle,
+                enabled = !processing,
+                modifier = Modifier.size((96 * scale).dp),
+                shape = CircleShape,
+                color = container,
+                contentColor = onContainer,
+                shadowElevation = 8.dp,
             ) {
-                when (phase) {
-                    VoiceViewModel.Phase.Processing -> {
-                        androidx.compose.material3.CircularProgressIndicator(
-                            modifier = Modifier.size(36.dp),
-                            color = MaterialTheme.colorScheme.primary,
+                Box(contentAlignment = Alignment.Center) {
+                    if (processing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(38.dp),
+                            color = onContainer,
                             strokeWidth = 3.dp,
                         )
-                    }
-                    else -> {
-                        IconButton(onClick = onToggle, modifier = Modifier.size(76.dp)) {
-                            Icon(
-                                if (phase == VoiceViewModel.Phase.Recording)
-                                    Icons.Filled.Stop else Icons.Filled.Mic,
-                                contentDescription = stringResource(
-                                    if (phase == VoiceViewModel.Phase.Recording)
-                                        R.string.voice_stop else R.string.voice_record
-                                ),
-                                tint = if (phase == VoiceViewModel.Phase.Recording)
-                                    MaterialTheme.colorScheme.onError
-                                else MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(36.dp),
-                            )
-                        }
+                    } else {
+                        Icon(
+                            if (recording) Icons.Filled.Stop else Icons.Filled.Mic,
+                            contentDescription = buttonLabel,
+                            modifier = Modifier.size(42.dp),
+                        )
                     }
                 }
             }
             Text(
                 when (phase) {
                     VoiceViewModel.Phase.Recording -> stringResource(
-                        R.string.voice_recording_fmt,
-                        formatMmSs(recordingMs),
+                        R.string.media_voice_recording_title, formatMmSs(recordingMs),
                     )
                     VoiceViewModel.Phase.Processing ->
-                        stringResource(R.string.voice_processing_title)
-                    VoiceViewModel.Phase.Idle -> stringResource(R.string.voice_record_hint)
+                        stringResource(R.string.media_voice_processing_title)
+                    VoiceViewModel.Phase.Idle ->
+                        stringResource(R.string.media_voice_record_title)
                 },
                 style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
             )
             Text(
                 when (phase) {
+                    VoiceViewModel.Phase.Recording ->
+                        stringResource(R.string.media_voice_recording_sub)
                     VoiceViewModel.Phase.Processing ->
-                        stringResource(R.string.voice_processing_sub)
-                    else -> stringResource(R.string.voice_record_sub)
+                        stringResource(R.string.media_voice_processing_sub)
+                    VoiceViewModel.Phase.Idle ->
+                        stringResource(R.string.media_voice_record_sub)
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ClipList(
+    clips: List<VoiceClip>,
+    playingId: String?,
+    onPlay: (VoiceClip) -> Unit,
+    onShare: (VoiceClip) -> Unit,
+    onDelete: (VoiceClip) -> Unit,
+) {
+    EggCard(
+        variant = CardVariant.Low,
+        padding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+    ) {
+        clips.forEachIndexed { index, clip ->
+            if (index > 0) CardRule()
+            ClipRow(
+                clip = clip,
+                playing = playingId == clip.id,
+                onPlay = { onPlay(clip) },
+                onShare = { onShare(clip) },
+                onDelete = { onDelete(clip) },
             )
         }
     }
@@ -523,74 +694,100 @@ private fun ClipRow(
     onShare: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(20.dp),
-        modifier = Modifier.fillMaxWidth(),
+    var menuOpen by remember { mutableStateOf(false) }
+    val duration = formatMmSs(clip.durationMs)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Surface(
+            onClick = onPlay,
+            modifier = Modifier.size(36.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                contentAlignment = Alignment.Center,
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    if (playing) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                    contentDescription = stringResource(
+                        if (playing) R.string.voice_stop else R.string.voice_play,
+                    ),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                dayMonthLower(clip.atMs),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                duration,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        val pitch = clip.pitchHz
+        // A clip whose pitch we couldn't measure shows an em dash, and the dash
+        // gets spelled out for screen readers — silence would read as a value.
+        val unknownPitch = stringResource(R.string.media_voice_pitch_unknown_cd)
+        StatusPill(
+            label = if (pitch != null) {
+                stringResource(R.string.media_voice_pitch, pitch)
+            } else {
+                stringResource(R.string.media_voice_pitch_unknown)
+            },
+            container = MaterialTheme.colorScheme.surfaceContainerHighest,
+            content = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = if (pitch == null) {
+                Modifier.clearAndSetSemantics { contentDescription = unknownPitch }
+            } else {
+                Modifier
+            },
+        )
+        Box {
+            IconButton(
+                onClick = { menuOpen = true },
+                modifier = Modifier.size(EggDim.TouchTarget),
             ) {
-                IconButton(onClick = onPlay, modifier = Modifier.size(44.dp)) {
-                    Icon(
-                        if (playing) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                        contentDescription = stringResource(
-                            if (playing) R.string.voice_stop else R.string.voice_play
-                        ),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Icon(
+                    Icons.Filled.MoreHoriz,
+                    contentDescription = stringResource(R.string.action_more),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Column(modifier = Modifier
-                .padding(horizontal = 12.dp)
-                .weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        formatDate(clip.atMs),
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (clip.pitchHz != null) {
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.voice_share)) },
+                    leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
+                    onClick = {
+                        menuOpen = false
+                        onShare()
+                    },
+                )
+                DropdownMenuItem(
+                    text = {
                         Text(
-                            "${clip.pitchHz} Hz",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
+                            stringResource(R.string.action_delete),
+                            color = MaterialTheme.colorScheme.error,
                         )
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(
-                        formatMmSs(clip.durationMs),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                StaticWaveform(
-                    color = MaterialTheme.colorScheme.primary,
-                    n = 28,
-                    height = 28.dp,
-                )
-            }
-            IconButton(onClick = onShare) {
-                Icon(
-                    Icons.Filled.Share,
-                    contentDescription = stringResource(R.string.voice_share),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Filled.Delete,
-                    contentDescription = stringResource(R.string.action_delete),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    },
+                    onClick = {
+                        menuOpen = false
+                        onDelete()
+                    },
                 )
             }
         }
@@ -598,26 +795,24 @@ private fun ClipRow(
 }
 
 @Composable
-private fun StaticWaveform(
-    color: Color,
-    n: Int = 28,
-    height: androidx.compose.ui.unit.Dp = 28.dp,
-) {
-    // Deterministic decorative bars — height varies by index so each card
-    // looks distinct without requiring actual amplitude analysis.
+private fun StaticWaveform(color: Color, n: Int, height: androidx.compose.ui.unit.Dp) {
+    // Deterministic decorative bars — the height varies by index so the card
+    // looks alive without pretending to plot data we don't have yet.
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        modifier = Modifier.height(height),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height),
     ) {
         for (i in 0 until n) {
-            val mag = 4f + abs(sin(i * 1.7).toFloat() * 18f) + (i % 3) * 3f
+            val mag = 6f + abs(sin(i * 1.7).toFloat() * 26f) + (i % 3) * 4f
             Box(
                 modifier = Modifier
-                    .width(2.5.dp)
+                    .weight(1f)
                     .height(mag.coerceAtMost(height.value).dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(color.copy(alpha = 0.55f)),
+                    .clip(EggShapes.Pill)
+                    .background(color.copy(alpha = 0.45f)),
             )
         }
     }
@@ -628,5 +823,10 @@ private fun formatMmSs(ms: Long): String {
     return "%d:%02d".format(s / 60, s % 60)
 }
 
-private fun formatDate(ms: Long): String =
-    SimpleDateFormat("d MMM HH:mm", Locale.getDefault()).format(Date(ms))
+/** « 21 JUILLET » — the small-caps date of the trend card. */
+private fun dayMonth(ms: Long): String =
+    SimpleDateFormat("d MMMM", Locale.getDefault()).format(Date(ms)).uppercase()
+
+/** « 21 juillet » — the clip-row date. */
+private fun dayMonthLower(ms: Long): String =
+    SimpleDateFormat("d MMMM", Locale.getDefault()).format(Date(ms))

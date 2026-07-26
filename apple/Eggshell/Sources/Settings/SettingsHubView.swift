@@ -1,69 +1,48 @@
 import SwiftUI
 import TransitionCore
 
-// ===========================================================================
-// PUSHED screen — the "Plus" hub. Shortcut rows to the dedicated settings
-// screens (Fonctionnalités, Thème, Rappels, Ressources, Avancé), plus PDF
-// export and hormone units. A "Quoi de neuf" row opens WhatsNewSheet; the
-// sheet also auto-presents on first launch of a new version (whatsNew gate).
-// Mirrors android SettingsHubScreen.
-// ===========================================================================
+// Réglages (§6.15) — seven screens folded into three doors.
+//
+// The doors are Modules, Sécurité, Apparence & langue. Their subtitles are live
+// summaries, not copy: « 6 activés sur 8 » has to be true, or the door lies about
+// what is behind it.
+//
+// Two things moved and are visible here: **Rappels came up a level** — the
+// notification-content card is a section of this screen, with one row down to the
+// full CRUD hub — and **the PDF export left**, for Rendez-vous. Nothing was
+// dropped on the way (D5).
 
 struct SettingsHubView: View {
+    @EnvironmentObject private var features: FeaturesStore
+    @EnvironmentObject private var themeStore: ThemeStore
+    @EnvironmentObject private var securityFlags: SecurityFlags
+    @EnvironmentObject private var hormoneUnits: HormoneUnitStore
+    @EnvironmentObject private var app: AppState
     @EnvironmentObject private var whatsNew: WhatsNewStore
+    @EnvironmentObject private var router: Router
     @Environment(\.palette) private var palette
+    @Environment(\.openURL) private var openURL
 
     @State private var showWhatsNew = false
-
-    private struct HubRow: Identifiable {
-        let id = UUID()
-        let label: String
-        let subtitle: String
-        let icon: String
-        let route: Route
-    }
-
-    private let rows: [HubRow] = [
-        HubRow(label: "Fonctionnalités", subtitle: "Choisis les sections à afficher",
-               icon: "slider.horizontal.3", route: .features),
-        HubRow(label: "Thème", subtitle: "Couleurs de l'application",
-               icon: "paintpalette", route: .themePicker),
-        HubRow(label: "Export PDF", subtitle: "Rapport à partager avec un·e soignant·e",
-               icon: "doc.richtext", route: .pdfExport),
-        HubRow(label: "Unités hormonales", subtitle: "Unité d'affichage par hormone",
-               icon: "ruler", route: .hormoneUnits),
-        HubRow(label: "Rappels", subtitle: "Notifications de prises, labo, photo, voix",
-               icon: "bell", route: .reminders),
-        HubRow(label: "Ressources", subtitle: "Sites et associations utiles",
-               icon: "globe", route: .resources),
-        HubRow(label: "Avancé", subtitle: "Sécurité, sauvegarde, masquage",
-               icon: "shield", route: .advancedSettings),
-    ]
+    @State private var contentMode: NotifContentMode = NotifPrefs.contentMode
 
     var body: some View {
         ScrollView {
-            VStack(spacing: Spacing.l) {
-                SectionCard {
-                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        if index > 0 {
-                            Divider().overlay(palette.outlineVariant)
-                        }
-                        NavigationLink(value: row.route) {
-                            hubRowLabel(icon: row.icon, label: row.label, subtitle: row.subtitle)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                whatsNewCard
-                donationCard
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                doors
+                remindersSection
+                supportCard
+                whatsNewRow
+                footer
             }
-            .padding(Spacing.l)
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.top, Spacing.s)
+            .padding(.bottom, Spacing.xl)
         }
-        .navigationTitle("Plus")
-        .sheet(isPresented: $showWhatsNew) {
-            WhatsNewSheet()
-        }
+        .background(palette.surface.ignoresSafeArea())
+        .navigationTitle("Réglages")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showWhatsNew) { WhatsNewSheet() }
         .onAppear {
             if whatsNew.shouldShow(latestVersion: WhatsNewCatalog.latestVersion) {
                 showWhatsNew = true
@@ -72,77 +51,204 @@ struct SettingsHubView: View {
         }
     }
 
-    private func hubRowLabel(icon: String, label: String, subtitle: String) -> some View {
-        HStack(spacing: Spacing.m) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(palette.primary)
-                .frame(width: 32, height: 32)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label)
-                    .font(.eggCallout)
+    // MARK: - The three doors
+
+    private var doors: some View {
+        ListGroup {
+            ListRowView(
+                title: "Modules",
+                subtitle: "\(features.enabledCount) activés sur 8 · ce que l'app suit pour toi",
+                systemImage: "square.grid.2x2",
+                iconContainer: palette.primaryContainer,
+                iconTint: palette.onPrimaryContainer,
+                showsChevron: true,
+                showsSeparator: true,
+                action: { router.push(.settingsModules) })
+            ListRowView(
+                title: "Sécurité",
+                subtitle: securitySummary,
+                systemImage: "lock.shield",
+                iconContainer: palette.primaryContainer,
+                iconTint: palette.onPrimaryContainer,
+                showsChevron: true,
+                showsSeparator: true,
+                action: { router.push(.settingsSecurity) })
+            ListRowView(
+                title: "Apparence & langue",
+                subtitle: appearanceSummary,
+                systemImage: "paintpalette",
+                iconContainer: palette.primaryContainer,
+                iconTint: palette.onPrimaryContainer,
+                showsChevron: true,
+                action: { router.push(.settingsAppearance) })
+        }
+    }
+
+    /// Verrouillage · leurre · sauvegarde. Read from the vault's own prefs, not
+    /// from a cached string: a door that misreports its lock mode is worse than
+    /// no subtitle at all.
+    private var securitySummary: String {
+        let prefs = VaultPrefs()
+        let mode = prefs.modeRaw.flatMap(SecurityMode.init(rawValue:))
+        return [
+            mode?.title.lowercased() ?? "verrouillage",
+            prefs.hasDecoyPin ? "leurre actif" : "pas de leurre",
+            securityFlags.blockScreenshots ? "captures bloquées" : "sauvegarde",
+        ]
+        .joined(separator: " · ")
+    }
+
+    private var appearanceSummary: String {
+        let theme = Themes.find(themeStore.themeId).label
+        let unit = hormoneUnits.effectiveUnit(for: "estradiol") ?? "unité d'origine"
+        return "\(theme) · français · \(unit)"
+    }
+
+    // MARK: - Rappels — a section of this screen, not a door (§2.4)
+
+    private var remindersSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            SectionTitleView("Rappels", prominent: true)
+            EggCard(variant: .low, paddingH: Spacing.l, paddingV: 18, spacing: 0) {
+                Text("Contenu des notifications")
+                    .font(EggFont.titleS)
                     .foregroundStyle(palette.onSurface)
-                Text(subtitle)
-                    .font(.eggCaption)
-                    .foregroundStyle(palette.onSurface.opacity(0.6))
+                Text("Ce qui s'affiche sur l'écran verrouillé")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .padding(.top, 2)
+
+                ChipFlowLayout(spacing: 7, lineSpacing: 7) {
+                    ForEach(NotifContentMode.allCases) { mode in
+                        PillView(Self.chipLabel(mode), selected: contentMode == mode) {
+                            contentMode = mode
+                            NotifPrefs.contentMode = mode
+                            Task { await app.refreshNotifications() }
+                        }
+                    }
+                }
+                .padding(.top, 14)
+
+                // The preview is the point of the card: a mode name means nothing,
+                // the sentence someone standing next to you would read means
+                // everything.
+                HStack(alignment: .center, spacing: 9) {
+                    Image(systemName: "bell")
+                        .font(.system(size: 17))
+                        .foregroundStyle(palette.onSurfaceVariant)
+                    Text(Self.preview(contentMode))
+                        .font(EggFont.bodyS)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, Spacing.m)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    palette.surfaceContainer,
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(.top, 14)
+                .accessibilityLabel("Aperçu de l'écran verrouillé. \(Self.preview(contentMode))")
             }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.eggCaption)
-                .foregroundStyle(palette.onSurface.opacity(0.4))
+
+            ListGroup {
+                ListRowView(
+                    title: "Configurer les rappels",
+                    subtitle: "Ajoute, modifie ou supprime tes rappels",
+                    systemImage: "bell.badge",
+                    showsChevron: true,
+                    action: { router.push(.reminders) })
+            }
         }
-        .padding(.vertical, Spacing.s)
     }
 
-    private var whatsNewCard: some View {
-        Button {
-            showWhatsNew = true
-        } label: {
-            SectionCard {
-                HStack(spacing: Spacing.m) {
-                    Image(systemName: "sparkles")
-                        .font(.title3)
-                        .foregroundStyle(palette.primary)
-                        .frame(width: 32, height: 32)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Quoi de neuf")
-                            .font(.eggCallout)
-                            .foregroundStyle(palette.onSurface)
-                        Text("Les nouveautés de cette version")
-                            .font(.eggCaption)
-                            .foregroundStyle(palette.onSurface.opacity(0.6))
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.eggCaption)
-                        .foregroundStyle(palette.onSurface.opacity(0.4))
-                }
-                .padding(.vertical, Spacing.s)
-            }
+    private static func chipLabel(_ mode: NotifContentMode) -> String {
+        switch mode {
+        case .generic: return "Générique"
+        case .name:    return "Nom"
+        case .alias:   return "Alias"
         }
-        .buttonStyle(.plain)
     }
 
-    private var donationCard: some View {
-        Link(destination: URL(string: "https://paypal.me/metraf")!) {
-            SectionCard {
-                HStack(spacing: Spacing.m) {
-                    Image(systemName: "heart")
-                        .font(.title2)
-                        .foregroundStyle(palette.error)
-                        .frame(width: 32, height: 32)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Soutenir le développement")
-                            .font(.eggHeadline)
-                            .foregroundStyle(palette.onSurface)
-                        Text("M'aider à construire des outils pour la santé trans")
-                            .font(.eggCaption)
-                            .foregroundStyle(palette.onSurface.opacity(0.6))
-                    }
-                    Spacer()
-                }
-            }
+    /// Written for each mode. The name and the alias previews did not exist in the
+    /// handoff and are written here to the same rule the vault follows: the real
+    /// name only ever reaches a lock screen because someone asked for it.
+    private static func preview(_ mode: NotifContentMode) -> String {
+        switch mode {
+        case .generic: return "« C'est l'heure » — aucun nom affiché."
+        case .name:    return "« Estradiol — c'est l'heure » — le vrai nom s'affiche."
+        case .alias:   return "« Vitamine D — c'est l'heure » — ton alias, jamais le vrai nom."
         }
-        .buttonStyle(.plain)
+    }
+
+    // MARK: - Soutien, nouveautés, pied de page
+
+    private var supportCard: some View {
+        EggCard(
+            variant: .tertiary,
+            action: { openURL(URL(string: "https://paypal.me/metraf")!) }
+        ) {
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 26))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Soutenir eggshell")
+                        .font(EggFont.titleS)
+                    Text("Gratuit, sans pub, sans compte.")
+                        .font(EggFont.bodyS)
+                        .opacity(0.8)
+                }
+                Spacer(minLength: Spacing.s)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 17, weight: .semibold))
+                    .opacity(0.7)
+            }
+            .frame(minHeight: Metrics.touchTarget)
+        }
+    }
+
+    private var whatsNewRow: some View {
+        ListGroup {
+            ListRowView(
+                title: "Quoi de neuf",
+                subtitle: "Les nouveautés de cette version",
+                systemImage: "sparkles",
+                showsChevron: true,
+                action: { showWhatsNew = true })
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: Metrics.blockGap) {
+            Button { router.push(.resources) } label: {
+                Text("Ressources")
+                    .font(EggFont.micro)
+                    .tracking(0.5)
+                    .foregroundStyle(palette.primary)
+                    .frame(minHeight: Metrics.touchTarget)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Text("·")
+                .font(EggFont.micro)
+                .foregroundStyle(palette.outline)
+            Text("Version \(AppVersion.name)")
+                .font(EggFont.micro)
+                .tracking(0.5)
+                .foregroundStyle(palette.onSurfaceVariant)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 14)
+        .padding(.bottom, 4)
+    }
+}
+
+extension FeaturesStore {
+    /// « N activés sur 8 » — the door's subtitle has to be counted, not typed.
+    /// Lives here rather than in `Core/Stores.swift` so the store stays a store.
+    var enabledCount: Int {
+        [medications, journal, hormones, weight, photos, voice, bleeding, appointments]
+            .filter { $0 }
+            .count
     }
 }

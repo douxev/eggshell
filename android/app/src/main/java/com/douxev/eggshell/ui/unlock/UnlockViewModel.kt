@@ -5,19 +5,22 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.data.VaultRepository
 import com.douxev.eggshell.security.DecoyVerifier
+import com.douxev.eggshell.security.PinRateLimiter
 import com.douxev.eggshell.security.VaultPrefs
 
 @HiltViewModel
 class UnlockViewModel @Inject constructor(
     private val repo: VaultRepository,
     private val decoy: DecoyVerifier,
-    private val throttle: com.douxev.eggshell.security.PinRateLimiter,
+    private val throttle: PinRateLimiter,
 ) : ViewModel() {
 
     val mode: VaultPrefs.Mode? = repo.currentMode
@@ -71,6 +74,34 @@ class UnlockViewModel @Inject constructor(
     private val _state = MutableStateFlow<State>(initialState())
     val state: StateFlow<State> = _state.asStateFlow()
 
+    /**
+     * Milliseconds left on the current lockout, refreshed every second.
+     *
+     * The ladder itself lives in [PinRateLimiter] and is not re-implemented
+     * here: we only *read* it, so the screen can show a countdown the user can
+     * actually plan around instead of silently swallowing their taps.
+     */
+    private val _lockoutMs = MutableStateFlow(throttle.lockedOutMs())
+    val lockoutMs: StateFlow<Long> = _lockoutMs.asStateFlow()
+
+    /**
+     * Attempts left before the vault self-erases, or `null` while unknown.
+     * The limiter doesn't publish its counter, so this only fills in once the
+     * user has failed at least once in this process — which is exactly when
+     * the warning becomes useful.
+     */
+    private val _attemptsLeft = MutableStateFlow<Int?>(null)
+    val attemptsLeft: StateFlow<Int?> = _attemptsLeft.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            while (isActive) {
+                _lockoutMs.value = throttle.lockedOutMs()
+                delay(1_000L)
+            }
+        }
+    }
+
     private fun initialState(): State = when {
         mode == null -> State.Failed("not initialized")
         // Decoy is set → user MUST type a PIN, regardless of underlying mode.
@@ -89,6 +120,7 @@ class UnlockViewModel @Inject constructor(
         // Reject early when the throttle is active. UI shows the countdown.
         val remaining = throttle.lockedOutMs()
         if (remaining > 0) {
+            _lockoutMs.value = remaining
             _state.value = State.Throttled(remaining)
             return
         }
@@ -105,10 +137,12 @@ class UnlockViewModel @Inject constructor(
                     // Decoy hits don't count as failed attempts — the user
                     // (or a snooper) entered a "valid" PIN by design.
                     throttle.reset()
+                    clearThrottleDisplay()
                     _state.value = State.Decoy
                 }
                 accessHit -> {
                     throttle.reset()
+                    clearThrottleDisplay()
                     _state.value = when (mode) {
                         VaultPrefs.Mode.KEYSTORE_ONLY,
                         VaultPrefs.Mode.KEYSTORE_BIOMETRIC -> State.AccessGranted
@@ -118,13 +152,17 @@ class UnlockViewModel @Inject constructor(
                     }
                 }
                 else -> {
-                    throttle.recordFailure()
+                    val failures = throttle.recordFailure()
+                    _attemptsLeft.value =
+                        (PinRateLimiter.WIPE_THRESHOLD - failures).coerceAtLeast(0)
+                    _lockoutMs.value = throttle.lockedOutMs()
                     if (throttle.shouldWipe()) {
                         repo.wipeAll()
                         throttle.reset()
+                        clearThrottleDisplay()
                         _state.value = State.Wiped
                     } else {
-                        _state.value = State.Failed("PIN incorrect")
+                        _state.value = State.Failed(REASON_WRONG_PIN)
                     }
                 }
             }
@@ -143,8 +181,20 @@ class UnlockViewModel @Inject constructor(
         }
     }
 
-    /** Triggered automatically for Keystore-only / Keystore-biometric modes. */
+    /**
+     * Triggered automatically for Keystore-only / Keystore-biometric modes.
+     *
+     * In `KEYSTORE_ONLY` this is a *silent* Keystore unwrap that opens the real
+     * vault with no prompt at all, and in `KEYSTORE_BIOMETRIC` a single finger
+     * does it. So when a decoy PIN is configured it is refused until the PIN
+     * gate has actually been passed: the decoy only holds if the four digits
+     * typed on that keypad are the single thing that decides whether the real
+     * vault or the notes app opens. The screen already hides every biometric
+     * affordance there; this makes the rule hold even if some future entry
+     * point forgets to.
+     */
     fun attemptAutoUnlock(activity: FragmentActivity?, biometricCopy: VaultRepository.BiometricCopy?) {
+        if (hasDecoy && _state.value !is State.AccessGranted) return
         _state.value = State.InProgress
         viewModelScope.launch {
             attemptUnlock(null, activity, biometricCopy)
@@ -161,6 +211,11 @@ class UnlockViewModel @Inject constructor(
         }
     }
 
+    private fun clearThrottleDisplay() {
+        _attemptsLeft.value = null
+        _lockoutMs.value = 0L
+    }
+
     private suspend fun attemptUnlock(
         passphrase: String?,
         activity: FragmentActivity?,
@@ -171,5 +226,10 @@ class UnlockViewModel @Inject constructor(
             is VaultRepository.UnlockOutcome.Failed -> _state.value = State.Failed(out.reason)
             VaultRepository.UnlockOutcome.NotInitialized -> _state.value = State.Failed("not initialized")
         }
+    }
+
+    companion object {
+        /** Marker the screen matches on to swap the raw reason for plain copy. */
+        const val REASON_WRONG_PIN = "PIN incorrect"
     }
 }

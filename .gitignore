@@ -26,8 +26,9 @@ android/app/build/generated/uniffi/
 .vscode/
 *.log
 
-# Design handoff bundle — kept local, not published
+# Design handoff bundles — kept local, not published
 design/
+/*.zip
 
 # Release signing — keystores and passphrases must never be committed.
 # Losing them == losing the ability to publish updates for

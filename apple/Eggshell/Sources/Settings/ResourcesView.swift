@@ -1,12 +1,11 @@
 import SwiftUI
 import TransitionCore
 
-// ===========================================================================
-// PUSHED screen — curated external resources. Two internal tabs: "Général"
-// (info sites, helplines) vs "Associations" (regional groups, mostly Discord).
-// Each entry is a title + description + an external link. No webview, no
-// analytics, no link rewriting. Mirrors android ResourcesScreen.
-// ===========================================================================
+// Reached from the footer of Réglages (§6.15). Sites, helplines and associations,
+// split into « Général » and « Associations ».
+//
+// No webview, no analytics, no link rewriting: a tap hands the URL to the system
+// browser and eggshell never touches any of these hosts itself.
 
 struct ResourcesView: View {
     @Environment(\.palette) private var palette
@@ -40,57 +39,47 @@ struct ResourcesView: View {
 
     @State private var selected: ResourceCategory = .general
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.l) {
-                Picker("Catégorie", selection: $selected) {
-                    ForEach(ResourceCategory.allCases, id: \.self) { cat in
-                        Text(cat.label).tag(cat)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                Text("Touche une carte pour ouvrir le lien dans ton navigateur. Eggshell ne fait aucune requête vers ces sites.")
-                    .font(.eggCaption)
-                    .foregroundStyle(palette.onSurface.opacity(0.6))
-
-                VStack(spacing: Spacing.m) {
-                    ForEach(resources.filter { $0.category == selected }) { resource in
-                        card(resource)
-                    }
-                }
-            }
-            .padding(Spacing.l)
-        }
-        .navigationTitle("Ressources")
+    private var categoryIndex: Int {
+        selected == .general ? 0 : 1
     }
 
-    private func card(_ resource: Resource) -> some View {
-        Button {
-            if let url = resource.url { openURL(url) }
-        } label: {
-            SectionCard {
-                HStack(alignment: .top, spacing: Spacing.m) {
-                    Image(systemName: resource.isDiscord ? "bubble.left.and.bubble.right" : "globe")
-                        .font(.title3)
-                        .foregroundStyle(palette.primary)
-                        .frame(width: 32, height: 32)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(resource.title)
-                            .font(.eggHeadline)
-                            .foregroundStyle(palette.onSurface)
-                        Text(resource.description)
-                            .font(.eggCaption)
-                            .foregroundStyle(palette.onSurface.opacity(0.6))
-                            .frame(maxWidth: .infinity, alignment: .leading)
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                SegmentedSelector(
+                    options: ResourceCategory.allCases.map(\.label),
+                    selection: Binding(
+                        get: { categoryIndex },
+                        set: { selected = $0 == 0 ? .general : .association }),
+                    accessibilityLabel: "Catégorie")
+
+                Text("Touche une ligne pour ouvrir le lien dans ton navigateur. eggshell ne fait aucune requête vers ces sites.")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                let shown = resources.filter { $0.category == selected }
+                ListGroup {
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, resource in
+                        ListRowView(
+                            title: resource.title,
+                            subtitle: resource.description,
+                            systemImage: resource.isDiscord
+                                ? "bubble.left.and.bubble.right"
+                                : "globe",
+                            showsChevron: true,
+                            showsSeparator: index != shown.count - 1,
+                            action: { if let url = resource.url { openURL(url) } })
                     }
-                    Image(systemName: "arrow.up.right")
-                        .font(.eggCaption)
-                        .foregroundStyle(palette.onSurface.opacity(0.5))
                 }
+                Color.clear.frame(height: Spacing.s)
             }
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.top, Spacing.s)
         }
-        .buttonStyle(.plain)
+        .background(palette.surface.ignoresSafeArea())
+        .navigationTitle("Ressources")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     // ── Données ─────────────────────────────────────────────────────────────
@@ -108,7 +97,7 @@ struct ResourcesView: View {
             category: .general),
         Resource(
             title: "Wikitrans",
-            description: "Encyclopédie collaborative francophone sur les questions trans : protocoles HRT, démarches administratives, ressources locales.",
+            description: "Encyclopédie collaborative francophone sur les questions trans : protocoles, démarches administratives, ressources locales.",
             urlString: "https://wikitrans.co",
             category: .general),
         Resource(

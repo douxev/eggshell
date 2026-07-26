@@ -1,14 +1,14 @@
 package com.douxev.eggshell.ui.hormones
 
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,38 +17,53 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,12 +75,27 @@ import com.douxev.eggshell.data.lab.EncryptedPdfException
 import com.douxev.eggshell.data.lab.LabResultOcrService
 import com.douxev.eggshell.data.lab.LabResultParser
 import com.douxev.eggshell.ui.common.PasswordField
+import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.components.ActionBand
+import com.douxev.eggshell.ui.components.CardRule
+import com.douxev.eggshell.ui.components.CardVariant
+import com.douxev.eggshell.ui.components.EggCard
+import com.douxev.eggshell.ui.components.MicroLabel
+import com.douxev.eggshell.ui.components.SectionTitle
+import com.douxev.eggshell.ui.components.SkeletonBlock
+import com.douxev.eggshell.ui.theme.EggDim
+import com.douxev.eggshell.ui.theme.EggShapes
 import uniffi.transition.NewHormoneMeasurement
+
+/** Fichier → Lecture → Aperçu → Enregistré. The progress bar shows four
+ *  segments and the caption row names the current one (§6.9). */
+private const val OCR_STEPS = 4
 
 @HiltViewModel
 class ImportLabResultViewModel @Inject constructor(
     private val ocr: LabResultOcrService,
     private val repo: HormonesRepository,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     sealed interface Phase {
@@ -78,18 +108,29 @@ class ImportLabResultViewModel @Inject constructor(
             val rawText: String,
             val atMs: Long,
             val dateAutoDetected: Boolean,
+            /** Laboratory read off the letterhead; null when unrecognised. */
+            val labName: String?,
+            /** Set when a save attempt could not write everything it was
+             *  given. The preview is kept intact so the user can retry. */
+            val saveFailure: SaveFailure? = null,
         ) : Phase
         data class Done(val saved: Int) : Phase
         data class Error(val reason: String) : Phase
     }
 
-    /** A parsed hormone row in the preview list. The user can toggle it
-     *  off if the parser picked something wrong. */
+    /** How a partly-failed save ended: what landed, and what did not. */
+    data class SaveFailure(val saved: Int, val failed: Int)
+
+    /** A parsed row in the preview list. The user can switch it off if the
+     *  parser picked something wrong — and a doubtful read starts off. */
     data class EditableEntry(
         val hormone: String,
         val value: Double,
         val unit: String,
         val selected: Boolean,
+        /** What the document literally showed, quoted back on a doubtful read. */
+        val raw: String,
+        val doubtful: Boolean,
     )
 
     private val _phase = MutableStateFlow<Phase>(Phase.Idle)
@@ -100,7 +141,9 @@ class ImportLabResultViewModel @Inject constructor(
         runRecognition(uri, null)
     }
 
-    /** Retry recognition with the password the user just entered. */
+    /** Retry recognition with the password the user just typed. The password
+     *  is a parameter and nothing else: it is never held in state, never
+     *  written to prefs, and gone as soon as this call returns. */
     fun submitPassword(password: String) {
         val uri = (_phase.value as? Phase.PasswordRequired)?.uri ?: return
         if (password.isBlank()) return
@@ -115,18 +158,28 @@ class ImportLabResultViewModel @Inject constructor(
                     val parsed = LabResultParser.parse(text)
                     _phase.value = Phase.Preview(
                         entries = parsed.values.map {
-                            EditableEntry(it.hormone, it.value, it.unit, selected = true)
+                            EditableEntry(
+                                hormone = it.hormone,
+                                value = it.value,
+                                unit = it.unit,
+                                // A doubtful read is opt-in: we never save a
+                                // guess the user hasn't looked at.
+                                selected = !it.doubtful,
+                                raw = it.raw,
+                                doubtful = it.doubtful,
+                            )
                         },
                         rawText = text,
                         atMs = parsed.dateMs ?: System.currentTimeMillis(),
                         dateAutoDetected = parsed.dateMs != null,
+                        labName = parsed.labName,
                     )
                 }
                 .onFailure { e ->
                     _phase.value = if (e is EncryptedPdfException) {
                         Phase.PasswordRequired(uri, wrongPassword = e.wrongPassword)
                     } else {
-                        Phase.Error(e.message ?: "OCR failed")
+                        Phase.Error(e.message.orEmpty())
                     }
                 }
         }
@@ -139,6 +192,9 @@ class ImportLabResultViewModel @Inject constructor(
             entries = cur.entries.toMutableList().also {
                 it[index] = it[index].copy(selected = !it[index].selected)
             },
+            // The user is composing a new attempt: the previous verdict no
+            // longer describes what is about to be written.
+            saveFailure = null,
         )
     }
 
@@ -156,10 +212,19 @@ class ImportLabResultViewModel @Inject constructor(
         val selected = cur.entries.filter { it.selected }
         if (selected.isEmpty()) return
         val atMs = cur.atMs
+        // Provenance (décisions D3): an imported reading always names where it
+        // came from, so the doctor report can tell it apart from a value typed
+        // in by hand. No new column — this is the existing `lab_name`.
+        val provenance = cur.labName ?: context.getString(R.string.ocr_lab_fallback)
         _phase.value = Phase.Processing
         viewModelScope.launch {
-            var saved = 0
-            selected.forEach { entry ->
+            // Every write is accounted for. Swallowing the failures used to
+            // land on « C'est enregistré · 0 valeur » with the parsed rows
+            // thrown away — a success screen for a save that never happened.
+            val written = HashSet<Int>()
+            var failed = 0
+            cur.entries.forEachIndexed { index, entry ->
+                if (!entry.selected) return@forEachIndexed
                 runCatching {
                     repo.add(
                         NewHormoneMeasurement(
@@ -167,23 +232,44 @@ class ImportLabResultViewModel @Inject constructor(
                             hormone = entry.hormone,
                             value = entry.value,
                             unit = entry.unit,
-                            labName = null,
+                            labName = provenance,
                             notes = null,
                         )
                     )
-                }.onSuccess { saved++ }
+                }
+                    .onSuccess { written.add(index) }
+                    .onFailure { failed++ }
             }
-            _phase.value = Phase.Done(saved)
+            _phase.value = if (failed == 0 && written.isNotEmpty()) {
+                Phase.Done(written.size)
+            } else {
+                // Back to the preview, values intact, so the user can retry.
+                // What did land is unticked: a retry must not write it twice.
+                cur.copy(
+                    entries = cur.entries.mapIndexed { index, entry ->
+                        if (index in written) entry.copy(selected = false) else entry
+                    },
+                    saveFailure = SaveFailure(saved = written.size, failed = failed),
+                )
+            }
         }
     }
 
     fun reset() { _phase.value = Phase.Idle }
 }
 
+/**
+ * Import a lab result in four steps, entirely on the device.
+ *
+ * [onManualEntry] defaults to [onDone]: when the read fails we offer to type
+ * the values in, and the honest fallback is to go back to Mesures where the
+ * « Ajouter » button lives.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImportLabResultScreen(
     onDone: () -> Unit,
+    onManualEntry: () -> Unit = onDone,
     vm: ImportLabResultViewModel = hiltViewModel(),
 ) {
     val phase by vm.phase.collectAsState()
@@ -196,445 +282,564 @@ fun ImportLabResultScreen(
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let { vm.process(it) } }
+    val pick = { picker.launch(arrayOf("application/pdf", "image/*")) }
+
+    val step = when (phase) {
+        ImportLabResultViewModel.Phase.Idle,
+        is ImportLabResultViewModel.Phase.PasswordRequired -> 1
+        ImportLabResultViewModel.Phase.Processing,
+        is ImportLabResultViewModel.Phase.Error -> 2
+        is ImportLabResultViewModel.Phase.Preview -> 3
+        is ImportLabResultViewModel.Phase.Done -> OCR_STEPS
+    }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.import_lab_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onDone) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back),
+        bottomBar = {
+            // A full-width action reserves its own band and never floats over
+            // the list; the hairline separates it from the scrolling content.
+            Column {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ActionBand(alignment = Alignment.Center) {
+                    when (val p = phase) {
+                        ImportLabResultViewModel.Phase.Idle -> BandButton(
+                            label = stringResource(R.string.ocr_pick),
+                            icon = Icons.Filled.FileUpload,
+                            onClick = { pick() },
+                        )
+
+                        ImportLabResultViewModel.Phase.Processing -> BandButton(
+                            label = stringResource(R.string.ocr_step2_title),
+                            icon = null,
+                            enabled = false,
+                            onClick = {},
+                        )
+
+                        is ImportLabResultViewModel.Phase.PasswordRequired -> Unit
+
+                        is ImportLabResultViewModel.Phase.Preview -> {
+                            val kept = p.entries.count { it.selected }
+                            BandButton(
+                                label = if (kept == 0) {
+                                    stringResource(R.string.ocr_save_none)
+                                } else {
+                                    pluralStringResource(R.plurals.ocr_save, kept, kept)
+                                },
+                                icon = Icons.Filled.Check,
+                                enabled = kept > 0,
+                                onClick = vm::save,
+                            )
+                        }
+
+                        is ImportLabResultViewModel.Phase.Done -> BandButton(
+                            label = stringResource(R.string.ocr_step4_done),
+                            icon = null,
+                            onClick = onDone,
+                        )
+
+                        is ImportLabResultViewModel.Phase.Error -> BandButton(
+                            label = stringResource(R.string.ocr_retry),
+                            icon = Icons.Filled.FileUpload,
+                            onClick = { vm.reset(); pick() },
                         )
                     }
-                },
-            )
+                }
+            }
         },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = EggDim.ScreenMargin),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            when (val p = phase) {
-                ImportLabResultViewModel.Phase.Idle -> IdleStep(
-                    onPickImage = {
-                        // MIME-filter to PDF + every image type. The user's
-                        // system file picker presents them with a chooser
-                        // that surfaces both their Photos gallery and any
-                        // PDF storage (Files, Drive, Nextcloud…).
-                        picker.launch(arrayOf("application/pdf", "image/*"))
+            ScreenHeader(title = stringResource(R.string.ocr_title), onBack = onDone)
+
+            StepProgress(step = step)
+            StepCaption(
+                caption = stringResource(
+                    when (step) {
+                        1 -> R.string.ocr_step1_caption
+                        2 -> R.string.ocr_step2_caption
+                        3 -> R.string.ocr_step3_caption
+                        else -> R.string.ocr_step4_caption
                     },
-                )
+                ),
+            )
 
-                ImportLabResultViewModel.Phase.Processing -> ProcessingStep()
+            when (val p = phase) {
+                ImportLabResultViewModel.Phase.Idle -> PickStep()
 
-                is ImportLabResultViewModel.Phase.PasswordRequired -> PasswordStep(
+                ImportLabResultViewModel.Phase.Processing -> ReadingStep()
+
+                is ImportLabResultViewModel.Phase.PasswordRequired -> LockedStep(
                     wrongPassword = p.wrongPassword,
                     onUnlock = vm::submitPassword,
-                    onCancel = vm::reset,
+                    onPickAnother = { vm.reset(); pick() },
                 )
 
-                is ImportLabResultViewModel.Phase.Preview -> PreviewStep(
-                    entries = p.entries,
-                    atMs = p.atMs,
-                    dateAutoDetected = p.dateAutoDetected,
-                    onToggle = vm::toggleEntry,
-                    onSetDate = vm::setDate,
-                    onSave = vm::save,
-                    onRetry = vm::reset,
-                )
+                is ImportLabResultViewModel.Phase.Preview ->
+                    if (p.entries.isEmpty()) {
+                        FailedStep(
+                            titleRes = R.string.ocr_failed_none_title,
+                            bodyRes = R.string.ocr_failed_none_body,
+                            onManualEntry = onManualEntry,
+                        )
+                    } else {
+                        ReviewStep(
+                            entries = p.entries,
+                            atMs = p.atMs,
+                            failure = p.saveFailure,
+                            onToggle = vm::toggleEntry,
+                            onSetDate = vm::setDate,
+                        )
+                    }
 
-                is ImportLabResultViewModel.Phase.Done -> {
-                    DoneStep(saved = p.saved, onContinue = onDone)
-                }
+                is ImportLabResultViewModel.Phase.Done -> SavedStep(saved = p.saved)
 
-                is ImportLabResultViewModel.Phase.Error -> ErrorStep(
-                    reason = p.reason,
-                    onRetry = vm::reset,
+                is ImportLabResultViewModel.Phase.Error -> FailedStep(
+                    titleRes = R.string.ocr_failed_title,
+                    bodyRes = R.string.ocr_failed_body,
+                    onManualEntry = onManualEntry,
                 )
             }
+
+            Spacer(Modifier.height(12.dp))
         }
     }
 }
 
+// ---------------------------------------------------------------------------
+// Chrome shared by the four steps
+// ---------------------------------------------------------------------------
+
+/** Four segments, filled up to the step we are on. */
 @Composable
-private fun ColumnScope.IdleStep(onPickImage: () -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-        ),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth(),
+private fun StepProgress(step: Int) {
+    val label = stringResource(R.string.ocr_progress_a11y_fmt, step)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = label },
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        repeat(OCR_STEPS) { index ->
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.tertiary),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Filled.CloudUpload,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onTertiary,
-                )
-            }
-            Column(modifier = Modifier
-                .padding(start = 14.dp)
-                .fillMaxWidth(),
-            ) {
-                Text(
-                    stringResource(R.string.import_lab_intro_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    stringResource(R.string.import_lab_intro_sub),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
+                    .weight(1f)
+                    .height(4.dp)
+                    .background(
+                        color = if (index < step) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHighest
+                        },
+                        shape = EggShapes.Pill,
+                    ),
+            )
         }
     }
-    Spacer(Modifier.height(8.dp))
-    Text(
-        stringResource(R.string.import_lab_supported_hint),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Spacer(Modifier.weight(1f))
+}
+
+/** « 3 / 4 · VÉRIFIE CE QU’ON A LU » on the left, « Hors ligne » on the right. */
+@Composable
+private fun StepCaption(caption: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        MicroLabel(caption, color = MaterialTheme.colorScheme.primary)
+        MicroLabel(stringResource(R.string.ocr_offline))
+    }
+}
+
+@Composable
+private fun BandButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
     Button(
-        onClick = onPickImage,
+        onClick = onClick,
+        enabled = enabled,
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp),
-        shape = RoundedCornerShape(50),
+        shape = EggShapes.Pill,
     ) {
-        Icon(Icons.Filled.CloudUpload, contentDescription = null)
-        Spacer(Modifier.size(8.dp))
-        Text(stringResource(R.string.import_lab_pick))
+        if (icon != null) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.size(8.dp))
+        }
+        Text(label, style = MaterialTheme.typography.labelLarge)
     }
-    Spacer(Modifier.height(8.dp))
 }
 
+/** The `encrypted` inset that closes every step: what was read, and what was
+ *  not kept. Same wording on all four so the promise never wavers. */
 @Composable
-private fun ColumnScope.ProcessingStep() {
-    Spacer(Modifier.weight(1f))
-    Column(
+private fun PrivacyInset(text: String) {
+    Row(
         modifier = Modifier
-            .fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainer, EggShapes.Note)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        CircularProgressIndicator()
+        Icon(
+            Icons.Filled.Lock,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(19.dp),
+        )
         Text(
-            stringResource(R.string.import_lab_processing),
-            style = MaterialTheme.typography.bodyMedium,
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-    Spacer(Modifier.weight(1f))
 }
 
+// ---------------------------------------------------------------------------
+// 1 / 4 — Fichier
+// ---------------------------------------------------------------------------
+
 @Composable
-private fun ColumnScope.PasswordStep(
-    wrongPassword: Boolean,
-    onUnlock: (String) -> Unit,
-    onCancel: () -> Unit,
-) {
-    var password by androidx.compose.runtime.remember {
-        androidx.compose.runtime.mutableStateOf("")
+private fun ColumnScope.PickStep() {
+    EggCard(variant = CardVariant.Primary) {
+        Text(
+            stringResource(R.string.ocr_step1_title),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            stringResource(R.string.ocr_step1_body),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 6.dp),
+        )
     }
-    Spacer(Modifier.height(8.dp))
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                stringResource(R.string.import_lab_password_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                stringResource(R.string.import_lab_password_sub),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            PasswordField(
-                value = password,
-                onValueChange = { password = it },
-                label = stringResource(R.string.import_lab_password_label),
-                isError = wrongPassword,
-                modifier = Modifier.fillMaxWidth(),
-                supportingText = if (wrongPassword) {
-                    { Text(stringResource(R.string.import_lab_password_wrong)) }
-                } else null,
-            )
-        }
-    }
-    Spacer(Modifier.weight(1f))
-    Button(
-        onClick = { onUnlock(password) },
-        enabled = password.isNotBlank(),
-        modifier = Modifier.fillMaxWidth().height(56.dp),
-        shape = RoundedCornerShape(50),
-    ) { Text(stringResource(R.string.import_lab_unlock)) }
-    androidx.compose.material3.TextButton(
-        onClick = onCancel,
-        modifier = Modifier.fillMaxWidth(),
-    ) { Text(stringResource(R.string.action_cancel)) }
-    Spacer(Modifier.height(8.dp))
-}
-
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-@Composable
-private fun ColumnScope.PreviewStep(
-    entries: List<ImportLabResultViewModel.EditableEntry>,
-    atMs: Long,
-    dateAutoDetected: Boolean,
-    onToggle: (Int) -> Unit,
-    onSetDate: (Long) -> Unit,
-    onSave: () -> Unit,
-    onRetry: () -> Unit,
-) {
-    var datePickerOpen by androidx.compose.runtime.saveable.rememberSaveable {
-        androidx.compose.runtime.mutableStateOf(false)
-    }
-    val dateFmt = androidx.compose.runtime.remember {
-        java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault())
-    }
-
-    if (entries.isEmpty()) {
-        Spacer(Modifier.weight(1f))
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            shape = RoundedCornerShape(24.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                stringResource(R.string.import_lab_no_match),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(24.dp),
-            )
-        }
-        Spacer(Modifier.weight(1f))
-        Button(
-            onClick = onRetry,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(50),
-        ) { Text(stringResource(R.string.import_lab_retry)) }
-        Spacer(Modifier.height(8.dp))
-        return
-    }
-
     Text(
-        stringResource(R.string.import_lab_review_title),
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-    )
-    Text(
-        stringResource(R.string.import_lab_review_sub),
+        stringResource(R.string.ocr_step1_hint),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(20.dp),
-        modifier = Modifier.fillMaxWidth(),
+    PrivacyInset(stringResource(R.string.ocr_privacy))
+}
+
+// ---------------------------------------------------------------------------
+// 2 / 4 — Lecture
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun ColumnScope.ReadingStep() {
+    Text(
+        stringResource(R.string.ocr_step2_title),
+        style = MaterialTheme.typography.titleMedium,
+    )
+    Text(
+        stringResource(R.string.ocr_step2_body),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    // Skeletons shaped like the review step that follows — never a spinner
+    // over the whole page (§5.3).
+    SkeletonBlock(height = 64.dp, shape = EggShapes.Card)
+    SkeletonBlock(height = 168.dp, shape = EggShapes.Card)
+    SkeletonBlock(height = 72.dp, shape = EggShapes.Note)
+}
+
+// ---------------------------------------------------------------------------
+// 3 / 4 — Aperçu
+// ---------------------------------------------------------------------------
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ColumnScope.ReviewStep(
+    entries: List<ImportLabResultViewModel.EditableEntry>,
+    atMs: Long,
+    failure: ImportLabResultViewModel.SaveFailure?,
+    onToggle: (Int) -> Unit,
+    onSetDate: (Long) -> Unit,
+) {
+    var datePickerOpen by rememberSaveable { mutableStateOf(false) }
+    val dateFmt = remember { SimpleDateFormat("d MMMM yyyy", Locale.getDefault()) }
+    val dateText = dateFmt.format(Date(atMs))
+    val dateLabel = stringResource(R.string.ocr_date_a11y_fmt, dateText)
+
+    // A failed save keeps the user on this step rather than on a success
+    // screen; the card says what happened and the band still offers a retry.
+    if (failure != null) {
+        EggCard(variant = CardVariant.Error) {
+            Text(
+                stringResource(R.string.ocr_save_failed_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                stringResource(R.string.ocr_save_failed_body),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            if (failure.saved > 0) {
+                Text(
+                    pluralStringResource(
+                        R.plurals.ocr_save_failed_partial,
+                        failure.saved,
+                        failure.saved,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        }
+    }
+
+    EggCard(
+        variant = CardVariant.Low,
+        padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+        onClick = { datePickerOpen = true },
+        modifier = Modifier.semantics { contentDescription = dateLabel },
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { datePickerOpen = true }
-                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Icon(
+                Icons.Filled.CalendarMonth,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    stringResource(R.string.import_lab_date_label),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    dateFmt.format(java.util.Date(atMs)),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    stringResource(
-                        if (dateAutoDetected) R.string.import_lab_date_auto
-                        else R.string.import_lab_date_manual,
-                    ),
+                    stringResource(R.string.ocr_date_label),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Text(
+                    dateText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
-            androidx.compose.material3.TextButton(onClick = { datePickerOpen = true }) {
-                Text(stringResource(R.string.import_lab_date_change))
-            }
-        }
-    }
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxWidth()
-            .weight(1f),
-        contentPadding = PaddingValues(vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(entries.size) { idx ->
-            val e = entries[idx]
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                shape = RoundedCornerShape(20.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onToggle(idx) },
-            ) {
-                Row(
-                    modifier = Modifier.padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(
-                        checked = e.selected,
-                        onCheckedChange = { onToggle(idx) },
-                    )
-                    Column(modifier = Modifier
-                        .padding(start = 4.dp)
-                        .fillMaxWidth()
-                        .weight(1f)) {
-                        Text(
-                            HormoneCatalog.kindLabel(e.hormone),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                    Text(
-                        "${trimDouble(e.value)} ${e.unit}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-        }
-    }
-    val anySelected = entries.any { it.selected }
-    Button(
-        onClick = onSave,
-        enabled = anySelected,
-        modifier = Modifier.fillMaxWidth().height(56.dp),
-        shape = RoundedCornerShape(50),
-    ) {
-        Text(
-            stringResource(
-                R.string.import_lab_save_fmt,
-                entries.count { it.selected },
+            Text(
+                stringResource(R.string.ocr_date_edit),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
             )
-        )
+        }
     }
-    Spacer(Modifier.height(8.dp))
+
+    SectionTitle(pluralStringResource(R.plurals.ocr_detected, entries.size, entries.size))
+
+    EggCard(
+        variant = CardVariant.Low,
+        padding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
+    ) {
+        entries.forEachIndexed { index, entry ->
+            AnalyteRow(entry = entry, onToggle = { onToggle(index) })
+            if (index < entries.lastIndex) CardRule()
+        }
+    }
+
+    PrivacyInset(stringResource(R.string.ocr_privacy))
 
     if (datePickerOpen) {
-        val state = androidx.compose.material3.rememberDatePickerState(initialSelectedDateMillis = atMs)
-        androidx.compose.material3.DatePickerDialog(
+        // Material speaks UTC midnight on both sides of this dialog, so the day
+        // is converted in and out of the local zone — otherwise a reading taken
+        // west of Greenwich is filed on the previous day.
+        val zone = remember { ZoneId.systemDefault() }
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = Instant.ofEpochMilli(atMs).atZone(zone)
+                .toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+        )
+        DatePickerDialog(
             onDismissRequest = { datePickerOpen = false },
             confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    state.selectedDateMillis?.let(onSetDate)
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { picked ->
+                        val day = Instant.ofEpochMilli(picked).atZone(ZoneOffset.UTC).toLocalDate()
+                        val previous = Instant.ofEpochMilli(atMs).atZone(zone)
+                        onSetDate(
+                            day.atTime(previous.hour, previous.minute)
+                                .atZone(zone).toInstant().toEpochMilli(),
+                        )
+                    }
                     datePickerOpen = false
                 }) { Text(stringResource(R.string.action_ok)) }
             },
             dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { datePickerOpen = false }) {
+                TextButton(onClick = { datePickerOpen = false }) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },
-        ) {
-            androidx.compose.material3.DatePicker(state = state)
-        }
+        ) { DatePicker(state = state) }
     }
 }
 
 @Composable
-private fun ColumnScope.DoneStep(saved: Int, onContinue: () -> Unit) {
-    Spacer(Modifier.weight(1f))
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                stringResource(R.string.import_lab_done_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+private fun AnalyteRow(
+    entry: ImportLabResultViewModel.EditableEntry,
+    onToggle: () -> Unit,
+) {
+    val name = HormoneCatalog.kindLabel(entry.hormone)
+    val valueText = if (entry.doubtful) {
+        stringResource(R.string.ocr_uncertain_fmt, entry.raw)
+    } else {
+        stringResource(R.string.measures_reading_original_fmt, trimDouble(entry.value), entry.unit)
+    }
+    // One node for the whole row: TalkBack announces the intent, the reading
+    // and the switch state in one breath instead of three separate stops.
+    val label = stringResource(R.string.measures_reading_sub_fmt, stringResource(R.string.ocr_keep_fmt, name), valueText)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = entry.selected,
+                role = Role.Switch,
+                onValueChange = { onToggle() },
             )
+            .semantics(mergeDescendants = true) { contentDescription = label }
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                stringResource(R.string.import_lab_done_fmt, saved),
+                name,
                 style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-    }
-    Spacer(Modifier.weight(1f))
-    Button(
-        onClick = onContinue,
-        modifier = Modifier.fillMaxWidth().height(52.dp),
-        shape = RoundedCornerShape(50),
-    ) { Text(stringResource(R.string.import_lab_close)) }
-    Spacer(Modifier.height(8.dp))
-}
-
-@Composable
-private fun ColumnScope.ErrorStep(reason: String, onRetry: () -> Unit) {
-    Spacer(Modifier.weight(1f))
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                stringResource(R.string.import_lab_error_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onErrorContainer,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                reason,
+                valueText,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onErrorContainer,
+                color = if (entry.doubtful) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
         }
+        Switch(checked = entry.selected, onCheckedChange = null)
     }
-    Spacer(Modifier.weight(1f))
-    Button(
-        onClick = onRetry,
-        modifier = Modifier.fillMaxWidth().height(52.dp),
-        shape = RoundedCornerShape(50),
-    ) { Text(stringResource(R.string.import_lab_retry)) }
-    Spacer(Modifier.height(8.dp))
+}
+
+// ---------------------------------------------------------------------------
+// 4 / 4 — Enregistré
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun ColumnScope.SavedStep(saved: Int) {
+    EggCard(variant = CardVariant.Primary) {
+        Text(
+            stringResource(R.string.ocr_step4_title),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            pluralStringResource(R.plurals.ocr_step4_body, saved, saved),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+    }
+    PrivacyInset(stringResource(R.string.ocr_step4_note))
+}
+
+// ---------------------------------------------------------------------------
+// The two distinct failures
+// ---------------------------------------------------------------------------
+
+/** A locked PDF is not a broken read: we ask for the key, use it once, and
+ *  forget it. The field is deliberately plain `remember` — `rememberSaveable`
+ *  would put the password in the saved-instance bundle. */
+@Composable
+private fun ColumnScope.LockedStep(
+    wrongPassword: Boolean,
+    onUnlock: (String) -> Unit,
+    onPickAnother: () -> Unit,
+) {
+    var password by remember { mutableStateOf("") }
+    EggCard(variant = if (wrongPassword) CardVariant.Error else CardVariant.Low) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                Icons.Filled.Lock,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Column {
+                Text(
+                    stringResource(R.string.ocr_locked_title),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    stringResource(R.string.ocr_locked_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+        PasswordField(
+            value = password,
+            onValueChange = { password = it },
+            label = stringResource(R.string.ocr_locked_label),
+            isError = wrongPassword,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 14.dp),
+            supportingText = if (wrongPassword) {
+                { Text(stringResource(R.string.ocr_locked_wrong)) }
+            } else {
+                null
+            },
+        )
+        Button(
+            onClick = { onUnlock(password) },
+            enabled = password.isNotBlank(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp)
+                .height(EggDim.TouchTarget),
+            shape = EggShapes.Pill,
+        ) { Text(stringResource(R.string.ocr_locked_unlock)) }
+        TextButton(
+            onClick = onPickAnother,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(stringResource(R.string.ocr_retry)) }
+    }
+    PrivacyInset(stringResource(R.string.ocr_privacy))
+}
+
+/** The other failure: the document opened but we got nothing usable out of it.
+ *  Offer the sure thing — typing the values in. */
+@Composable
+private fun ColumnScope.FailedStep(
+    titleRes: Int,
+    bodyRes: Int,
+    onManualEntry: () -> Unit,
+) {
+    EggCard(variant = CardVariant.Error) {
+        Text(
+            stringResource(titleRes),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            stringResource(bodyRes),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        TextButton(
+            onClick = onManualEntry,
+            modifier = Modifier.padding(top = 4.dp),
+        ) { Text(stringResource(R.string.ocr_manual)) }
+    }
 }
 
 private fun trimDouble(v: Double): String {
     val s = v.toString()
     return if (s.endsWith(".0")) s.dropLast(2) else s
 }
-

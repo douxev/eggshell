@@ -2,14 +2,19 @@ import SwiftUI
 import TransitionCore
 
 // ===========================================================================
-// PUSHED screen — log a dose for a medication. Fields: dose, unité, voie,
-// date/heure, notes. For injection routes (MedCatalog.isInjection, keyed off
-// the SELECTED route) a site picker from standardInjectionSites() is shown,
-// pre-selecting the suggested next site (suggestNextInjectionSite).
-// Create only: a « Période » mode logs one dose per day at a chosen hour over
-// a span in one core transaction (logDoses). With editDoseId set, the screen
-// edits that recorded dose in place (updateDose), carrying the schedule
-// linkage over. Parity with Android LogDoseScreen. All UI strings in French.
+// Médics — note a dose (handoff §6.5, action bar « Noter une prise »).
+//
+// Two modes, both kept: « Une prise » and « Période » (one intake a day across
+// a span, in a single core transaction — a gel applied every morning for three
+// months is not thirty taps). The injection-site selector keeps its rotation
+// suggestion, and the route can differ from the treatment's default so an
+// occasional other administration is recorded truthfully.
+//
+// The screen also *attaches* what it writes: a dose typed by hand is worth as
+// much as one ticked from a notification, so `DueOccurrence.linkage` fills
+// `scheduledAtMs` / `scheduleId` when the intake falls within half a cadence of
+// an occurrence. Outside that, nothing is attached — an ad-hoc dose is not
+// late, it is unplanned, and we never invent a prescribed time (D2).
 // ===========================================================================
 
 @MainActor
@@ -24,6 +29,9 @@ final class LogDoseViewModel: ObservableObject {
     /// The recorded dose being edited (nil in create mode). Kept so its
     /// schedule linkage (status/scheduledAtMs/scheduleId) survives the edit.
     @Published var loadedDose: DoseEvent?
+    /// The treatment's reminders, so a hand-noted dose can be attached to the
+    /// occurrence it answers. Read once: they don't change under this screen.
+    @Published var schedules: [DoseSchedule] = []
 
     // Editable fields
     @Published var doseText = ""
@@ -35,12 +43,18 @@ final class LogDoseViewModel: ObservableObject {
 
     // Range mode (create only): declare a daily intake over a whole span
     // (e.g. a topical applied every day for months) in one action.
-    @Published var rangeMode = false
+    @Published var modeIndex = 0
     @Published var rangeStart = Date()
     @Published var rangeEnd = Date()
     @Published var rangeTime = LogDoseViewModel.defaultRangeTime()
 
     @Published var saving = false
+    /// Bumped on a successful write — the trigger of `.sensoryFeedback` (§4).
+    @Published var savedTick = 0
+
+    static let modes = ["Une prise", "Période"]
+
+    var rangeMode: Bool { modeIndex == 1 }
 
     /// Days in the selected span, inclusive; 0 when the range is inverted.
     var rangeDayCount: Int {
@@ -67,6 +81,7 @@ final class LogDoseViewModel: ObservableObject {
                 route = m.route
                 refreshInjection(for: m.route)
             }
+            schedules = (try? await session.listSchedulesForMedication(medId, includeInactive: true)) ?? []
             if let id = editDoseId {
                 // Editing: seed every field from the recorded dose.
                 if let d = try await session.getDose(id) {
@@ -82,7 +97,7 @@ final class LogDoseViewModel: ObservableObject {
                     // Surface a failed load — Save stays gated on loadedDose,
                     // but the user must not stare at a silently empty form
                     // believing it's the record.
-                    self.error = "Prise introuvable."
+                    self.error = "Impossible de charger cette prise."
                 }
             } else if isInjection {
                 let suggestion = try await session.suggestNextInjectionSite(medicationId: medId)
@@ -106,6 +121,14 @@ final class LogDoseViewModel: ObservableObject {
         }
     }
 
+    /// The occurrence an intake at `atMs` answers, and how far from it — what
+    /// the line under the date field says before anything is written.
+    func plannedMatch(at atMs: Int64) -> (plannedAtMs: Int64, deltaMin: Int)? {
+        guard let planned = DueOccurrence.linkage(for: atMs, schedules: schedules).scheduledAtMs
+        else { return nil }
+        return (planned, Int((atMs - planned) / 60_000))
+    }
+
     private func formatDose(_ value: Double) -> String {
         if value == value.rounded() { return String(Int(value)) }
         return String(format: "%g", value)
@@ -117,8 +140,16 @@ final class LogDoseViewModel: ObservableObject {
         let parsed = Double(doseText.replacingOccurrences(of: ",", with: "."))
         let takenMs = Int64(takenAt.timeIntervalSince1970 * 1000)
         // On edit, carry the schedule linkage over untouched — the dose keeps
-        // counting against whichever reminder produced it.
+        // counting against whichever reminder produced it, and we never
+        // retro-fit a prescribed time onto a record written before punctuality
+        // existed. On create, attach the occurrence this intake answers.
         let prev = loadedDose
+        let link: (scheduleId: Int64?, scheduledAtMs: Int64?)
+        if let prev {
+            link = (prev.scheduleId, prev.scheduledAtMs)
+        } else {
+            link = DueOccurrence.linkage(for: takenMs, schedules: schedules)
+        }
         let event = NewDoseEvent(
             medicationId: medId,
             takenAtMs: takenMs,
@@ -128,14 +159,15 @@ final class LogDoseViewModel: ObservableObject {
             injectionSite: isInjection ? selectedSite : nil,
             notes: notes.isEmpty ? nil : notes,
             status: prev?.status ?? "taken",
-            scheduledAtMs: prev?.scheduledAtMs,
-            scheduleId: prev?.scheduleId)
+            scheduledAtMs: link.scheduledAtMs,
+            scheduleId: link.scheduleId)
         do {
             if let prev {
                 _ = try await session.updateDose(prev.id, event)
             } else {
                 _ = try await session.logDose(event)
             }
+            savedTick += 1
             return true
         } catch {
             self.error = describe(error)
@@ -155,18 +187,26 @@ final class LogDoseViewModel: ObservableObject {
         var doses: [NewDoseEvent] = []
         while day <= endDay {
             let at = cal.date(bySettingHour: comps.hour ?? 12, minute: comps.minute ?? 0, second: 0, of: day) ?? day
+            let atMs = Int64(at.timeIntervalSince1970 * 1000)
+            // Each day is matched on its own: a fortnight of doses can very
+            // well answer a reminder on some days and none on others.
+            let link = DueOccurrence.linkage(for: atMs, schedules: schedules)
             doses.append(NewDoseEvent(
                 medicationId: medId,
-                takenAtMs: Int64(at.timeIntervalSince1970 * 1000),
+                takenAtMs: atMs,
                 dose: parsed,
                 doseUnit: unit.isEmpty ? nil : unit,
                 route: route,
                 injectionSite: isInjection ? selectedSite : nil,
-                notes: notes.isEmpty ? nil : notes))
+                notes: notes.isEmpty ? nil : notes,
+                status: "taken",
+                scheduledAtMs: link.scheduledAtMs,
+                scheduleId: link.scheduleId))
             day = cal.date(byAdding: .day, value: 1, to: day) ?? day.addingTimeInterval(86_400)
         }
         do {
             _ = try await session.logDoses(doses)
+            savedTick += 1
             return true
         } catch {
             self.error = describe(error)
@@ -191,219 +231,221 @@ struct LogDoseView: View {
     }
 
     private var isEditing: Bool { editDoseId != nil }
+    private var isRange: Bool { vm.rangeMode && !isEditing }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.l) {
+            VStack(alignment: .leading, spacing: Metrics.blockGap) {
+                if let error = vm.error {
+                    ErrorCardView(error, retryLabel: "Réessayer") { reload() }
+                }
+
                 if vm.loading {
-                    ProgressView().tint(palette.primary).frame(maxWidth: .infinity).padding()
+                    SkeletonBlock(height: 72)
+                    SkeletonBlock(height: 120)
+                    SkeletonBlock(height: 120)
                 } else {
-                    if let med = vm.med {
-                        Text(med.name).font(.eggTitle).foregroundStyle(palette.onSurface)
+                    if let med = vm.med { identityCard(med) }
+                    if !isEditing {
+                        SegmentedSelector(
+                            options: LogDoseViewModel.modes,
+                            selection: $vm.modeIndex,
+                            accessibilityLabel: "Ce que tu notes")
                     }
-                    if !isEditing { modeCard }
-                    doseCard
-                    routeCard
-                    if vm.isInjection { siteCard }
-                    if vm.rangeMode && !isEditing { rangeCard } else { dateCard }
-                    notesCard
-                    saveButton
+                    whenBlock
+                    doseBlock
+                    routeBlock
+                    if vm.isInjection { siteBlock }
+                    noteBlock
                 }
-                if let e = vm.error { ErrorBanner(message: e) }
             }
-            .padding(Spacing.l)
+            .padding(.horizontal, Metrics.screenMargin)
+            .padding(.top, Spacing.xs)
+            .padding(.bottom, Metrics.blockGap)
         }
-        .navigationTitle(isEditing ? "Modifier la prise" : "Enregistrer une prise")
-        .task { if let s = app.session { await vm.load(s, medId: medId, editDoseId: editDoseId) } }
+        .medsScreen(isEditing ? "Modifier la prise" : "Noter une prise")
+        .eggActionBar {
+            ActionBarButton(saveLabel, systemImage: "checkmark", enabled: canSave) { save() }
+        }
+        // The confirmation you feel in your hand, on a dose that landed (§4).
+        .sensoryFeedback(.success, trigger: vm.savedTick)
+        .task { reload() }
     }
 
-    private var modeCard: some View {
-        Picker("Mode", selection: $vm.rangeMode) {
-            Text("Une prise").tag(false)
-            Text("Période").tag(true)
-        }
-        .pickerStyle(.segmented)
-    }
+    // MARK: - Blocks
 
-    private var doseCard: some View {
-        SectionCard {
-            Text("Dose").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
+    /// Which treatment this is about — the screen is reached from three places,
+    /// so it always says so rather than assuming you remember.
+    private func identityCard(_ med: Medication) -> some View {
+        let accent: Color? = med.color.map { MedColor.color(fromArgb: $0) }
+        return EggCard(variant: .low, paddingH: 18, paddingV: 14, spacing: 0) {
             HStack(spacing: Spacing.m) {
-                TextField("0", text: $vm.doseText)
-                    .keyboardType(.decimalPad)
-                    .font(.eggHeadline)
-                    .foregroundStyle(palette.onSurface)
-                    .padding(Spacing.m)
-                    .background(palette.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: Corner.medium, style: .continuous))
-                TextField("unité", text: $vm.unit)
-                    .font(.eggHeadline)
-                    .foregroundStyle(palette.onSurface)
-                    .padding(Spacing.m)
-                    .background(palette.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: Corner.medium, style: .continuous))
-                    .frame(maxWidth: 120)
-            }
-        }
-    }
-
-    private var routeCard: some View {
-        SectionCard {
-            Text("Voie d'administration").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            FlowChips {
-                ForEach(MedCatalog.routes, id: \.self) { value in
-                    ChoiceChip(label: MedCatalog.routeLabel(value), selected: vm.route == value) {
-                        vm.route = value
-                        vm.refreshInjection(for: value)
-                    }
+                IconTile(size: 44, container: accent?.opacity(0.18) ?? palette.primaryContainer) {
+                    Image(systemName: MedFormat.routeIcon(med.route))
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(accent ?? palette.onPrimaryContainer)
                 }
-            }
-        }
-    }
-
-    private var siteCard: some View {
-        SectionCard {
-            Text("Site d'injection").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            if let suggested = vm.suggestedSite {
-                Text("Suggéré : \(MedCatalog.injectionSiteLabel(suggested))")
-                    .font(.eggCaption).foregroundStyle(palette.primary)
-            }
-            SiteChips(items: vm.sites, selected: vm.selectedSite, suggested: vm.suggestedSite) { site in
-                vm.selectedSite = site
-            }
-        }
-    }
-
-    private var dateCard: some View {
-        SectionCard {
-            Text("Date et heure").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            // A dose can only have been taken in the past — cap the picker at now.
-            DatePicker("Prise le", selection: $vm.takenAt, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
-                .font(.eggBody)
-                .tint(palette.primary)
-        }
-    }
-
-    private var rangeCard: some View {
-        SectionCard {
-            Text("Période").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            DatePicker("Début", selection: $vm.rangeStart, in: ...Date(), displayedComponents: [.date])
-                .font(.eggBody)
-                .tint(palette.primary)
-            DatePicker("Fin", selection: $vm.rangeEnd, in: ...Date(), displayedComponents: [.date])
-                .font(.eggBody)
-                .tint(palette.primary)
-            DatePicker("Heure de chaque prise", selection: $vm.rangeTime, displayedComponents: .hourAndMinute)
-                .font(.eggBody)
-                .tint(palette.primary)
-            if vm.rangeDayCount >= 1 {
-                Text("\(vm.rangeDayCount) prises seront enregistrées.")
-                    .font(.eggCaption).foregroundStyle(palette.onSurface.opacity(0.6))
-            }
-        }
-    }
-
-    private var notesCard: some View {
-        SectionCard {
-            Text("Notes").font(.eggLabel).foregroundStyle(palette.onSurface.opacity(0.6))
-            TextField("Remarques (optionnel)", text: $vm.notes, axis: .vertical)
-                .lineLimit(3...6)
-                .font(.eggBody)
-                .foregroundStyle(palette.onSurface)
-                .padding(Spacing.m)
-                .background(palette.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: Corner.medium, style: .continuous))
-        }
-    }
-
-    private var saveButton: some View {
-        Button {
-            guard let session = app.session else { return }
-            Task {
-                let ok: Bool
-                if vm.rangeMode && !isEditing {
-                    ok = await vm.saveRange(session, medId: medId)
-                } else {
-                    ok = await vm.save(session, medId: medId)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(med.name)
+                        .font(EggFont.titleS)
+                        .foregroundStyle(palette.onSurface)
+                    Text(MedCatalog.kindLabel(med.kind) + MedFormat.sep + MedCatalog.routeLabel(med.route))
+                        .font(EggFont.bodyS)
+                        .foregroundStyle(palette.onSurfaceVariant)
                 }
-                if ok { dismiss() }
-            }
-        } label: {
-            Text("Enregistrer")
-                .font(.eggHeadline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Spacing.s)
-        }
-        .glassProminentButton()
-        .tint(palette.primary)
-        // In edit mode, block Save until the record actually loaded — saving
-        // an unseeded form would blank the dose and sever its schedule linkage.
-        .disabled(vm.saving
-            || (isEditing && vm.loadedDose == nil)
-            || (vm.rangeMode && !isEditing && vm.rangeDayCount < 1))
-    }
-}
-
-// Wrapping grid of ChoiceChips for injection sites (labels via MedCatalog).
-private struct SiteChips: View {
-    let items: [String]
-    let selected: String?
-    let suggested: String?
-    let onSelect: (String) -> Void
-
-    var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: Spacing.s)], alignment: .leading, spacing: Spacing.s) {
-            ForEach(items, id: \.self) { site in
-                let label = MedCatalog.injectionSiteLabel(site)
-                ChoiceChip(
-                    label: site == suggested ? "\(label) ★" : label,
-                    selected: selected == site
-                ) {
-                    onSelect(site)
-                }
+                Spacer(minLength: 0)
             }
         }
     }
-}
 
-// Private layout helper: wraps the route chips onto multiple lines.
-private struct FlowChips: Layout {
-    var spacing: CGFloat = Spacing.s
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var rowWidth: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var totalHeight: CGFloat = 0
-        var totalWidth: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if rowWidth > 0, rowWidth + spacing + size.width > maxWidth {
-                totalHeight += rowHeight + spacing
-                totalWidth = max(totalWidth, rowWidth)
-                rowWidth = size.width
-                rowHeight = size.height
-            } else {
-                rowWidth += (rowWidth > 0 ? spacing : 0) + size.width
-                rowHeight = max(rowHeight, size.height)
+    @ViewBuilder
+    private var whenBlock: some View {
+        if isRange {
+            MedsFormBlock("QUAND", footnote: rangeFootnote) {
+                DatePicker("Du", selection: $vm.rangeStart, in: ...Date(), displayedComponents: .date)
+                    .font(.eggBody)
+                DatePicker("Au", selection: $vm.rangeEnd, in: ...Date(), displayedComponents: .date)
+                    .font(.eggBody)
+                DatePicker("À quelle heure", selection: $vm.rangeTime, displayedComponents: .hourAndMinute)
+                    .font(.eggBody)
+            }
+        } else {
+            MedsFormBlock("QUAND") {
+                // A dose can only have been taken in the past — cap the picker.
+                DatePicker("Prise le", selection: $vm.takenAt, in: ...Date(),
+                           displayedComponents: [.date, .hourAndMinute])
+                    .font(.eggBody)
+                plannedLine
             }
         }
-        totalHeight += rowHeight
-        totalWidth = max(totalWidth, rowWidth)
-        return CGSize(width: maxWidth.isFinite ? totalWidth : rowWidth, height: totalHeight)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > bounds.maxX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
+    private var rangeFootnote: String {
+        switch vm.rangeDayCount {
+        case 0:  return "La date de fin est avant celle du début — je ne sais pas quoi noter."
+        case 1:  return "Une prise sera notée."
+        default: return "\(vm.rangeDayCount) prises seront notées, une par jour."
         }
+    }
+
+    /// Says out loud what the dose will be measured against, before it is
+    /// written — and says just as clearly when it will be measured against
+    /// nothing, so a missing écart never looks like a bug (D2).
+    @ViewBuilder
+    private var plannedLine: some View {
+        let atMs = Int64(vm.takenAt.timeIntervalSince1970 * 1000)
+        if let match = vm.plannedMatch(at: atMs) {
+            let timing: MedTiming = Punctuality.timing(match.deltaMin) == .late ? .late : .onTime
+            let style = MedTimingStyle.of(timing, deltaMin: match.deltaMin, palette: palette)
+            HStack(spacing: Spacing.s) {
+                Image(systemName: style.systemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(style.glyph)
+                Text("Répond au rappel : " + MedFormat.dayAndTime(match.plannedAtMs))
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: Spacing.s)
+                StatusPillView(style.word, container: style.container, content: style.content)
+            }
+            .frame(minHeight: 32)
+        } else {
+            HStack(spacing: Spacing.s) {
+                Image(systemName: "clock")
+                    .font(.system(size: 15))
+                    .foregroundStyle(palette.onSurfaceVariant)
+                Text("Aucun rappel autour de cette heure : je la note sans écart.")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(minHeight: 32)
+        }
+    }
+
+    private var doseBlock: some View {
+        MedsFormBlock("LA DOSE") {
+            HStack(spacing: Spacing.m) {
+                MedsField(placeholder: "0", text: $vm.doseText, keyboard: .decimalPad)
+                MedsField(placeholder: "unité", text: $vm.unit)
+                    .frame(maxWidth: 130)
+            }
+        }
+    }
+
+    private var routeBlock: some View {
+        // Per-dose route: it defaults to the treatment's, and stays editable so
+        // an occasional different administration is recorded truthfully.
+        MedsFormBlock("LA VOIE") {
+            MedsChipRow(
+                options: MedCatalog.routes,
+                selected: vm.route,
+                label: MedCatalog.routeLabel,
+                onSelect: { value in
+                    vm.route = value
+                    vm.refreshInjection(for: value)
+                })
+        }
+    }
+
+    private var siteBlock: some View {
+        MedsFormBlock("LE SITE", footnote: siteFootnote) {
+            MedsChipRow(
+                options: vm.sites,
+                selected: vm.selectedSite,
+                label: MedCatalog.injectionSiteLabel,
+                suggested: vm.suggestedSite,
+                onSelect: { vm.selectedSite = $0 })
+        }
+    }
+
+    private var siteFootnote: String {
+        guard let suggested = vm.suggestedSite else {
+            return "Note où tu piques : c'est ce qui permet de faire tourner les sites."
+        }
+        return "Suggéré : \(MedCatalog.injectionSiteLabel(suggested)) — on alterne pour laisser la peau se remettre."
+    }
+
+    private var noteBlock: some View {
+        MedsFormBlock("UN MOT") {
+            MedsField(
+                placeholder: "Ce que tu veux te rappeler (facultatif)",
+                text: $vm.notes,
+                multiline: true)
+        }
+    }
+
+    // MARK: - Saving
+
+    private var saveLabel: String {
+        guard isRange else { return "Enregistrer" }
+        return vm.rangeDayCount <= 1 ? "Enregistrer" : "Enregistrer \(vm.rangeDayCount) prises"
+    }
+
+    private var canSave: Bool {
+        if vm.saving { return false }
+        // In edit mode, block Save until the record actually loaded — saving an
+        // unseeded form would blank the dose and sever its schedule linkage.
+        if isEditing && vm.loadedDose == nil { return false }
+        if isRange && vm.rangeDayCount < 1 { return false }
+        return true
+    }
+
+    private func save() {
+        guard canSave, let session = app.session else { return }
+        Task {
+            let ok = isRange
+                ? await vm.saveRange(session, medId: medId)
+                : await vm.save(session, medId: medId)
+            if ok { dismiss() }
+        }
+    }
+
+    private func reload() {
+        guard let session = app.session else {
+            vm.loading = false
+            return
+        }
+        Task { await vm.load(session, medId: medId, editDoseId: editDoseId) }
     }
 }

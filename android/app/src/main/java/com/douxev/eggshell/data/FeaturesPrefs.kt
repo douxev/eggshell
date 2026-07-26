@@ -58,9 +58,15 @@ class FeaturesPrefs @Inject constructor(
     private val _bleeding = MutableStateFlow(prefs.getBoolean(KEY_BLEEDING, false))
     val bleeding: StateFlow<Boolean> = _bleeding.asStateFlow()
 
-    /** Appointments / notes ("RDV"). Opt-in: appointment content (clinic,
-     *  professional) can be very identifying, so it stays hidden until enabled. */
-    private val _appointments = MutableStateFlow(prefs.getBoolean(KEY_APPOINTMENTS, false))
+    /**
+     * Appointments ("RDV"). On by default since the refonte: the doctor report
+     * is reached from « Préparer ma consultation » on this screen and nowhere
+     * else, so leaving the module off would leave a fresh install with no path
+     * to the PDF export at all. An empty Rendez-vous screen reveals nothing —
+     * what is identifying is its *content*, and there is none until the user
+     * writes some.
+     */
+    private val _appointments = MutableStateFlow(prefs.getBoolean(KEY_APPOINTMENTS, true))
     val appointments: StateFlow<Boolean> = _appointments.asStateFlow()
 
     fun setMedications(enabled: Boolean) {

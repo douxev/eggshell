@@ -4,8 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -16,36 +17,46 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.douxev.eggshell.R
+import com.douxev.eggshell.ui.theme.EggDim
 
 /**
- * Shared headline row used at the top of every main tab (Today, Médics,
- * Journal, Courbes, Photos, Voix). Title on the left, settings IconButton
- * on the right so the user can always reach Réglages without scrolling
- * back to Home first.
+ * Header of a pushed screen: back arrow, then the title.
+ *
+ * The refonte has a single root — the launcher home — so every other screen is
+ * pushed and every one of them owns a back arrow that returns to it. This
+ * replaces the old "large title + settings cog" header, which only made sense
+ * while these screens were tabs.
+ *
+ * It is a plain row rather than a `TopAppBar` so it can sit as the first item
+ * of a `LazyColumn` and scroll with the content.
  */
 @Composable
 fun ScreenHeader(
     title: String,
-    onOpenSettings: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    actions: @Composable () -> Unit = {},
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 4.dp, top = 6.dp, bottom = 4.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            title,
-            style = MaterialTheme.typography.headlineLarge,
-        )
-        IconButton(onClick = onOpenSettings) {
+        IconButton(onClick = onBack, modifier = Modifier.size(EggDim.TouchTarget)) {
             Icon(
-                Icons.Filled.Settings,
-                contentDescription = stringResource(R.string.more_title),
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.action_back),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        actions()
     }
 }

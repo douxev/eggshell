@@ -36,6 +36,14 @@ class PendingDosePrefs @Inject constructor(
         val takenAtMs: Long,
         /** "taken" or "skipped" — what the user tapped while the vault was locked. */
         val status: String = "taken",
+        /**
+         * The occurrence the tap answered. It has to travel with the queue: by
+         * the time the vault is unlocked the schedule has long since moved on,
+         * and without it the intake would land in the vault with no prescribed
+         * time and drop out of the punctuality figures for good. Null when the
+         * schedule had no usable cadence — we never invent one.
+         */
+        val scheduledAtMs: Long? = null,
     )
 
     private val prefs: SharedPreferences =
@@ -57,19 +65,29 @@ class PendingDosePrefs @Inject constructor(
     fun all(): List<Pending> {
         val plaintext = obfuscator.open(prefs.getString(KEY_BLOB, null)) ?: return emptyList()
         return plaintext.split(SEP).mapNotNull { row ->
-            val parts = row.split(",")
-            // 3 fields = legacy "taken" row; 4 fields adds the status tag.
+            val parts = row.split(FIELD_SEP)
+            // 3 fields = legacy "taken" row; 4 adds the status tag; 5 adds the
+            // prescribed time. Older rows keep parsing, they just carry none.
             if (parts.size < 3) return@mapNotNull null
             val scheduleId = parts[0].toLongOrNull() ?: return@mapNotNull null
             val medicationId = parts[1].toLongOrNull() ?: return@mapNotNull null
             val takenAtMs = parts[2].toLongOrNull() ?: return@mapNotNull null
             val status = parts.getOrNull(3)?.takeIf { it.isNotBlank() } ?: "taken"
-            Pending(scheduleId, medicationId, takenAtMs, status)
+            val scheduledAtMs = parts.getOrNull(4)?.toLongOrNull()
+            Pending(scheduleId, medicationId, takenAtMs, status, scheduledAtMs)
         }
     }
 
     private fun serialize(rows: List<Pending>): String = rows.joinToString(SEP) {
-        "${it.scheduleId},${it.medicationId},${it.takenAtMs},${it.status}"
+        listOf(
+            it.scheduleId.toString(),
+            it.medicationId.toString(),
+            it.takenAtMs.toString(),
+            it.status,
+            // Appended last, blank when absent, so a row written by the previous
+            // version still round-trips through this parser.
+            it.scheduledAtMs?.toString().orEmpty(),
+        ).joinToString(FIELD_SEP)
     }
 
     @Synchronized
@@ -99,5 +117,6 @@ class PendingDosePrefs @Inject constructor(
         private const val PREFS_NAME = "androidx_cache_index"
         private const val KEY_BLOB = "seq"
         private const val SEP = ";"
+        private const val FIELD_SEP = ","
     }
 }

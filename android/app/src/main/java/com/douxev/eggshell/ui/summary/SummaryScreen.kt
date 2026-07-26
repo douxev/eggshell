@@ -2,26 +2,16 @@ package com.douxev.eggshell.ui.summary
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -34,6 +24,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,6 +34,14 @@ import com.douxev.eggshell.R
 import com.douxev.eggshell.data.SummaryPeriod
 import com.douxev.eggshell.data.SummaryPrefs
 import com.douxev.eggshell.data.SummaryRepository
+import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.components.CardVariant
+import com.douxev.eggshell.ui.components.EggCard
+import com.douxev.eggshell.ui.components.EmptyState
+import com.douxev.eggshell.ui.components.Pill
+import com.douxev.eggshell.ui.components.SectionTitle
+import com.douxev.eggshell.ui.components.SkeletonBlock
+import com.douxev.eggshell.ui.theme.EggDim
 
 @HiltViewModel
 class SummaryViewModel @Inject constructor(
@@ -74,7 +73,13 @@ class SummaryViewModel @Inject constructor(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * « Ton résumé » — the encouraging, honest read of the last week or month.
+ *
+ * It only ever states what is true: the headline picks the kindest framing the
+ * data actually supports, and the footer says out loud that a comparison is not
+ * a cause.
+ */
 @Composable
 fun SummaryScreen(
     onBack: () -> Unit,
@@ -84,134 +89,160 @@ fun SummaryScreen(
     val summary by vm.summary.collectAsState()
     val loading by vm.loading.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.summary_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back),
-                        )
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
+    Scaffold(containerColor = MaterialTheme.colorScheme.surface) { padding ->
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(padding),
+            contentPadding = PaddingValues(
+                start = EggDim.ScreenMargin,
+                end = EggDim.ScreenMargin,
+                bottom = 24.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = period == SummaryPeriod.WEEK,
-                    onClick = { vm.setPeriod(SummaryPeriod.WEEK) },
-                    label = { Text(stringResource(R.string.summary_period_week)) },
-                )
-                FilterChip(
-                    selected = period == SummaryPeriod.MONTH,
-                    onClick = { vm.setPeriod(SummaryPeriod.MONTH) },
-                    label = { Text(stringResource(R.string.summary_period_month)) },
-                )
+            item(key = "summary-header") {
+                ScreenHeader(title = stringResource(R.string.summary_title), onBack = onBack)
+            }
+            item(key = "summary-period") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Pill(
+                        label = stringResource(R.string.summary_period_week),
+                        selected = period == SummaryPeriod.WEEK,
+                        onClick = { vm.setPeriod(SummaryPeriod.WEEK) },
+                    )
+                    Pill(
+                        label = stringResource(R.string.summary_period_month),
+                        selected = period == SummaryPeriod.MONTH,
+                        onClick = { vm.setPeriod(SummaryPeriod.MONTH) },
+                    )
+                }
             }
 
             val s = summary
             when {
-                loading && s == null -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
-                        horizontalArrangement = Arrangement.Center,
-                    ) { CircularProgressIndicator() }
+                loading && s == null -> item(key = "summary-skeleton") {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SkeletonBlock(height = 84.dp)
+                        SkeletonBlock(height = 104.dp)
+                        SkeletonBlock(height = 104.dp)
+                    }
                 }
-                s == null || !s.hasData -> {
-                    InfoCard(stringResource(R.string.summary_no_data))
+                s == null || !s.hasData -> item(key = "summary-empty") {
+                    EmptyState(message = stringResource(R.string.summary_no_data))
                 }
-                else -> {
-                    HeadlineCard(headlineFor(s))
+                else -> summaryBody(s)
+            }
 
-                    if (s.hasJournal) {
-                        SectionCard(title = stringResource(R.string.summary_mood_title)) {
-                            ComparisonLine(
-                                current = fmt1(s.moodCurrent),
-                                previous = fmt1(s.moodPrevious),
-                                suffix = stringResource(R.string.summary_out_of_ten),
-                            )
-                        }
-                    }
+            item(key = "summary-disclaimer") {
+                Text(
+                    stringResource(R.string.summary_disclaimer),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
 
-                    if (s.hasMedications && (s.expectedCurrent > 0 || s.takenCurrent > 0 || s.expectedPrevious > 0)) {
-                        SectionCard(title = stringResource(R.string.summary_doses_title)) {
-                            Text(
-                                stringResource(
-                                    R.string.summary_doses_logged_fmt,
-                                    s.takenCurrent,
-                                    s.expectedCurrent,
-                                ),
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                            Text(
-                                stringResource(
-                                    R.string.summary_missed_vs_fmt,
-                                    s.missedCurrent,
-                                    s.missedPrevious,
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                stringResource(R.string.summary_estimate_note),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+private fun LazyListScope.summaryBody(s: SummaryRepository.PeriodSummary) {
+    item(key = "summary-headline") {
+        EggCard(variant = CardVariant.Primary) {
+            Text(
+                headlineFor(s),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
 
-                    if (s.customMetrics.isNotEmpty()) {
-                        SectionCard(title = stringResource(R.string.summary_symptoms_title)) {
-                            s.customMetrics.forEach { m ->
-                                Row(modifier = Modifier.fillMaxWidth()) {
-                                    Text(
-                                        m.label,
-                                        modifier = Modifier.weight(1f),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                    Text(
-                                        stringResource(
-                                            R.string.summary_vs_prev_fmt,
-                                            fmt1(m.current),
-                                            fmt1(m.previous),
-                                        ),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (s.hasJournal) {
-                        SectionCard(title = stringResource(R.string.summary_journal_title)) {
-                            Text(
-                                stringResource(
-                                    R.string.summary_journal_count_fmt,
-                                    s.journalCountCurrent,
-                                    s.journalCountPrevious,
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        }
-                    }
-
+    if (s.hasJournal) {
+        item(key = "summary-mood") {
+            SummarySection(title = stringResource(R.string.summary_mood_title)) {
+                Row(verticalAlignment = Alignment.Bottom) {
                     Text(
-                        stringResource(R.string.summary_disclaimer),
-                        style = MaterialTheme.typography.bodySmall,
+                        fmt1(s.moodCurrent) + stringResource(R.string.summary_out_of_ten),
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        "  " + stringResource(
+                            R.string.summary_vs_prev_short_fmt,
+                            fmt1(s.moodPrevious),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp),
                     )
                 }
+            }
+        }
+    }
+
+    if (s.hasMedications && (s.expectedCurrent > 0 || s.takenCurrent > 0 || s.expectedPrevious > 0)) {
+        item(key = "summary-doses") {
+            SummarySection(title = stringResource(R.string.summary_doses_title)) {
+                Text(
+                    stringResource(
+                        R.string.summary_doses_logged_fmt,
+                        s.takenCurrent,
+                        s.expectedCurrent,
+                    ),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    stringResource(R.string.summary_missed_vs_fmt, s.missedCurrent, s.missedPrevious),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    stringResource(R.string.summary_estimate_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+
+    if (s.customMetrics.isNotEmpty()) {
+        item(key = "summary-metrics") {
+            SummarySection(title = stringResource(R.string.summary_symptoms_title)) {
+                s.customMetrics.forEach { m ->
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            m.label,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            stringResource(
+                                R.string.summary_vs_prev_fmt,
+                                fmt1(m.current),
+                                fmt1(m.previous),
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (s.hasJournal) {
+        item(key = "summary-journal") {
+            SummarySection(title = stringResource(R.string.summary_journal_title)) {
+                Text(
+                    stringResource(
+                        R.string.summary_journal_count_fmt,
+                        s.journalCountCurrent,
+                        s.journalCountPrevious,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
             }
         }
     }
@@ -235,76 +266,14 @@ private fun headlineFor(s: SummaryRepository.PeriodSummary): String {
 }
 
 @Composable
-private fun HeadlineCard(text: String) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(20.dp),
-        )
-    }
-}
-
-@Composable
-private fun InfoCard(text: String) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(20.dp),
-        )
-    }
-}
-
-@Composable
-private fun SectionCard(title: String, content: @Composable () -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = RoundedCornerShape(20.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-            content()
+private fun SummarySection(title: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionTitle(title)
+        EggCard(variant = CardVariant.Low, padding = PaddingValues(16.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { content() }
         }
     }
 }
 
-@Composable
-private fun ComparisonLine(current: String, previous: String, suffix: String) {
-    Row(verticalAlignment = Alignment.Bottom) {
-        Text(
-            "$current$suffix",
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            "  " + stringResource(R.string.summary_vs_prev_short_fmt, previous),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 4.dp),
-        )
-    }
-}
-
-private fun fmt1(v: Double?): String = v?.let { String.format("%.1f", it) } ?: "—"
+private fun fmt1(v: Double?): String =
+    v?.let { String.format(Locale.getDefault(), "%.1f", it) } ?: "—"
