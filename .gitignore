@@ -79,5 +79,5 @@ design-system/src/styles/themes.css
 # Local working notes / scratch files
 /labels-to-edit.json
 
-# Claude Code local state
+# local tooling state
 .claude/
