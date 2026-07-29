@@ -65,4 +65,26 @@
         <item quantity="one">Il te reste %1$d essai avant que les données soient effacées.</item>
         <item quantity="other">Il te reste %1$d essais avant que les données soient effacées.</item>
     </plurals>
+
+    <!-- ========================= Clé de secours ========================= -->
+    <string name="recovery_setup_title">Ajoute une clé de secours</string>
+    <string name="recovery_setup_why_title">Pourquoi c\'est important</string>
+    <string name="recovery_setup_why_body">Ton coffre ne s\'ouvre aujourd\'hui qu\'avec ton empreinte. Android détruit définitivement cette clé dès qu\'une nouvelle empreinte est enregistrée dans les réglages du téléphone, et parfois après une mise à jour du système.\n\nSans deuxième clé, tes données resteraient chiffrées sur ton téléphone sans que personne — nous compris — ne puisse les rouvrir.</string>
+    <string name="recovery_setup_why_footer">Cette clé de secours ne quitte pas ton téléphone. Choisis quelque chose que tu retrouveras dans six mois : elle ne peut pas être réinitialisée.</string>
+    <string name="recovery_setup_field_secret">Clé de secours</string>
+    <string name="recovery_setup_field_confirm">Confirme la clé de secours</string>
+    <string name="recovery_setup_min_hint">%1$d caractères minimum.</string>
+    <string name="recovery_setup_mismatch">Les deux saisies ne correspondent pas.</string>
+    <string name="recovery_setup_action">Enregistrer ma clé de secours</string>
+    <string name="recovery_setup_working">Enregistrement…</string>
+    <string name="recovery_setup_error">Échec : %1$s</string>
+    <string name="recovery_setup_confirm_title">Confirme que c\'est bien toi</string>
+    <string name="recovery_setup_confirm_subtitle">Pose ton doigt pour créer la clé de secours</string>
+
+    <!-- Entrée de la clé de secours depuis l\'écran de déverrouillage. -->
+    <string name="unlock_recovery_open">Mon empreinte ne fonctionne pas</string>
+    <string name="unlock_recovery_label">Clé de secours</string>
+    <string name="unlock_recovery_submit">Déverrouiller</string>
+    <string name="unlock_recovery_back">Revenir à l\'empreinte</string>
+    <string name="unlock_recovery_keystore_dead">Ton empreinte ne peut plus ouvrir le coffre sur ce téléphone : Android a invalidé la clé, souvent après l\'ajout d\'une empreinte ou une mise à jour du système. Tes données sont intactes — utilise ta clé de secours.</string>
 </resources>

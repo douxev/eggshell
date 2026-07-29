@@ -21,6 +21,27 @@ val keystoreProps = Properties().apply {
 fun signingValue(propName: String, envName: String): String? =
     keystoreProps.getProperty(propName) ?: System.getenv(envName)
 
+// Single source of truth for the ABIs this build targets — read by BOTH the
+// packaging filter and the cargo-ndk task below. They used to disagree:
+// `-PdevAbi` shrank the APK but cargoBuildRust still compiled all three
+// targets, so the flag never actually saved any Rust build time (which is the
+// expensive half — rusqlite vendors OpenSSL + SQLCipher per target).
+//
+// Accepts a comma-separated list:
+//   ./gradlew installDebug   -PdevAbi=arm64-v8a                   fast local install
+//   ./gradlew assembleRelease -PdevAbi=arm64-v8a,armeabi-v7a      CI: phones only
+//
+// The default keeps all three, because the Play AAB is built locally from it
+// and x86_64 is what ChromeOS / x86 Chromebooks run — dropping it there would
+// silently cut those users off.
+val targetAbis: List<String> =
+    (project.findProperty("devAbi") as String?)
+        ?.split(",")
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        ?.takeIf { it.isNotEmpty() }
+        ?: listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+
 android {
     namespace = "com.douxev.eggshell"
     compileSdk = 37
@@ -42,16 +63,7 @@ android {
         versionName = "2.0.3"
 
         ndk {
-            // Limit ABIs to common phone architectures; can extend to x86 for emulators.
-            // For fast local installs over (slow) wireless adb, package a single ABI:
-            //   ./gradlew installDebug -PdevAbi=arm64-v8a
-            // Default (no flag) bundles all three so release AABs stay complete.
-            val devAbi = (project.findProperty("devAbi") as String?)?.takeIf { it.isNotBlank() }
-            if (devAbi != null) {
-                abiFilters += devAbi
-            } else {
-                abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
-            }
+            abiFilters += targetAbis
         }
     }
 
@@ -162,14 +174,17 @@ val cargoBuildRust = tasks.register<Exec>("cargoBuildRust") {
 
     workingDir = coreDir.asFile
     commandLine(
-        "cargo", "ndk",
-        "-t", "arm64-v8a",
-        "-t", "armeabi-v7a",
-        "-t", "x86_64",
-        "-o", jniLibsDir.asFile.absolutePath,
-        "build", "--release", "-p", "transition-uniffi"
+        buildList {
+            addAll(listOf("cargo", "ndk"))
+            targetAbis.forEach { addAll(listOf("-t", it)) }
+            addAll(listOf("-o", jniLibsDir.asFile.absolutePath))
+            addAll(listOf("build", "--release", "-p", "transition-uniffi"))
+        }
     )
 
+    // Without this the task stays UP-TO-DATE across an ABI-set change and
+    // silently ships jniLibs from the previous target list.
+    inputs.property("abis", targetAbis)
     inputs.dir(coreDir.dir("transition-core/src"))
     inputs.dir(coreDir.dir("transition-uniffi/src"))
     inputs.file(coreDir.file("transition-uniffi/Cargo.toml"))
@@ -264,9 +279,6 @@ dependencies {
     implementation(libs.androidx.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
 
-    implementation(libs.vico.compose)
-    implementation(libs.vico.compose.m3)
-
     // UniFFI runtime — JNA powers the Kotlin bindings
     implementation(libs.jna) { artifact { type = "aar" } }
 
@@ -277,8 +289,11 @@ dependencies {
     // language switching with persistence across cold starts).
     implementation(libs.androidx.appcompat)
 
-    // SQLCipher native lib (will be wired up in Phase 1)
-    implementation(libs.sqlcipher.android)
+    // No net.zetetic:sqlcipher-android here: the vault is opened entirely from
+    // Rust, whose rusqlite is built with `bundled-sqlcipher-vendored-openssl`,
+    // so SQLCipher is already linked *inside* libtransition_uniffi.so. The AAR
+    // was a leftover from an early phase that never got wired up, and it was
+    // shipping a second, unused 6.2 MB libsqlcipher.so per ABI.
 
     // Lab-result import — two-stage strategy:
     //  1. Most lab PDFs (Cerba, Biogroup, Synlab…) ship with an embedded

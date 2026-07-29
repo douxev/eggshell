@@ -26,6 +26,9 @@ class UnlockViewModel @Inject constructor(
     val mode: VaultPrefs.Mode? = repo.currentMode
     val hasDecoy: Boolean get() = decoy.hasAccessPin && decoy.hasDecoyPin
 
+    /** Whether a second, non-Keystore way into the vault exists. */
+    val hasRecovery: Boolean get() = repo.hasRecoverySecret
+
     sealed interface State {
         /** Initial / waiting for input. */
         data object Idle : State
@@ -46,6 +49,13 @@ class UnlockViewModel @Inject constructor(
          * reason and re-popping the prompt would be hostile.
          */
         data object AwaitingBiometric : State
+
+        /**
+         * The user asked for the recovery-key field because the primary factor
+         * is not working — typically a Keystore key destroyed by a fingerprint
+         * re-enrollment, which no amount of retrying will fix.
+         */
+        data object AwaitingRecovery : State
 
         /**
          * The PIN gate passed in a Keystore-only-style mode (1, 2). The
@@ -195,15 +205,80 @@ class UnlockViewModel @Inject constructor(
      */
     fun attemptAutoUnlock(activity: FragmentActivity?, biometricCopy: VaultRepository.BiometricCopy?) {
         if (hasDecoy && _state.value !is State.AccessGranted) return
+        lastAttemptWasRecovery = false
         _state.value = State.InProgress
         viewModelScope.launch {
             attemptUnlock(null, activity, biometricCopy)
         }
     }
 
+    /**
+     * Show the recovery-key field.
+     *
+     * Refused under a decoy for the same reason the fingerprint tile is: the
+     * decoy skin claims to be a notes app's passcode gate, and every surface on
+     * it must lead through the PIN. A recovery field there would open the real
+     * vault straight from the screen built to hide that it exists.
+     */
+    fun openRecovery() {
+        if (hasDecoy || !hasRecovery) return
+        lastAttemptWasRecovery = true
+        _state.value = State.AwaitingRecovery
+    }
+
+    /** Back to the primary factor from the recovery field. */
+    fun closeRecovery() {
+        lastAttemptWasRecovery = false
+        resetToPin()
+    }
+
+    fun submitRecovery(secret: String) {
+        if (hasDecoy || !hasRecovery) return
+        lastAttemptWasRecovery = true
+        _state.value = State.InProgress
+        viewModelScope.launch {
+            when (val out = repo.unlockWithRecovery(secret)) {
+                is VaultRepository.UnlockOutcome.Success -> _state.value = State.Success
+                is VaultRepository.UnlockOutcome.Failed -> _state.value = State.Failed(out.reason)
+                VaultRepository.UnlockOutcome.NotInitialized ->
+                    _state.value = State.Failed("not initialized")
+                // Unreachable in practice: this path never touches the Keystore,
+                // which is the entire point of it. Handled rather than `else`d
+                // so a future outcome cannot slip through unnoticed.
+                is VaultRepository.UnlockOutcome.KeystoreUnusable ->
+                    _state.value = State.Failed(out.reason)
+            }
+        }
+    }
+
+    /**
+     * Whether the last attempt came from the recovery field.
+     *
+     * Two jobs. It puts the post-failure bounce back on that field instead of
+     * dumping the user on the fingerprint tile they already told us is not
+     * working — and it tells the screen not to treat a slow recovery unlock as
+     * a stalled biometric prompt. Argon2id derivation legitimately takes
+     * seconds, and there is no prompt to have been dropped on that path.
+     */
+    private val _recoveryAttempt = MutableStateFlow(false)
+    val recoveryAttempt: StateFlow<Boolean> = _recoveryAttempt.asStateFlow()
+
+    /**
+     * The Keystore has definitively refused the primary factor this session.
+     * Drives the one line of copy that tells the user why they are suddenly
+     * looking at the recovery field instead of their fingerprint.
+     */
+    private val _keystoreUnusable = MutableStateFlow(false)
+    val keystoreUnusable: StateFlow<Boolean> = _keystoreUnusable.asStateFlow()
+
+    private var lastAttemptWasRecovery: Boolean
+        get() = _recoveryAttempt.value
+        set(value) { _recoveryAttempt.value = value }
+
     /** Reset back to the right entry-point after a Failed state. */
     fun resetToPin() {
         _state.value = when {
+            lastAttemptWasRecovery -> State.AwaitingRecovery
             hasDecoy -> State.AwaitingPin
             mode == VaultPrefs.Mode.KEYSTORE_BIOMETRIC -> State.AwaitingBiometric
             mode == VaultPrefs.Mode.KEYSTORE_ONLY -> State.Idle
@@ -225,6 +300,19 @@ class UnlockViewModel @Inject constructor(
             is VaultRepository.UnlockOutcome.Success -> _state.value = State.Success
             is VaultRepository.UnlockOutcome.Failed -> _state.value = State.Failed(out.reason)
             VaultRepository.UnlockOutcome.NotInitialized -> _state.value = State.Failed("not initialized")
+            is VaultRepository.UnlockOutcome.KeystoreUnusable -> {
+                _keystoreUnusable.value = true
+                // Send them where they can actually get in. Under a decoy no
+                // recovery surface may exist, and with no recovery secret set
+                // there is nowhere to send them — both fall back to the plain
+                // error, which is at least honest about the dead end.
+                if (hasRecovery && !hasDecoy) {
+                    lastAttemptWasRecovery = true
+                    _state.value = State.AwaitingRecovery
+                } else {
+                    _state.value = State.Failed(out.reason)
+                }
+            }
         }
     }
 

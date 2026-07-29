@@ -29,6 +29,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -82,6 +83,8 @@ fun UnlockScreen(
     val state by vm.state.collectAsState()
     val lockoutMs by vm.lockoutMs.collectAsState()
     val attemptsLeft by vm.attemptsLeft.collectAsState()
+    val recoveryAttempt by vm.recoveryAttempt.collectAsState()
+    val keystoreUnusable by vm.keystoreUnusable.collectAsState()
     val activity = LocalContext.current as FragmentActivity
     val biometricCopy = VaultRepository.BiometricCopy(
         title = stringResource(R.string.biometric_unlock_title),
@@ -132,11 +135,17 @@ fun UnlockScreen(
             // gated on it, so the flag must not be able to differ between the
             // key that is drawn and the callback that key fires.
             decoy = vm.hasDecoy,
+            hasRecovery = vm.hasRecovery,
+            recoveryAttempt = recoveryAttempt,
+            keystoreUnusable = keystoreUnusable,
             lockoutMs = lockoutMs,
             attemptsLeft = attemptsLeft,
             onSubmitPin = vm::submitPin,
             onSubmitPassphrase = { pp -> vm.submitPassphrase(pp, activity, biometricCopy) },
             onBiometric = { vm.attemptAutoUnlock(activity, biometricCopy) },
+            onOpenRecovery = vm::openRecovery,
+            onCloseRecovery = vm::closeRecovery,
+            onSubmitRecovery = vm::submitRecovery,
         )
     }
 
@@ -152,12 +161,25 @@ fun UnlockScreen(
 }
 
 /** Which input surface the current state puts in front of the user. */
-private enum class Stage { Pin, Passphrase, Biometric, Working, Silent }
+private enum class Stage { Pin, Passphrase, Biometric, Recovery, Working, Silent }
+
+/**
+ * How long a non-interactive state may last before the screen assumes it is
+ * stuck and offers a way out.
+ *
+ * Comfortably past the ~4 s watchdog inside [BiometricKeystoreUnlock], which
+ * catches the common case (prompt never reached the screen) and reports a real
+ * failure. This is the backstop for what that watchdog cannot see — a prompt
+ * that did appear but whose result the library swallowed.
+ */
+private const val STALLED_AFTER_MS = 12_000L
 
 private fun stageFor(
     state: UnlockViewModel.State,
     mode: VaultPrefs.Mode?,
     decoy: Boolean,
+    stalled: Boolean,
+    recoveryAttempt: Boolean,
 ): Stage {
     if (mode == null) return Stage.Silent
     // A failure bounces back to whatever surface the user came from, so the
@@ -173,20 +195,29 @@ private fun stageFor(
     } else {
         state
     }
+    // Biometric unlock is the one path with no input surface of its own: the
+    // prompt is the whole interaction, so if it never arrives the screen has
+    // nothing on it to tap and the only way out is force-stopping the app.
+    // Whenever we have been sitting on a non-interactive state long enough to
+    // call it stuck, fall back to the fingerprint tile — worst case it sits
+    // unseen behind a prompt that did show up.
+    val biometricStuck = stalled && mode == VaultPrefs.Mode.KEYSTORE_BIOMETRIC && !recoveryAttempt
     val stage = when (effective) {
         UnlockViewModel.State.AwaitingPin -> Stage.Pin
         UnlockViewModel.State.AwaitingPassphrase -> Stage.Passphrase
         UnlockViewModel.State.AwaitingBiometric -> Stage.Biometric
+        UnlockViewModel.State.AwaitingRecovery -> Stage.Recovery
         UnlockViewModel.State.InProgress,
-        UnlockViewModel.State.AccessGranted -> Stage.Working
+        UnlockViewModel.State.AccessGranted -> if (biometricStuck) Stage.Biometric else Stage.Working
+        UnlockViewModel.State.Idle -> if (biometricStuck) Stage.Biometric else Stage.Silent
         is UnlockViewModel.State.Throttled -> Stage.Pin
         else -> Stage.Silent
     }
     // Under a decoy the screen has exactly one way in — the PIN typed on it,
     // which then routes to the real vault or to the notes app. A fingerprint
-    // surface here would open the *real* vault straight from a screen that
-    // claims to be a notes-app passcode gate, so it never appears.
-    return if (decoy && stage == Stage.Biometric) Stage.Pin else stage
+    // (or recovery-key) surface here would open the *real* vault straight from
+    // a screen that claims to be a notes-app passcode gate, so neither appears.
+    return if (decoy && (stage == Stage.Biometric || stage == Stage.Recovery)) Stage.Pin else stage
 }
 
 @Composable
@@ -194,13 +225,32 @@ private fun UnlockBody(
     state: UnlockViewModel.State,
     mode: VaultPrefs.Mode?,
     decoy: Boolean,
+    hasRecovery: Boolean,
+    recoveryAttempt: Boolean,
+    keystoreUnusable: Boolean,
     lockoutMs: Long,
     attemptsLeft: Int?,
     onSubmitPin: (String) -> Unit,
     onSubmitPassphrase: (String) -> Unit,
     onBiometric: () -> Unit,
+    onOpenRecovery: () -> Unit,
+    onCloseRecovery: () -> Unit,
+    onSubmitRecovery: (String) -> Unit,
 ) {
-    val stage = stageFor(state, mode, decoy)
+    // No state on this screen is allowed to be terminal. The biometric prompt
+    // can be dropped by the platform without ever calling back (see
+    // BiometricKeystoreUnlock.awaitPromptOrGiveUp), and that used to strand
+    // the user on a progress bar with no button, no error and no retry. Any
+    // state that outlives this delay is treated as stuck; `stageFor` decides
+    // what to offer instead.
+    var stalled by remember { mutableStateOf(false) }
+    LaunchedEffect(state) {
+        stalled = false
+        delay(STALLED_AFTER_MS)
+        stalled = true
+    }
+
+    val stage = stageFor(state, mode, decoy, stalled, recoveryAttempt)
     val locked = lockoutMs > 0L
 
     // Never `rememberSaveable`: that would serialise the PIN into the
@@ -254,7 +304,7 @@ private fun UnlockBody(
                     else -> Unit
                 }
 
-                val message = messageFor(state, mode, stage)
+                val message = messageFor(state, mode, stage, keystoreUnusable)
                 if (message != null) {
                     Spacer(Modifier.height(14.dp))
                     Text(
@@ -286,6 +336,19 @@ private fun UnlockBody(
                     Stage.Biometric -> {
                         Spacer(Modifier.height(22.dp))
                         BiometricStage(onRetry = onBiometric)
+                        // The escape hatch for the failure the retry button
+                        // cannot fix: a Keystore key destroyed by a fingerprint
+                        // re-enrollment will refuse forever, however many times
+                        // it is tapped.
+                        if (hasRecovery) {
+                            TextButton(onClick = onOpenRecovery) {
+                                Text(stringResource(R.string.unlock_recovery_open))
+                            }
+                        }
+                    }
+                    Stage.Recovery -> {
+                        Spacer(Modifier.height(22.dp))
+                        RecoveryStage(onSubmit = onSubmitRecovery, onBack = onCloseRecovery)
                     }
                     else -> Unit
                 }
@@ -431,6 +494,7 @@ private fun messageFor(
     state: UnlockViewModel.State,
     mode: VaultPrefs.Mode?,
     stage: Stage,
+    keystoreUnusable: Boolean,
 ): String? = when {
     mode == null -> stringResource(R.string.unlock_not_initialized)
     state is UnlockViewModel.State.Failed ->
@@ -441,6 +505,9 @@ private fun messageFor(
         } else {
             stringResource(R.string.unlock_error_prefix, state.reason)
         }
+    // Explains why the fingerprint tile just vanished from under them.
+    stage == Stage.Recovery && keystoreUnusable ->
+        stringResource(R.string.unlock_recovery_keystore_dead)
     stage == Stage.Working -> stringResource(R.string.unlock_in_progress)
     // The passphrase field already labels itself; only the biometric stage
     // needs a sentence to explain what the big fingerprint tile does.
@@ -469,6 +536,38 @@ private fun PassphraseStage(onSubmit: (String) -> Unit) {
                 .fillMaxWidth()
                 .height(56.dp),
         ) { Text(stringResource(R.string.action_unlock)) }
+    }
+}
+
+/**
+ * The recovery-key field: the one way in that never touches the Keystore, and
+ * therefore the only one that still works once the biometric-bound key has been
+ * destroyed by a fingerprint re-enrollment.
+ */
+@Composable
+private fun RecoveryStage(onSubmit: (String) -> Unit, onBack: () -> Unit) {
+    var secret by remember { mutableStateOf("") }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        PasswordField(
+            value = secret,
+            onValueChange = { secret = it },
+            label = stringResource(R.string.unlock_recovery_label),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(
+            onClick = { onSubmit(secret) },
+            enabled = secret.isNotEmpty(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+        ) { Text(stringResource(R.string.unlock_recovery_submit)) }
+        TextButton(onClick = onBack) {
+            Text(stringResource(R.string.unlock_recovery_back))
+        }
     }
 }
 

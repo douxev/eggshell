@@ -64,4 +64,26 @@
         <item quantity="one">%1$d try left before the data is erased.</item>
         <item quantity="other">%1$d tries left before the data is erased.</item>
     </plurals>
+
+    <!-- ========================= Recovery key ========================= -->
+    <string name="recovery_setup_title">Add a recovery key</string>
+    <string name="recovery_setup_why_title">Why this matters</string>
+    <string name="recovery_setup_why_body">Right now your vault only opens with your fingerprint. Android destroys that key for good the moment a new fingerprint is enrolled in your phone\'s settings, and sometimes after a system update.\n\nWithout a second key, your data would stay encrypted on your phone with no one — us included — able to open it again.</string>
+    <string name="recovery_setup_why_footer">This recovery key never leaves your phone. Pick something you will still remember in six months: it cannot be reset.</string>
+    <string name="recovery_setup_field_secret">Recovery key</string>
+    <string name="recovery_setup_field_confirm">Confirm recovery key</string>
+    <string name="recovery_setup_min_hint">%1$d characters minimum.</string>
+    <string name="recovery_setup_mismatch">The two entries do not match.</string>
+    <string name="recovery_setup_action">Save my recovery key</string>
+    <string name="recovery_setup_working">Saving…</string>
+    <string name="recovery_setup_error">Failed: %1$s</string>
+    <string name="recovery_setup_confirm_title">Confirm it\'s you</string>
+    <string name="recovery_setup_confirm_subtitle">Touch the sensor to create the recovery key</string>
+
+    <!-- Recovery key entry from the unlock screen. -->
+    <string name="unlock_recovery_open">My fingerprint isn\'t working</string>
+    <string name="unlock_recovery_label">Recovery key</string>
+    <string name="unlock_recovery_submit">Unlock</string>
+    <string name="unlock_recovery_back">Back to fingerprint</string>
+    <string name="unlock_recovery_keystore_dead">Your fingerprint can no longer open the vault on this phone: Android invalidated the key, usually after a fingerprint was added or a system update landed. Your data is intact — use your recovery key.</string>
 </resources>

@@ -50,12 +50,6 @@
 #   -keep interface uniffi.**Lib { *; }
 #   -keepclassmembers class * implements uniffi.** { *; }
 
-# ── SQLCipher (net.zetetic:sqlcipher-android) ───────────────────────────────
-# Native JNI entry points must keep their exact class + method names.
--keep class net.sqlcipher.** { *; }
--keep class net.zetetic.** { *; }
--dontwarn net.sqlcipher.**
-
 # ── Tesseract4Android (adaptech-cz fork) ────────────────────────────────────
 # JNI bridge to libtesseract.so + libleptonica.so. The native side looks up
 # Java classes + method signatures by exact name through JNI, so anything in

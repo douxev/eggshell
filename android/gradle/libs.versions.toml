@@ -1,6 +1,6 @@
 [versions]
 agp = "9.3.1"
-kotlin = "2.3.21"
+kotlin = "2.4.10"
 ksp = "2.3.10"
 hilt = "2.60.1"
 # androidx.hilt 1.4 is the first release built against navigation 2.9 and
@@ -12,18 +12,22 @@ composeBom = "2026.06.01"
 # 1.11+ is the first release whose enableEdgeToEdge() stops calling the
 # setStatusBarColor / setNavigationBarColor / SHORT_EDGES APIs deprecated in
 # Android 15. It requires compileSdk 36, which is why this moved with AGP.
-activityCompose = "1.11.0"
+activityCompose = "1.13.0"
 coreKtx = "1.19.0"
 lifecycleKtx = "2.11.0"
 navigationCompose = "2.9.8"
 workManager = "2.11.2"
-biometric = "1.2.0-alpha05"
+# 1.2.0-alpha05 is February 2022 — the one androidx artifact the 2.0.2
+# toolchain jump left behind, next to libraries that all moved to 2026
+# releases. It also pinned androidx.fragment to 1.2.5 while everything around
+# it wanted far newer. 1.4.0-alpha07 is the newest published release (there is
+# no stable line past 1.1.0) and depends on fragment 1.6.2.
+biometric = "1.4.0-alpha07"
 datastore = "1.2.1"
 cameraX = "1.6.1"
-vico = "2.0.0-beta.3"
 # 5.17.0+ ships 16 KB page-aligned libjnidispatch.so (Android 15 requirement)
-jna = "5.17.0"
-reorderable = "2.4.3"
+jna = "5.19.1"
+reorderable = "3.1.0"
 appcompat = "1.7.1"
 pdfboxAndroid = "2.0.27.0"
 # 4.8.0+ ships 16 KB page-aligned native libs (libtesseract, libleptonica, …)
@@ -54,12 +58,9 @@ androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycl
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraX" }
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
-vico-compose = { group = "com.patrykandpatrick.vico", name = "compose", version.ref = "vico" }
-vico-compose-m3 = { group = "com.patrykandpatrick.vico", name = "compose-m3", version.ref = "vico" }
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 reorderable = { group = "sh.calvin.reorderable", name = "reorderable", version.ref = "reorderable" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
-sqlcipher-android = { group = "net.zetetic", name = "sqlcipher-android", version = "4.6.1" }
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfboxAndroid" }
 tesseract4android = { group = "com.github.adaptech-cz.Tesseract4Android", name = "tesseract4android", version.ref = "tesseract4android" }
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }

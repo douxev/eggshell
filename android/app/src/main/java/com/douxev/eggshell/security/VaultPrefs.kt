@@ -80,6 +80,70 @@ class VaultPrefs @Inject constructor(@ApplicationContext context: Context) {
         }.apply()
     }
 
+    // -- Recovery secret ------------------------------------------------------
+
+    /**
+     * Second, independent wrap of the vault master key.
+     *
+     * `KEYSTORE_BIOMETRIC` otherwise has exactly one way in, and the Keystore
+     * key behind it is destroyed outright the moment a new fingerprint is
+     * enrolled in Android's settings (`setInvalidatedByBiometricEnrollment`),
+     * or when an OEM update re-provisions the biometric templates. With a
+     * single wrap that is unrecoverable data loss — the DB, the photos and the
+     * voice notes stay on disk, encrypted, forever.
+     *
+     * This wrap is derived from a user-held secret via Argon2id, exactly like
+     * `KEYSTORE_PASSPHRASE` mode, and deliberately does **not** sit under a
+     * Keystore layer: surviving a broken Keystore is its entire purpose, so
+     * depending on one would reintroduce the single point of failure it exists
+     * to remove. Offline brute-force resistance therefore rests on Argon2id
+     * and on the secret's own strength.
+     */
+    fun recoveryWrapped(): ByteArray? =
+        prefs.getString(KEY_RECOVERY_WRAPPED, null)?.let { Base64.decode(it, Base64.NO_WRAP) }
+
+    fun recoveryKdf(): Kdf? {
+        val salt = prefs.getString(KEY_RECOVERY_SALT, null)
+            ?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return null
+        return Kdf(
+            salt = salt,
+            mCostKib = prefs.getInt(KEY_RECOVERY_M, 0).toUInt(),
+            tCost = prefs.getInt(KEY_RECOVERY_T, 0).toUInt(),
+            pCost = prefs.getInt(KEY_RECOVERY_P, 0).toUInt(),
+        )
+    }
+
+    /** True once a usable recovery wrap *and* its KDF material are both stored. */
+    val hasRecovery: Boolean
+        get() = prefs.contains(KEY_RECOVERY_WRAPPED) && prefs.contains(KEY_RECOVERY_SALT)
+
+    /**
+     * Persist both halves together with `commit`, not `apply`.
+     *
+     * A half-written recovery wrap is worse than none: the gate that forces
+     * this setup keys off [hasRecovery], so an interrupted async write would
+     * let the user through while leaving them with a secret that cannot
+     * actually open anything.
+     */
+    fun commitRecovery(wrapped: ByteArray, kdf: Kdf): Boolean =
+        prefs.edit()
+            .putString(KEY_RECOVERY_WRAPPED, Base64.encodeToString(wrapped, Base64.NO_WRAP))
+            .putString(KEY_RECOVERY_SALT, Base64.encodeToString(kdf.salt, Base64.NO_WRAP))
+            .putInt(KEY_RECOVERY_M, kdf.mCostKib.toInt())
+            .putInt(KEY_RECOVERY_T, kdf.tCost.toInt())
+            .putInt(KEY_RECOVERY_P, kdf.pCost.toInt())
+            .commit()
+
+    fun clearRecovery() {
+        prefs.edit()
+            .remove(KEY_RECOVERY_WRAPPED)
+            .remove(KEY_RECOVERY_SALT)
+            .remove(KEY_RECOVERY_M)
+            .remove(KEY_RECOVERY_T)
+            .remove(KEY_RECOVERY_P)
+            .apply()
+    }
+
     /** Erase everything — used at logout / vault reset / failed onboarding. */
     fun wipe() {
         prefs.edit().clear().apply()
@@ -183,6 +247,12 @@ class VaultPrefs @Inject constructor(@ApplicationContext context: Context) {
         private const val KEY_KDF_T = "kdf_t_cost"
         private const val KEY_KDF_P = "kdf_p_cost"
         private const val KEY_WRAPPED = "wrapped_key"
+
+        private const val KEY_RECOVERY_WRAPPED = "recovery_wrapped"
+        private const val KEY_RECOVERY_SALT = "recovery_salt"
+        private const val KEY_RECOVERY_M = "recovery_m"
+        private const val KEY_RECOVERY_T = "recovery_t"
+        private const val KEY_RECOVERY_P = "recovery_p"
 
         private const val KEY_DECOY_SALT = "decoy_salt"
         private const val KEY_DECOY_HASH = "decoy_hash"

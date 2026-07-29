@@ -1,6 +1,8 @@
 package com.douxev.eggshell.data
 
 import android.content.Context
+import android.security.keystore.KeyPermanentlyInvalidatedException
+import android.security.keystore.UserNotAuthenticatedException
 import androidx.fragment.app.FragmentActivity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.crypto.Cipher
@@ -88,6 +90,42 @@ class VaultRepository @Inject constructor(
         prefs.setWrappedKey(wrapped)
         prefs.mode = VaultPrefs.Mode.KEYSTORE_BIOMETRIC
         session = Vault(dbPath, key)
+    }
+
+    /**
+     * Decrypt a biometric-wrapped blob, recovering from the one failure that
+     * happens *before* any prompt is ever requested.
+     *
+     * `Cipher.init()` on a per-use key is supposed to succeed and defer
+     * authorisation to the CryptoObject. When it throws
+     * [UserNotAuthenticatedException] instead, the Keystore is demanding a
+     * valid auth token up front — it is treating the key as time-bound. Users
+     * hit by this see no fingerprint popup at all, because the code never got
+     * far enough to ask for one, and every retry fails identically.
+     *
+     * So: mint a token with a plain prompt, then re-init. If that works we
+     * decrypt straight away rather than asking for a second fingerprint — the
+     * token we just created is exactly what the Keystore was waiting for.
+     */
+    private suspend fun decryptWithBiometricKey(
+        wrapped: ByteArray,
+        activity: FragmentActivity,
+        biometricCopy: BiometricCopy,
+    ): ByteArray {
+        val secret = keystoreBio.getOrCreate(requireBiometric = true)
+        val cipher = try {
+            keystoreBio.newDecryptCipher(secret, keystoreBio.ivOf(wrapped))
+        } catch (notAuthenticated: UserNotAuthenticatedException) {
+            BiometricKeystoreUnlock.confirmIdentity(
+                activity, biometricCopy.title, biometricCopy.subtitle, biometricCopy.cancel,
+            )
+            val retried = keystoreBio.newDecryptCipher(secret, keystoreBio.ivOf(wrapped))
+            return retried.doFinal(keystoreBio.cipherTextOf(wrapped))
+        }
+        val unlocked = BiometricKeystoreUnlock.unlockCipher(
+            activity, cipher, biometricCopy.title, biometricCopy.subtitle, biometricCopy.cancel,
+        )
+        return unlocked.doFinal(keystoreBio.cipherTextOf(wrapped))
     }
 
     private fun ensureBiometricAvailable(activity: FragmentActivity) {
@@ -196,12 +234,7 @@ class VaultRepository @Inject constructor(
             VaultPrefs.Mode.KEYSTORE_BIOMETRIC -> {
                 if (activity == null || biometricCopy == null) return null
                 val wrapped = prefs.wrappedKey() ?: return null
-                val secret = keystoreBio.getOrCreate(requireBiometric = true)
-                val cipher = keystoreBio.newDecryptCipher(secret, keystoreBio.ivOf(wrapped))
-                val unlocked = BiometricKeystoreUnlock.unlockCipher(
-                    activity, cipher, biometricCopy.title, biometricCopy.subtitle, biometricCopy.cancel,
-                )
-                unlocked.doFinal(keystoreBio.cipherTextOf(wrapped))
+                decryptWithBiometricKey(wrapped, activity, biometricCopy)
             }
             VaultPrefs.Mode.KEYSTORE_PASSPHRASE -> {
                 val pass = passphrase ?: return null
@@ -304,13 +337,7 @@ class VaultRepository @Inject constructor(
                     }
                     val wrapped = prefs.wrappedKey()
                         ?: return@withContext UnlockOutcome.Failed("missing wrapped key")
-                    val secret = keystoreBio.getOrCreate(requireBiometric = true)
-                    val decryptCipher = keystoreBio.newDecryptCipher(secret, keystoreBio.ivOf(wrapped))
-                    val unlocked = BiometricKeystoreUnlock.unlockCipher(
-                        activity, decryptCipher,
-                        biometricCopy.title, biometricCopy.subtitle, biometricCopy.cancel,
-                    )
-                    VaultKey.fromRaw(unlocked.doFinal(keystoreBio.cipherTextOf(wrapped)))
+                    VaultKey.fromRaw(decryptWithBiometricKey(wrapped, activity, biometricCopy))
                 }
                 VaultPrefs.Mode.KEYSTORE_PASSPHRASE -> {
                     val pass = passphrase ?: return@withContext UnlockOutcome.Failed("passphrase required")
@@ -335,9 +362,96 @@ class VaultRepository @Inject constructor(
             }
             session = Vault(dbPath, key)
             UnlockOutcome.Success
+        } catch (invalidated: KeyPermanentlyInvalidatedException) {
+            // A fingerprint was (re-)enrolled since the key was created, so the
+            // Keystore destroyed it. Nothing retried here will ever work again.
+            UnlockOutcome.KeystoreUnusable(describe(invalidated))
+        } catch (notAuthenticated: UserNotAuthenticatedException) {
+            // Reached only when decryptWithBiometricKey's confirm-and-retry has
+            // already failed too, so the platform is asking for an auth token it
+            // then refuses to honour. Same dead end from the user's side.
+            UnlockOutcome.KeystoreUnusable(describe(notAuthenticated))
         } catch (cause: Throwable) {
             UnlockOutcome.Failed(describe(cause))
         }
+    }
+
+    // -- recovery secret -----------------------------------------------------
+
+    /** True when the vault has a second, non-Keystore way in. */
+    val hasRecoverySecret: Boolean get() = prefs.hasRecovery
+
+    /**
+     * True when the user is in a mode whose only key lives in the Keystore
+     * *and* is destroyed by a biometric re-enrollment, with nothing else able
+     * to open the vault. The UI turns this into a gate the user cannot skip.
+     */
+    val needsRecoverySetup: Boolean
+        get() = prefs.mode == VaultPrefs.Mode.KEYSTORE_BIOMETRIC && !prefs.hasRecovery
+
+    /**
+     * Wrap the master key a second time under a user-held secret.
+     *
+     * Needs the raw master key, which we deliberately do not keep in memory
+     * after unlock — so this re-runs the mode's normal recovery path, i.e. one
+     * more biometric prompt. That is not just an implementation detail: minting
+     * a second way into the vault should require proving you are the person who
+     * can already open it.
+     */
+    suspend fun setRecoverySecret(
+        secret: String,
+        activity: FragmentActivity?,
+        biometricCopy: BiometricCopy?,
+    ): RecoveryOutcome = withContext(Dispatchers.IO) {
+        val mode = prefs.mode ?: return@withContext RecoveryOutcome.Failed("vault not initialized")
+        if (secret.isBlank()) return@withContext RecoveryOutcome.Failed("empty secret")
+
+        val rawKey = try {
+            recoverRawKey(mode, null, activity, biometricCopy)
+        } catch (t: Throwable) {
+            return@withContext RecoveryOutcome.Failed(describe(t))
+        } ?: return@withContext RecoveryOutcome.Failed("missing credentials")
+
+        try {
+            val kdf = freshKdfMaterial()
+            val wrapped = VaultKey.fromRaw(rawKey).wrapWithPassphrase(
+                secret, kdf.salt, kdf.mCostKib, kdf.tCost, kdf.pCost,
+            )
+            // Synchronous: the gate that forced this screen reads `hasRecovery`,
+            // so it must be true on disk before we let the user past it.
+            if (prefs.commitRecovery(wrapped, kdf.toPrefs())) RecoveryOutcome.Success
+            else RecoveryOutcome.Failed("failed to persist recovery wrap")
+        } catch (t: Throwable) {
+            RecoveryOutcome.Failed(describe(t))
+        }
+    }
+
+    /**
+     * Open the vault with the recovery secret instead of the primary factor.
+     *
+     * This is the path that saves a user whose Keystore key was destroyed by a
+     * fingerprint re-enrollment: it never touches the Keystore at all.
+     */
+    suspend fun unlockWithRecovery(secret: String): UnlockOutcome = withContext(Dispatchers.IO) {
+        prefs.mode ?: return@withContext UnlockOutcome.NotInitialized
+        val wrapped = prefs.recoveryWrapped()
+            ?: return@withContext UnlockOutcome.Failed("no recovery secret set")
+        val kdf = prefs.recoveryKdf()
+            ?: return@withContext UnlockOutcome.Failed("no recovery kdf material")
+        try {
+            val key = VaultKey.unwrapWithPassphrase(
+                wrapped, secret, kdf.salt, kdf.mCostKib, kdf.tCost, kdf.pCost,
+            )
+            session = Vault(dbPath, key)
+            UnlockOutcome.Success
+        } catch (cause: Throwable) {
+            UnlockOutcome.Failed(describe(cause))
+        }
+    }
+
+    sealed interface RecoveryOutcome {
+        data object Success : RecoveryOutcome
+        data class Failed(val reason: String) : RecoveryOutcome
     }
 
     fun lock() {
@@ -412,5 +526,14 @@ class VaultRepository @Inject constructor(
         data object Success : UnlockOutcome
         data object NotInitialized : UnlockOutcome
         data class Failed(val reason: String) : UnlockOutcome
+
+        /**
+         * The Keystore will not produce the key and retrying cannot change
+         * that. Separated from [Failed] because the right response is not
+         * "try your finger again" — it is the recovery secret, and the UI
+         * takes the user straight there instead of bouncing them back onto a
+         * fingerprint tile that is now guaranteed to fail.
+         */
+        data class KeystoreUnusable(val reason: String) : UnlockOutcome
     }
 }

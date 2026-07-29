@@ -34,6 +34,7 @@ import com.douxev.eggshell.data.VoiceRepository
 import com.douxev.eggshell.data.WhatsNewPrefs
 import com.douxev.eggshell.ui.home.HomeNavHost
 import com.douxev.eggshell.ui.onboarding.OnboardingScreen
+import com.douxev.eggshell.ui.recovery.RecoverySetupScreen
 import com.douxev.eggshell.ui.theme.EggshellTheme
 import com.douxev.eggshell.ui.unlock.UnlockScreen
 import com.douxev.eggshell.ui.whatsnew.WhatsNewCatalog
@@ -154,6 +155,8 @@ fun AppRoot(rootVm: AppRootViewModel = hiltViewModel()) {
             OnboardingScreen(onComplete = { rootVm.refresh() })
         AppRootViewModel.Route.Unlock ->
             UnlockScreen(onUnlocked = { rootVm.refresh() })
+        AppRootViewModel.Route.RecoverySetup ->
+            RecoverySetupScreen(onDone = { rootVm.refresh() })
         AppRootViewModel.Route.Home -> {
             HomeNavHost(deepLinkProvider = rootVm)
             // What's-new overlay only on Home: don't pop a sheet on top of
@@ -179,7 +182,7 @@ class AppRootViewModel @Inject constructor(
     private val voice: VoiceRepository,
 ) : ViewModel() {
 
-    enum class Route { Onboarding, Unlock, Home }
+    enum class Route { Onboarding, Unlock, RecoverySetup, Home }
 
     /** Where the widget (or future deep links) ask the app to land. */
     enum class DeepLink { JournalAdd }
@@ -246,6 +249,11 @@ class AppRootViewModel @Inject constructor(
     private fun initialRoute(): Route = when {
         !repo.isInitialized -> Route.Onboarding
         !repo.isUnlocked -> Route.Unlock
+        // Sits between Unlock and Home on purpose: someone in biometric mode
+        // with no second wrap is one fingerprint enrollment away from losing
+        // the vault outright, and that is not a state to leave a user parked
+        // in behind a dismissible banner they will tap away.
+        repo.needsRecoverySetup -> Route.RecoverySetup
         else -> Route.Home
     }
 }

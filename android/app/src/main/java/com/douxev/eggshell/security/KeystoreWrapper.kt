@@ -76,7 +76,16 @@ class KeystoreWrapper(private val alias: String) {
                     // defence-in-depth: an attacker who lifts an unlocked
                     // device can still use the key, but one that grabs a
                     // locked one cannot — even with root and Keystore access.
-                    setUnlockedDeviceRequired(true)
+                    //
+                    // NOT applied to biometric keys. Combined with per-use auth
+                    // it is the one tag in this spec that can make the Keystore
+                    // demand a valid auth token at `Cipher.init()` — throwing
+                    // UserNotAuthenticatedException *before* any prompt is even
+                    // requested, which is a hard lockout with no visible cause.
+                    // Testers hit exactly that after an OEM system update. The
+                    // protection it buys is marginal by its own description
+                    // above; being locked out of your own vault is not.
+                    if (!requireBiometric) setUnlockedDeviceRequired(true)
                     if (useStrongBox) setIsStrongBoxBacked(true)
                 }
                 if (requireBiometric) {
