@@ -43,12 +43,27 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           build-scan-publish: false
+          # setup-gradle defaults to read-only on anything that is not the
+          # default branch. This workflow ONLY ever runs from a tag or a manual
+          # dispatch, so with the default it would read a cache that nothing is
+          # ever allowed to write — permanently cold. Opt in explicitly.
+          cache-read-only: false
+
+      # $ANDROID_HOME is a runner *shell* variable, not a workflow one: the
+      # `env` context only holds what a workflow/job/step `env:` block put
+      # there. `${{ env.ANDROID_HOME }}` therefore expands to the empty string
+      # inside `with:`, which silently turned the cache path into an absolute
+      # /ndk/... that does not exist — the step went green and cached nothing.
+      # Promote it to the env context first so the expansion has something to
+      # resolve.
+      - name: Resolve NDK path
+        run: echo "NDK_DIR=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
       - name: Cache Android NDK
         id: cache-ndk
         uses: actions/cache@v4
         with:
-          path: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+          path: ${{ env.NDK_DIR }}
           key: android-ndk-27.2.12479018
 
       - name: Install pinned Android NDK
