@@ -66,6 +66,7 @@ import com.douxev.eggshell.ui.components.EggCard
 @Composable
 fun RecoverySetupScreen(
     onDone: () -> Unit,
+    onGiveUp: () -> Unit,
     vm: RecoverySetupViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
@@ -192,6 +193,18 @@ fun RecoverySetupScreen(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive },
                 )
+                // Only after a real failure, never up front.
+                //
+                // Creating the key needs one biometric confirmation, so someone
+                // whose sensor is broken or whose Keystore key is already dead
+                // cannot complete this screen — and with back swallowed and no
+                // "later", the app became unusable for exactly the people it
+                // was built to protect. A dead end has to have a door; putting
+                // it behind a failure keeps it from being a casual skip.
+                Spacer(Modifier.height(6.dp))
+                androidx.compose.material3.TextButton(onClick = onGiveUp) {
+                    Text(stringResource(R.string.recovery_setup_continue_without))
+                }
             }
 
             Spacer(Modifier.height(24.dp))

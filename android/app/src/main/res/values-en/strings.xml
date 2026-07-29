@@ -157,7 +157,7 @@
     <string name="photo_reminder_title">Photo check-in</string>
     <string name="voice_reminder_title">Voice check-in</string>
     <string name="journal_reminder_title">Journal time</string>
-    <string name="reminder_public_title">eggshell</string>
+    <string name="reminder_public_title">Reminder</string>
     <string name="reminder_public_body">Reminder — unlock to see details.</string>
     <string name="reminder_locked_toast">Unlock the app to log this dose.</string>
     <string name="reminder_queued_toast">Dose recorded — it\'ll be added to your stats on next unlock.</string>
@@ -480,4 +480,5 @@
     <string name="appointment_reminder_body">You have an upcoming appointment.</string>
     <string name="feature_appointments_title">Appointments / Notes</string>
     <string name="feature_appointments_sub">Note medical appointments, professionals and to-dos.</string>
+    <string name="widget_lab_title">Blood work due</string>
 </resources>

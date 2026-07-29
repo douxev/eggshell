@@ -180,7 +180,7 @@
     <!-- Generic, content-free copy shown on the lockscreen and on the
          paired watch when the user hasn't unlocked the device. Hides the
          specific lab / dose details from anyone glancing at the screen. -->
-    <string name="reminder_public_title">eggshell</string>
+    <string name="reminder_public_title">Rappel</string>
     <string name="reminder_public_body">Rappel — déverrouille pour voir les détails.</string>
     <string name="reminder_locked_toast">Déverrouille l\'app pour enregistrer la prise.</string>
     <string name="reminder_queued_toast">Prise enregistrée — ajoutée à tes stats au prochain déverrouillage.</string>
@@ -512,4 +512,5 @@
     <string name="appointment_reminder_body">Tu as un rendez-vous à venir.</string>
     <string name="feature_appointments_title">Rendez-vous / Notes</string>
     <string name="feature_appointments_sub">Note tes RDV médicaux, les professionnel·les et les tâches à faire.</string>
+    <string name="widget_lab_title">Bilan à prévoir</string>
 </resources>

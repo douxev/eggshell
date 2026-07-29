@@ -13,6 +13,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Suspending wrapper around AndroidX [BiometricPrompt].
@@ -115,7 +116,13 @@ object BiometricKeystoreUnlock {
         // so wait for a host that can actually host a dialog before asking
         // for one. Throws LifecycleDestroyedException if the activity is gone,
         // which the caller reports as an ordinary failed unlock.
-        activity.lifecycle.withResumed { }
+        //
+        // Bounded: an activity that never reaches RESUMED — buried under a
+        // permission dialog, an OEM overlay, a screen that never turns back on
+        // — would otherwise suspend here forever, which is precisely the hang
+        // the watchdog below exists to prevent, reintroduced one line above it.
+        withTimeoutOrNull(RESUME_WAIT_MS) { activity.lifecycle.withResumed { } }
+            ?: throw PromptNotShownException()
 
         coroutineScope {
             val outcome = CompletableDeferred<Cipher?>()
@@ -197,12 +204,23 @@ object BiometricKeystoreUnlock {
         // plus the system dialog's animation in.
         delay(PROMPT_GRACE_MS)
         var focusedPolls = 0
+        var waited = PROMPT_GRACE_MS
         while (!outcome.isCompleted) {
             val nothingOnTop =
                 activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
                     activity.hasWindowFocus()
             focusedPolls = if (nothingOnTop) focusedPolls + 1 else 0
-            if (focusedPolls >= PROMPT_MISSING_POLLS) {
+            // The focus heuristic is one-directional: losing focus is good
+            // evidence a prompt is up, but keeping it is only *suggestive* that
+            // none is. Split-screen, a floating window and some OEM shells all
+            // leave us focused with a prompt showing, and the library's
+            // "a prompt is already flagged as showing" no-op leaves us focused
+            // with none — the very path this watchdog's own doc claims to
+            // cover. So the focus rule stays as the fast path, and an absolute
+            // deadline backs it up for everything it cannot see. The deadline
+            // is generous because tripping it cancels a possibly-live prompt.
+            val dropped = focusedPolls >= PROMPT_MISSING_POLLS || waited >= PROMPT_DEADLINE_MS
+            if (dropped) {
                 outcome.completeExceptionally(PromptNotShownException())
                 // After the outcome, so a late ERROR_CANCELED can't overwrite
                 // the diagnosis with a generic "cancelled".
@@ -210,12 +228,23 @@ object BiometricKeystoreUnlock {
                 return
             }
             delay(PROMPT_POLL_MS)
+            waited += PROMPT_POLL_MS
         }
     }
 
     private const val PROMPT_GRACE_MS = 2_000L
     private const val PROMPT_POLL_MS = 500L
     private const val PROMPT_MISSING_POLLS = 4
+
+    /**
+     * Absolute ceiling on one prompt. Two minutes is far longer than anyone
+     * needs to place a finger, so a legitimate prompt is never cut short —
+     * it only catches the cases the focus heuristic is structurally blind to.
+     */
+    private const val PROMPT_DEADLINE_MS = 120_000L
+
+    /** How long to wait for a host that can actually put a dialog on screen. */
+    private const val RESUME_WAIT_MS = 15_000L
 
     class BiometricAuthException(val errorCode: Int, message: String) : Exception(message)
 

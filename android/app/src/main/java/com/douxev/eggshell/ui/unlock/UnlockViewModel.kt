@@ -248,6 +248,11 @@ class UnlockViewModel @Inject constructor(
      */
     fun attemptAutoUnlock(activity: FragmentActivity?, biometricCopy: VaultRepository.BiometricCopy?) {
         if (hasDecoy && _state.value !is State.AccessGranted) return
+        // The trigger LaunchedEffect re-runs on every Activity recreation, so a
+        // rotation mid-prompt used to fire a second concurrent authenticate()
+        // — which androidx answers by no-op'ing one of them, leaving a prompt
+        // nobody is waiting on.
+        if (_state.value is State.InProgress) return
         lastAttemptWasRecovery = false
         _state.value = State.InProgress
         viewModelScope.launch {

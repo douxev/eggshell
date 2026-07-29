@@ -88,4 +88,8 @@
     <string name="media_voice_error">The recording stopped short. Check that nothing else is using the mic, then start again.</string>
     <string name="media_voice_error_retry">Start again</string>
 
+    <string name="photos_date_title">Photo date</string>
+    <string name="photos_date_detected">Date read from the photo. Tap it to correct.</string>
+    <string name="photos_date_unknown">No date found on this photo — today by default. Tap it to correct.</string>
+    <string name="photos_date_confirm">Add</string>
 </resources>

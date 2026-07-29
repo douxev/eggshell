@@ -57,7 +57,29 @@ class PhotosRepository @Inject constructor(
      * [readAndStripExif], so location and device metadata never reach the vault.
      */
     fun originalTimestamp(uri: Uri): Long? =
-        exifTimestamp(uri) ?: mediaStoreTimestamp(uri) ?: filenameTimestamp(uri)
+        plausible(exifTimestamp(uri))
+            ?: plausible(mediaStoreTimestamp(uri))
+            ?: plausible(filenameTimestamp(uri))
+
+    /**
+     * Reject timestamps that exist but cannot be true.
+     *
+     * Every source here lies in its own way. A stripped or malformed EXIF
+     * block parses to epoch 0, which is a perfectly valid non-null Long and
+     * would file the photo under 1 January 1970. A camera whose clock was
+     * never set, or a phone whose timezone was wrong, produces dates in the
+     * future. Both would silently corrupt the before/after span rather than
+     * fall through to the next source, so the check has to sit here rather
+     * than in each reader.
+     *
+     * The floor is 1990: digital photography did not predate it, and anything
+     * older is a default value rather than a memory. The ceiling allows a day
+     * of clock skew — a photo taken this morning in a timezone ahead of the
+     * phone's is legitimate.
+     */
+    private fun plausible(ms: Long?): Long? = ms?.takeIf {
+        it >= EARLIEST_PLAUSIBLE_MS && it <= System.currentTimeMillis() + FUTURE_TOLERANCE_MS
+    }
 
     private fun exifTimestamp(uri: Uri): Long? = runCatching {
         context.contentResolver.openInputStream(uri)?.use { stream ->
@@ -75,7 +97,7 @@ class PhotosRepository @Inject constructor(
         context.contentResolver.query(
             uri, arrayOf(MediaStore.MediaColumns.DATE_TAKEN), null, null, null,
         )?.use { c ->
-            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0).takeIf { it > 0L } else null
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
         }
     }.getOrNull()
 
@@ -86,7 +108,7 @@ class PhotosRepository @Inject constructor(
         Calendar.getInstance().apply {
             clear()
             set(y.toInt(), mo.toInt() - 1, d.toInt(), 12, 0, 0)
-        }.timeInMillis.takeIf { it <= System.currentTimeMillis() }
+        }.timeInMillis
     }.getOrNull()
 
     suspend fun importFromUri(uri: Uri, category: String?, atMs: Long? = null) = withContext(Dispatchers.IO) {
@@ -251,5 +273,12 @@ class PhotosRepository @Inject constructor(
 
     companion object {
         private const val STALE_CACHE_MS = 10L * 60L * 1000L // 10 minutes
+
+        /** Digital photography does not predate this; anything older is a default. */
+        private val EARLIEST_PLAUSIBLE_MS: Long =
+            Calendar.getInstance().apply { clear(); set(1990, 0, 1) }.timeInMillis
+
+        /** One day of slack for a phone whose timezone trails the camera's. */
+        private const val FUTURE_TOLERANCE_MS: Long = 24L * 60 * 60 * 1000
     }
 }

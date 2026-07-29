@@ -93,4 +93,5 @@
     <string name="recovery_setup_strength_weak">Courte : quelqu\'un qui copie le contenu de ton téléphone pourrait la retrouver en un jour ou deux. 12 caractères de plus la rendraient hors d\'atteinte.</string>
     <string name="recovery_setup_strength_fair">Correcte. Quelques caractères de plus et elle devient hors d\'atteinte.</string>
     <string name="recovery_setup_strength_strong">Solide — hors d\'atteinte, même pour quelqu\'un qui copierait tout ton téléphone.</string>
+    <string name="recovery_setup_continue_without">Continuer sans clé de secours pour l\'instant</string>
 </resources>

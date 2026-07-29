@@ -88,4 +88,8 @@
     <string name="media_voice_error">L’enregistrement s’est interrompu. Vérifie que rien d’autre n’utilise le micro, puis recommence.</string>
     <string name="media_voice_error_retry">Recommencer</string>
 
+    <string name="photos_date_title">Date de la photo</string>
+    <string name="photos_date_detected">Date lue sur la photo. Touche-la pour la corriger.</string>
+    <string name="photos_date_unknown">Aucune date trouvée sur cette photo — aujourd\'hui par défaut. Touche-la pour la corriger.</string>
+    <string name="photos_date_confirm">Ajouter</string>
 </resources>

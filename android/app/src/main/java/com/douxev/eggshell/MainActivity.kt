@@ -202,7 +202,10 @@ fun AppRoot(rootVm: AppRootViewModel = hiltViewModel()) {
         AppRootViewModel.Route.Unlock ->
             UnlockScreen(onUnlocked = { rootVm.refresh() })
         AppRootViewModel.Route.RecoverySetup ->
-            RecoverySetupScreen(onDone = { rootVm.refresh() })
+            RecoverySetupScreen(
+                onDone = { rootVm.refresh() },
+                onGiveUp = { rootVm.dismissRecoveryGate() },
+            )
         AppRootViewModel.Route.Home -> {
             HomeNavHost(deepLinkProvider = rootVm)
             // What's-new overlay only on Home: don't pop a sheet on top of
@@ -263,6 +266,19 @@ class AppRootViewModel @Inject constructor(
      * work that [refresh] does. Only ever moves Home -> Unlock here: the
      * reverse transition goes through a real unlock, which calls refresh().
      */
+    /**
+     * Let someone past the recovery gate who cannot complete it — a broken
+     * sensor, a Keystore key already dead. For this session only: the flag is
+     * not persisted, so the gate returns on the next launch and keeps asking
+     * as long as the vault has no second way in.
+     */
+    private var recoveryGateDismissed = false
+
+    fun dismissRecoveryGate() {
+        recoveryGateDismissed = true
+        refresh()
+    }
+
     fun syncLockState() {
         val r = initialRoute()
         if (r != _route.value) _route.value = r
@@ -309,7 +325,7 @@ class AppRootViewModel @Inject constructor(
         // with no second wrap is one fingerprint enrollment away from losing
         // the vault outright, and that is not a state to leave a user parked
         // in behind a dismissible banner they will tap away.
-        repo.needsRecoverySetup -> Route.RecoverySetup
+        repo.needsRecoverySetup && !recoveryGateDismissed -> Route.RecoverySetup
         else -> Route.Home
     }
 }

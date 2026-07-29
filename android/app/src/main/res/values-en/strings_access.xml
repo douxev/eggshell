@@ -92,4 +92,5 @@
     <string name="recovery_setup_strength_weak">Short: someone who copies your phone\'s contents could work it out in a day or two. Another 12 characters would put it out of reach.</string>
     <string name="recovery_setup_strength_fair">Reasonable. A few more characters and it is out of reach.</string>
     <string name="recovery_setup_strength_strong">Strong — out of reach, even for someone who copied your whole phone.</string>
+    <string name="recovery_setup_continue_without">Continue without a recovery key for now</string>
 </resources>

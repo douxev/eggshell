@@ -192,7 +192,12 @@ class EggshellWidgetProvider : AppWidgetProvider() {
                 Pair(
                     entry.nextDueAtMs,
                     WidgetRow(
-                        title = entry.label,
+                        // Generic, like the medication rows above. entry.label is
+                        // free text the user typed ("bilan hormonal T4"), and the
+                        // notification path deliberately refuses to show it — a
+                        // home screen is read by more people than a lock screen,
+                        // not fewer.
+                        title = context.getString(R.string.widget_lab_title),
                         whenLabel = relativeLabel(context, entry.nextDueAtMs),
                     ),
                 )
@@ -208,9 +213,13 @@ class EggshellWidgetProvider : AppWidgetProvider() {
      * Hilt graph from a BroadcastReceiver context.
      */
     private fun isDecoyActive(context: Context): Boolean {
-        val prefs = context.applicationContext.getSharedPreferences(
-            "transition_vault_prefs",
-            Context.MODE_PRIVATE,
+        // Must go through SecurePrefs: release builds store this file under a
+        // hashed name, so reading the literal "transition_vault_prefs" always
+        // came back empty and the widget concluded "no decoy" on every single
+        // install that had one — publishing medication rows onto the home
+        // screen of a phone whose owner had explicitly asked for a facade.
+        val prefs = com.douxev.eggshell.data.SecurePrefs.get(
+            context.applicationContext, "transition_vault_prefs",
         )
         return prefs.contains("decoy_salt")
     }

@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
@@ -136,9 +138,37 @@ class PhotosViewModel @Inject constructor(
         }
     }
 
+    /**
+     * A picked image waiting on the user to confirm which day it belongs to.
+     *
+     * [detected] is null when nothing on the file could be trusted — no EXIF
+     * capture time, no MediaStore date, no dated filename — in which case the
+     * dialog opens on today and says so, rather than silently pretending today
+     * is the answer.
+     */
+    data class PendingImport(val uri: android.net.Uri, val detected: Long?) {
+        val dateMs: Long get() = detected ?: System.currentTimeMillis()
+    }
+
+    private val _pendingImport = MutableStateFlow<PendingImport?>(null)
+    val pendingImport: StateFlow<PendingImport?> = _pendingImport.asStateFlow()
+
     fun import(uri: android.net.Uri) {
         viewModelScope.launch {
-            runCatching { repo.importFromUri(uri, null) }
+            val detected = withContext(Dispatchers.IO) {
+                runCatching { repo.originalTimestamp(uri) }.getOrNull()
+            }
+            _pendingImport.value = PendingImport(uri, detected)
+        }
+    }
+
+    fun cancelImport() { _pendingImport.value = null }
+
+    fun confirmImport(atMs: Long) {
+        val pending = _pendingImport.value ?: return
+        _pendingImport.value = null
+        viewModelScope.launch {
+            runCatching { repo.importFromUri(pending.uri, null, atMs) }
             refresh()
         }
     }
@@ -193,6 +223,19 @@ fun PhotosScreen(
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { vm.import(it) } }
+
+    // Confirm the day before storing. An imported photo used to be stamped
+    // with the moment of import, which quietly flattened the whole point of
+    // the module for anyone catching up on older pictures.
+    val pendingImport by vm.pendingImport.collectAsState()
+    pendingImport?.let { pending ->
+        PhotoDateConfirmDialog(
+            initialMs = pending.dateMs,
+            detected = pending.detected != null,
+            onDismiss = vm::cancelImport,
+            onConfirm = vm::confirmImport,
+        )
+    }
     val pick = {
         picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
@@ -412,7 +455,11 @@ private fun savePhotoToGallery(
             put(MediaStore.Images.Media.DISPLAY_NAME, name)
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Transition")
+                // Neutral folder on purpose. An album literally named "Transition"
+                // in the shared gallery announces what the app is to anyone
+                // scrolling the phone's pictures — the one thing the icon
+                // alias and the decoy exist to prevent.
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures")
             }
         }
         val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
@@ -835,4 +882,89 @@ private fun LightboxAction(
             modifier = Modifier.padding(top = 4.dp),
         )
     }
+}
+
+/**
+ * Confirms which day an imported photo belongs to.
+ *
+ * Opens on the capture date read off the file when there was one, and says
+ * plainly when there was not — a photo with no usable metadata defaults to
+ * today, and the user deserves to know that is a guess rather than a reading.
+ */
+@Composable
+private fun PhotoDateConfirmDialog(
+    initialMs: Long,
+    detected: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (Long) -> Unit,
+) {
+    var chosen by remember(initialMs) { mutableStateOf(initialMs) }
+    var picking by remember { mutableStateOf(false) }
+
+    if (picking) {
+        val state = androidx.compose.material3.rememberDatePickerState(
+            initialSelectedDateMillis = chosen,
+        )
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { picking = false },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        state.selectedDateMillis?.let { picked ->
+                            // DatePicker reports UTC midnight; reinterpret those
+                            // calendar y/m/d at local midnight so the day cannot
+                            // shift in negative-offset zones.
+                            val date = java.time.Instant.ofEpochMilli(picked)
+                                .atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                            chosen = date.atStartOfDay(java.time.ZoneId.systemDefault())
+                                .toInstant().toEpochMilli()
+                        }
+                        picking = false
+                    },
+                ) { Text(stringResource(R.string.action_save)) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { picking = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        ) {
+            androidx.compose.material3.DatePicker(state = state)
+        }
+        return
+    }
+
+    val formatted = remember(chosen) {
+        java.text.DateFormat.getDateInstance(java.text.DateFormat.LONG)
+            .format(java.util.Date(chosen))
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.photos_date_title)) },
+        text = {
+            Column {
+                Text(
+                    stringResource(
+                        if (detected) R.string.photos_date_detected
+                        else R.string.photos_date_unknown
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(10.dp))
+                androidx.compose.material3.TextButton(onClick = { picking = true }) {
+                    Text(formatted)
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = { onConfirm(chosen) }) {
+                Text(stringResource(R.string.photos_date_confirm))
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
 }
