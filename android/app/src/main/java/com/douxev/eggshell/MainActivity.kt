@@ -1,9 +1,7 @@
 package com.douxev.eggshell
 
 import android.content.Intent
-import android.app.KeyguardManager
 import android.os.Bundle
-import android.os.PowerManager
 import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -68,46 +66,33 @@ class MainActivity : AppCompatActivity() {
             runCatching { photos.purgeAllCache() }
             runCatching { voice.purgeAllCache() }
             runCatching { pdfExports.purgeExports() }
+            if (vault.currentMode == com.douxev.eggshell.security.VaultPrefs.Mode.PARANOID) {
+                vault.lock()
+            }
         }
     }
 
-    /**
-     * The user deliberately left the app — Home, Recents, or switching to
-     * another app. Lock in every mode.
-     *
-     * Only PARANOID used to re-lock, which meant the decoy could be walked
-     * straight past: background the app, reopen it, and the router went to
-     * Home because the session was still open. No PIN, no fingerprint, no
-     * notes-app facade. The mechanism the whole threat model rests on was
-     * bypassable by pressing Home twice.
-     *
-     * This lives on `onUserLeaveHint` rather than the process-wide `onStop`
-     * for a reason: `onStop` also fires when *we* launch a system activity,
-     * and the app opens the photo picker, the camera and the document picker
-     * from 25 different call sites. Locking there would throw the user back to
-     * the lock screen every time they attached a photo. `onUserLeaveHint` is
-     * only called when the departure is the user's doing, so pickers are
-     * unaffected without touching a single one of those screens.
-     */
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        vault.lock()
-    }
-
-    /**
-     * Screen off / keyguard up. `onUserLeaveHint` is not called for this, and
-     * "phone put down on the table" is the single likeliest moment for someone
-     * else to pick it up — so it has to lock here too.
-     */
-    override fun onStop() {
-        super.onStop()
-        val keyguard = getSystemService(KeyguardManager::class.java)
-        val power = getSystemService(PowerManager::class.java)
-        if (keyguard?.isKeyguardLocked == true || power?.isInteractive == false) {
-            vault.lock()
-        }
-    }
-
+    // REVERTED: locking from onUserLeaveHint.
+    //
+    // The premise was wrong. onUserLeaveHint is NOT limited to Home/Recents:
+    // a plain startActivity() from inside the app also counts as a user leave
+    // unless the caller sets FLAG_ACTIVITY_NO_USER_ACTION, which the AndroidX
+    // ActivityResult launchers do not. So opening the photo picker, the camera
+    // or a permission dialog locked the vault under the user's feet.
+    //
+    // The damage was not a lock screen — it was worse. The route had already
+    // been computed as Home and nothing recomputes it while the activity stays
+    // started, so the app carried on drawing Home with a null session. Every
+    // vault read goes through `runCatching { … }.getOrDefault(emptyList())` in
+    // 48 places, so every list rendered EMPTY while the settings, which live
+    // outside the vault, still looked correct. It read exactly like total data
+    // loss, and photo and voice saves failed silently for the same reason.
+    //
+    // Re-locking on background is still the right thing — the decoy is
+    // otherwise walked past by pressing Home twice — but it needs a mechanism
+    // that can tell "the user left" from "we opened a picker", and it needs to
+    // be verified on a device before it ships. Until then, previous behaviour.
+    //
     /**
      * Coming back: the route was computed while the vault was still open, so
      * without this the app would redraw the screen the user left instead of
