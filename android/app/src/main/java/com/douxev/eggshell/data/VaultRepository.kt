@@ -9,6 +9,9 @@ import javax.crypto.Cipher
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import com.douxev.eggshell.security.BiometricKeystoreUnlock
 import com.douxev.eggshell.security.KeystoreWrapper
@@ -43,6 +46,28 @@ class VaultRepository @Inject constructor(
     private val keystoreBio = KeystoreWrapper(VaultPrefs.KEYSTORE_ALIAS_BIO)
 
     @Volatile private var session: Vault? = null
+        set(value) {
+            field = value
+            _unlocked.value = value != null
+        }
+
+    /**
+     * Observable lock state, so the UI can never be left drawing a screen that
+     * needs a vault it no longer has.
+     *
+     * This exists because of a real incident: a background-lock change closed
+     * the session while the router had already settled on Home, and nothing
+     * recomputed the route until the next onStart. The app kept rendering
+     * Home, and because vault reads go through
+     * `runCatching { … }.getOrDefault(emptyList())` in 48 places, every list
+     * came back empty. Users reported it as having lost all their data.
+     *
+     * A poll at onStart cannot prevent that class of bug; only reacting to the
+     * transition can. Whatever decides to lock, the worst outcome is now the
+     * lock screen.
+     */
+    private val _unlocked = MutableStateFlow(false)
+    val unlocked: StateFlow<Boolean> = _unlocked.asStateFlow()
 
     val isInitialized: Boolean get() = prefs.mode != null
     val currentMode: VaultPrefs.Mode? get() = prefs.mode

@@ -72,27 +72,56 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // REVERTED: locking from onUserLeaveHint.
-    //
-    // The premise was wrong. onUserLeaveHint is NOT limited to Home/Recents:
-    // a plain startActivity() from inside the app also counts as a user leave
-    // unless the caller sets FLAG_ACTIVITY_NO_USER_ACTION, which the AndroidX
-    // ActivityResult launchers do not. So opening the photo picker, the camera
-    // or a permission dialog locked the vault under the user's feet.
-    //
-    // The damage was not a lock screen — it was worse. The route had already
-    // been computed as Home and nothing recomputes it while the activity stays
-    // started, so the app carried on drawing Home with a null session. Every
-    // vault read goes through `runCatching { … }.getOrDefault(emptyList())` in
-    // 48 places, so every list rendered EMPTY while the settings, which live
-    // outside the vault, still looked correct. It read exactly like total data
-    // loss, and photo and voice saves failed silently for the same reason.
-    //
-    // Re-locking on background is still the right thing — the decoy is
-    // otherwise walked past by pressing Home twice — but it needs a mechanism
-    // that can tell "the user left" from "we opened a picker", and it needs to
-    // be verified on a device before it ships. Until then, previous behaviour.
-    //
+    /**
+     * Set while a departure is *our* doing rather than the user's.
+     *
+     * `onUserLeaveHint` alone cannot tell the two apart: a plain
+     * `startActivity` from inside the app also counts as a user leave unless
+     * the caller sets `FLAG_ACTIVITY_NO_USER_ACTION`, which the AndroidX
+     * ActivityResult launchers do not. A first attempt at background locking
+     * relied on that distinction and locked the vault whenever the photo
+     * picker, the camera or a permission dialog opened — and because the route
+     * had already been computed as Home, the app kept drawing Home against a
+     * null session, rendering every list empty. It presented as total data
+     * loss. This flag is the missing discriminator.
+     *
+     * Every AndroidX launcher funnels through `startActivityForResult`, so the
+     * two overrides below catch all 25 call sites without touching any of them.
+     */
+    private var leavingForOwnActivity = false
+
+    override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
+        leavingForOwnActivity = true
+        super.startActivityForResult(intent, requestCode, options)
+    }
+
+    override fun startActivity(intent: Intent, options: Bundle?) {
+        leavingForOwnActivity = true
+        super.startActivity(intent, options)
+    }
+
+    /**
+     * The user deliberately left — Home, Recents, another app. Lock in every
+     * mode: with only PARANOID re-locking, the decoy was walked straight past
+     * by pressing Home twice and reopening.
+     *
+     * Consumed one-shot rather than merely read, so a launch that never
+     * actually happens cannot leave the flag stuck and silently disable
+     * locking for the rest of the session.
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        val ours = leavingForOwnActivity
+        leavingForOwnActivity = false
+        if (!ours) vault.lock()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Back on screen: whatever we launched is done with.
+        leavingForOwnActivity = false
+    }
+
     /**
      * Coming back: the route was computed while the vault was still open, so
      * without this the app would redraw the screen the user left instead of
@@ -223,6 +252,18 @@ class AppRootViewModel @Inject constructor(
 
     private val _route = MutableStateFlow(initialRoute())
     val route: StateFlow<Route> = _route.asStateFlow()
+
+    init {
+        // Leave Home the moment the vault closes, whoever closed it. The
+        // onStart poll below is a second line of defence, not the mechanism:
+        // a session can be dropped while the activity stays started, and that
+        // used to leave the app rendering Home with every list empty.
+        viewModelScope.launch {
+            repo.unlocked.collect { open ->
+                if (!open && _route.value == Route.Home) _route.value = Route.Unlock
+            }
+        }
+    }
 
     /** Pending deep-link target. Consumed once HomeNavHost mounts. */
     private val _pendingDeepLink = MutableStateFlow<DeepLink?>(null)
