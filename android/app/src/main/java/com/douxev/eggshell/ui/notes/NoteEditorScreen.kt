@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,6 +79,21 @@ class NoteEditorViewModel @Inject constructor(
     /** Null until the note exists in the vault — a brand-new note has no id yet. */
     private var noteId: Long? = null
 
+    /**
+     * Read or write.
+     *
+     * An existing note opens rendered: that is what you came to do with it, and
+     * a wall of raw markdown is not the note, it is its source. A new or empty
+     * one opens in the editor, because there is nothing to read yet.
+     *
+     * Lives here rather than in the screen so the decision is made once, when
+     * the note is loaded, and cannot flip back under someone mid-sentence.
+     */
+    private val _preview = MutableStateFlow(false)
+    val preview: StateFlow<Boolean> = _preview.asStateFlow()
+
+    fun setPreview(v: Boolean) { _preview.value = v }
+
     fun load(id: Long?) {
         noteId = id
         if (id == null) return
@@ -85,6 +101,7 @@ class NoteEditorViewModel @Inject constructor(
             repo.get(id)?.let {
                 _title.value = it.title
                 _body.value = it.body
+                _preview.value = it.title.isNotBlank() || it.body.isNotBlank()
             }
             reloadImages()
         }
@@ -181,8 +198,9 @@ fun NoteEditorScreen(
     val title by vm.title.collectAsState()
     val body by vm.body.collectAsState()
     val images by vm.images.collectAsState()
+    val preview by vm.preview.collectAsState()
     var confirmDelete by remember { mutableStateOf(false) }
-    var preview by remember { mutableStateOf(false) }
+
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val ctx = androidx.compose.ui.platform.LocalContext.current
 
@@ -238,7 +256,7 @@ fun NoteEditorScreen(
                             modifier = Modifier.padding(start = 6.dp),
                         )
                     }
-                    androidx.compose.material3.TextButton(onClick = { preview = !preview }) {
+                    androidx.compose.material3.TextButton(onClick = { vm.setPreview(!preview) }) {
                         Text(
                             stringResource(
                                 if (preview) R.string.notes_edit else R.string.notes_preview
@@ -266,7 +284,13 @@ fun NoteEditorScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = padding.calculateTopPadding()),
+                .padding(top = padding.calculateTopPadding())
+                .then(
+                    if (preview) Modifier.clickable(
+                        indication = null,
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    ) { vm.setPreview(false) } else Modifier
+                ),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 100.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -277,6 +301,10 @@ fun NoteEditorScreen(
                 )
             }
             if (preview) {
+                // Tapping the rendered note drops into the editor. Not a true
+                // editable preview — the renderer emits Compose UI, not an
+                // editable field, so that would need a rich-text engine with
+                // markdown semantics — but it removes the trip to the toolbar.
                 item {
                     Text(
                         title.ifBlank { stringResource(R.string.notes_untitled) },
@@ -288,6 +316,7 @@ fun NoteEditorScreen(
                 // references sit, so the preview reads as the finished note
                 // rather than as text followed by an album.
                 items(splitAroundImages(body)) { piece ->
+                    @Suppress("NAME_SHADOWING")
                     when (piece) {
                         is BodyPiece.Text ->
                             if (piece.value.isNotBlank()) MarkdownBody(piece.value)

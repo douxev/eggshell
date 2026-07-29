@@ -146,23 +146,10 @@ jobs:
           generate_release_notes: true
           files: eggshell-*.apk
 
-      # GitHub always zips upload-artifact downloads — that is platform
-      # behaviour, not something this workflow can turn off. Release assets are
-      # NOT zipped, so test builds go out as a DRAFT release instead: a direct
-      # .apk, and invisible to anyone browsing a public repo's releases, which a
-      # prerelease would not be. Fixed tag, so each run replaces the last.
-      - name: Publish draft release (manual runs)
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: dev-build
-          name: "dev build — ${{ github.sha }}"
-          body: "Test build from ${{ github.ref_name }}. Not a release."
-          draft: true
-          files: eggshell-*.apk
-
-      # Kept as a fallback: the draft needs repo access to download, the
-      # artifact only needs the Actions run.
+      # NB: GitHub always zips upload-artifact downloads. That is platform
+      # behaviour, not a setting — the only way to hand out a bare .apk is a
+      # Release asset, and on a public repo that means test builds sitting next
+      # to the real ones. Kept as an artifact deliberately.
       - name: Upload workflow artifact (manual runs)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
