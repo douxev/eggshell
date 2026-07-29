@@ -42,8 +42,15 @@ class DecoyVerifier @Inject constructor(
             return@withContext
         }
         require(accessPin != decoyPin) { "access and decoy PINs must differ" }
-        prefs.setAccessPin(hashFor(accessPin))
-        prefs.setDecoy(hashFor(decoyPin!!))
+        // Derive BOTH before persisting either. Each hashFor spends seconds in
+        // Argon2id, and writing the access PIN first left a window where a
+        // process death produced an access PIN with no decoy behind it: the
+        // keypad would then accept the real code and refuse the cover story,
+        // which is the one failure this feature must never have.
+        val accessHash = hashFor(accessPin)
+        val decoyHash = hashFor(decoyPin!!)
+        prefs.setAccessPin(accessHash)
+        prefs.setDecoy(decoyHash)
         // The widget would leak real reminder copy to whoever holds the
         // decoy PIN, so we hide it from the launcher picker entirely.
         widgetVisibility.setEnabled(false)

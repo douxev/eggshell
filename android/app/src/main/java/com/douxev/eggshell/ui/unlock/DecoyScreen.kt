@@ -37,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -77,6 +78,15 @@ import sh.calvin.reorderable.rememberReorderableLazyGridState
  */
 @Composable
 fun DecoyScreen() {
+    // Announce ourselves so MainActivity stops forcing FLAG_SECURE while the
+    // facade is up: an ordinary notes app does not refuse screenshots or show
+    // a blank card in Recents, and that mismatch is exactly the kind of tell
+    // the decoy exists to avoid.
+    val presence = decoyPresenceEntryPoint()
+    DisposableEffect(Unit) {
+        presence?.setOnScreen(true)
+        onDispose { presence?.setOnScreen(false) }
+    }
     MaterialTheme(
         colorScheme = DecoyColors,
         typography = MaterialTheme.typography,
@@ -551,4 +561,27 @@ private fun EditNote(
             )
         }
     }
+}
+
+
+/**
+ * DecoyScreen is a plain composable with no ViewModel of its own, so the
+ * singleton is fetched through Hilt's entry-point API rather than by threading
+ * a parameter through every call site of a screen whose signature is
+ * deliberately empty.
+ */
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface DecoyPresenceEntryPoint {
+    fun decoyPresence(): com.douxev.eggshell.data.DecoyPresence
+}
+
+@Composable
+private fun decoyPresenceEntryPoint(): com.douxev.eggshell.data.DecoyPresence? {
+    val ctx = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    return runCatching {
+        dagger.hilt.android.EntryPointAccessors
+            .fromApplication(ctx, DecoyPresenceEntryPoint::class.java)
+            .decoyPresence()
+    }.getOrNull()
 }

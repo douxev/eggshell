@@ -50,6 +50,7 @@ class MainActivity : AppCompatActivity() {
     @Inject lateinit var photos: com.douxev.eggshell.data.PhotosRepository
     @Inject lateinit var voice: com.douxev.eggshell.data.VoiceRepository
     @Inject lateinit var pdfExports: com.douxev.eggshell.data.PdfReportExporter
+    @Inject lateinit var decoyPresence: com.douxev.eggshell.data.DecoyPresence
 
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStop(owner: LifecycleOwner) {
@@ -147,8 +148,16 @@ class MainActivity : AppCompatActivity() {
                 kotlinx.coroutines.flow.combine(
                     securityPrefs.blockScreenshots,
                     rootViewModel.route,
-                ) { block, route ->
-                    val forceSecure = route != AppRootViewModel.Route.Home
+                    decoyPresence.onScreen,
+                ) { block, route, decoyOnScreen ->
+                    // Onboarding and Unlock accept PINs and passphrases, so
+                    // they are always secure. Home follows the user's setting —
+                    // and that deliberately includes the decoy, which renders
+                    // inside the Unlock route: a plain notes app does not refuse
+                    // screenshots or show a blank card in Recents, so forcing
+                    // the flag there is itself the tell it was meant to prevent.
+                    val forceSecure = route == AppRootViewModel.Route.Onboarding ||
+                        (route == AppRootViewModel.Route.Unlock && !decoyOnScreen)
                     block || forceSecure
                 }.collect { secure ->
                     if (secure) {

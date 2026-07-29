@@ -104,7 +104,15 @@ class ReminderNotifications @Inject constructor(
         actions: List<NotificationCompat.Action>,
     ) {
         val mgr = context.getSystemService(NotificationManager::class.java)
-        val openIntent = Intent(context, MainActivity::class.java).apply {
+        // Route through the launcher rather than MainActivity directly: with a
+        // disguised icon the alias is enabled and MainActivity is DISABLED, so
+        // the PendingIntent pointed at a dead component and tapping a reminder
+        // did nothing at all — silently, and only for the users who most need
+        // the disguise.
+        val openIntent = (
+            context.packageManager.getLaunchIntentForPackage(context.packageName)
+                ?: Intent(context, MainActivity::class.java)
+            ).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pi = PendingIntent.getActivity(

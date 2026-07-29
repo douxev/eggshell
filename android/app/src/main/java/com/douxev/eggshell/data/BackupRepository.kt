@@ -23,6 +23,11 @@ class BackupRepository @Inject constructor(
     suspend fun exportToCache(passphrase: String): File = withContext(Dispatchers.IO) {
         val bytes = vault.requireSession().exportEncrypted(passphrase)
         val dir = File(context.cacheDir, "backup_share").apply { mkdirs() }
+        // Sweep anything from a previous share first. The bundle is encrypted,
+        // but it is a complete copy of the vault and it was never purged — one
+        // "share a backup" tap left it in the cache indefinitely, reachable by
+        // anything that can read the app's cache directory.
+        runCatching { dir.listFiles()?.forEach { it.delete() } }
         val out = File(dir, "eggshell-${System.currentTimeMillis()}.transition.enc")
         out.writeBytes(bytes)
         out.deleteOnExit()
