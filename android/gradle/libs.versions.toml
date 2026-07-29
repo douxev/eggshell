@@ -28,6 +28,9 @@ cameraX = "1.6.1"
 # 5.17.0+ ships 16 KB page-aligned libjnidispatch.so (Android 15 requirement)
 jna = "5.19.1"
 reorderable = "3.1.0"
+# Compose-native markdown. Image loading is a SEPARATE module (-coil3), so we
+# render images ourselves from decrypted bytes and pull in no network stack.
+markdown = "0.43.0"
 appcompat = "1.7.1"
 pdfboxAndroid = "2.0.27.0"
 # 4.8.0+ ships 16 KB page-aligned native libs (libtesseract, libleptonica, …)
@@ -60,6 +63,8 @@ hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 reorderable = { group = "sh.calvin.reorderable", name = "reorderable", version.ref = "reorderable" }
+markdown-renderer = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-android", version.ref = "markdown" }
+markdown-renderer-m3 = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-m3", version.ref = "markdown" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfboxAndroid" }
 tesseract4android = { group = "com.github.adaptech-cz.Tesseract4Android", name = "tesseract4android", version.ref = "tesseract4android" }

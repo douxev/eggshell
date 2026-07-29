@@ -285,6 +285,13 @@ dependencies {
     // Decoy notes app: long-press drag-to-reorder for the LazyVerticalGrid.
     implementation(libs.reorderable)
 
+    // Notes: markdown rendering. The core artifact has no image loader — that
+    // is a separate -coil3 module we deliberately do NOT take, because note
+    // images are encrypted blobs we decrypt ourselves and no note content
+    // should ever be fetched over a network.
+    implementation(libs.markdown.renderer)
+    implementation(libs.markdown.renderer.m3)
+
     // AppCompat — needed for AppCompatDelegate.setApplicationLocales (runtime
     // language switching with persistence across cold starts).
     implementation(libs.androidx.appcompat)
