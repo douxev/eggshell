@@ -50,4 +50,5 @@
 
     <string name="quicklog_subtitle">One gesture, from any screen.</string>
     <string name="quicklog_footer">Saved on your device, encrypted.</string>
+    <string name="module_notes">Notes</string>
 </resources>

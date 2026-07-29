@@ -65,6 +65,7 @@ class HomeViewModel @Inject constructor(
         val weight: Boolean = true,
         val photos: Boolean = false,
         val voice: Boolean = false,
+        val notes: Boolean = false,
     )
 
     /** A launcher badge. Counters win over dots, and at most two are shown. */
@@ -114,6 +115,7 @@ class HomeViewModel @Inject constructor(
         weight = features.weightTracking.value,
         photos = features.photoTab.value,
         voice = features.voiceTab.value,
+        notes = features.notes.value,
     )
 
     fun refresh() {

@@ -53,6 +53,11 @@ class FeaturesPrefs @Inject constructor(
     private val _voiceTab = MutableStateFlow(prefs.getBoolean(KEY_VOICE, false))
     val voiceTab: StateFlow<Boolean> = _voiceTab.asStateFlow()
 
+    // Off by default, like photos and voice: a new module should appear
+    // because someone chose it, not because an update decided for them.
+    private val _notes = MutableStateFlow(prefs.getBoolean(KEY_NOTES, false))
+    val notes: StateFlow<Boolean> = _notes.asStateFlow()
+
     /** Bleeding / cycle tracking. Opt-in and off by default: bleeding is a
      *  strong sex-assigned-at-birth signal, so it stays hidden until enabled. */
     private val _bleeding = MutableStateFlow(prefs.getBoolean(KEY_BLEEDING, false))
@@ -99,6 +104,11 @@ class FeaturesPrefs @Inject constructor(
         _voiceTab.value = enabled
     }
 
+    fun setNotes(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_NOTES, enabled).apply()
+        _notes.value = enabled
+    }
+
     fun setBleeding(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_BLEEDING, enabled).apply()
         _bleeding.value = enabled
@@ -119,6 +129,7 @@ class FeaturesPrefs @Inject constructor(
         private const val KEY_WEIGHT = "weight_tracking"
         private const val KEY_PHOTO = "show_photo"
         private const val KEY_VOICE = "show_voice"
+        private const val KEY_NOTES = "show_notes"
         private const val KEY_BLEEDING = "feature_bleeding"
         private const val KEY_APPOINTMENTS = "feature_appointments"
     }

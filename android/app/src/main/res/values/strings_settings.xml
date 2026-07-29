@@ -129,4 +129,6 @@
     <string name="set_res_revolte">Discord — serveur Nancy / Metz / Grand Est.</string>
     <string name="set_res_astr">Discord — serveur transfem Suisse.</string>
 
+    <string name="set_module_notes">Notes</string>
+    <string name="set_module_notes_sub">Des notes en markdown, avec images et dossiers</string>
 </resources>

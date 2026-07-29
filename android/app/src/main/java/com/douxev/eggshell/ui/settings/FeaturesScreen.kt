@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bloodtype
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -57,6 +58,7 @@ class FeaturesViewModel @Inject constructor(
     val weightTracking: StateFlow<Boolean> = prefs.weightTracking
     val photoTab: StateFlow<Boolean> = prefs.photoTab
     val voiceTab: StateFlow<Boolean> = prefs.voiceTab
+    val notes: StateFlow<Boolean> = prefs.notes
     val bleeding: StateFlow<Boolean> = prefs.bleeding
     val appointments: StateFlow<Boolean> = prefs.appointments
 
@@ -66,6 +68,7 @@ class FeaturesViewModel @Inject constructor(
     fun setWeightTracking(v: Boolean) = prefs.setWeightTracking(v)
     fun setPhotoTab(v: Boolean) = prefs.setPhotoTab(v)
     fun setVoiceTab(v: Boolean) = prefs.setVoiceTab(v)
+    fun setNotes(v: Boolean) = prefs.setNotes(v)
     fun setBleeding(v: Boolean) = prefs.setBleeding(v)
     fun setAppointments(v: Boolean) = prefs.setAppointments(v)
 }
@@ -92,6 +95,7 @@ fun FeaturesScreen(
     val weight by vm.weightTracking.collectAsState()
     val photo by vm.photoTab.collectAsState()
     val voice by vm.voiceTab.collectAsState()
+    val notes by vm.notes.collectAsState()
 
     Scaffold(containerColor = MaterialTheme.colorScheme.surface) { padding ->
         LazyColumn(
@@ -201,6 +205,16 @@ fun FeaturesScreen(
                     subtitle = stringResource(R.string.set_module_voice_sub),
                     checked = voice,
                     onCheckedChange = vm::setVoiceTab,
+                )
+            }
+            item {
+                ModuleRow(
+                    icon = Icons.Filled.Description,
+                    family = ModuleFamily.Evolution,
+                    title = stringResource(R.string.set_module_notes),
+                    subtitle = stringResource(R.string.set_module_notes_sub),
+                    checked = notes,
+                    onCheckedChange = vm::setNotes,
                 )
             }
 

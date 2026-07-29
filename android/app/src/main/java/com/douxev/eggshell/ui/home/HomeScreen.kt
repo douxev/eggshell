@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Bloodtype
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Mood
@@ -632,6 +633,7 @@ private fun LauncherGrid(
         if (m.weight) add(LauncherTile(ModuleBadgePrefs.Module.Weight, R.string.module_weight, Icons.Filled.Straighten, Family.Evolution))
         if (m.photos) add(LauncherTile(ModuleBadgePrefs.Module.Photos, R.string.module_photos, Icons.Filled.PhotoCamera, Family.Evolution))
         if (m.voice) add(LauncherTile(ModuleBadgePrefs.Module.Voice, R.string.module_voice, Icons.Filled.GraphicEq, Family.Evolution))
+        if (m.notes) add(LauncherTile(ModuleBadgePrefs.Module.Notes, R.string.module_notes, Icons.Filled.Description, Family.Evolution))
     }
     // A fixed 4-column grid inside an already-scrolling column: laid out by
     // hand rather than with LazyVerticalGrid, which cannot nest in a scroll.

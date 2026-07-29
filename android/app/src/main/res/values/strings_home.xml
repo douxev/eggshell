@@ -63,4 +63,5 @@
     <!-- Saisie rapide (feuille) -->
     <string name="quicklog_subtitle">Un geste, depuis n’importe quel écran.</string>
     <string name="quicklog_footer">Enregistré sur l’appareil, chiffré.</string>
+    <string name="module_notes">Notes</string>
 </resources>
