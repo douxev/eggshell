@@ -144,9 +144,31 @@ class VaultPrefs @Inject constructor(@ApplicationContext context: Context) {
             .apply()
     }
 
-    /** Erase everything — used at logout / vault reset / failed onboarding. */
+    /**
+     * Persist the mode and its wrapped key together, durably.
+     *
+     * They used to be two separate `apply()`s, so a kill between them could
+     * leave a mode with no key (permanently stuck on the unlock screen) or a
+     * key with no mode (back to onboarding, on top of live data). One edit,
+     * one `commit`, no intermediate state to be killed in.
+     */
+    fun commitModeAndWrappedKey(newMode: Mode, wrapped: ByteArray?): Boolean =
+        prefs.edit().apply {
+            putString(KEY_MODE, newMode.name)
+            if (wrapped == null) remove(KEY_WRAPPED)
+            else putString(KEY_WRAPPED, Base64.encodeToString(wrapped, Base64.NO_WRAP))
+        }.commit()
+
+    /**
+     * Erase everything — used at logout / vault reset / failed onboarding.
+     *
+     * `commit`: every other step of a wipe (deleting the Keystore aliases, the
+     * DB, the blob directories) is immediate and durable, so an async clear
+     * here is the one piece a kill could leave behind — auth state pointing at
+     * key material that no longer exists.
+     */
     fun wipe() {
-        prefs.edit().clear().apply()
+        prefs.edit().clear().commit()
     }
 
     /**

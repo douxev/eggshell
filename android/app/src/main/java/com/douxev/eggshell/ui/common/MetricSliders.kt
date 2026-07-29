@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.douxev.eggshell.R
 import com.douxev.eggshell.ui.theme.EggColors
 import uniffi.transition.MetricDefinition
+import kotlin.math.roundToInt
 
 /**
  * The configurable indicators of the refonte (§6.2): one row per slider, the
@@ -77,7 +78,10 @@ fun MetricSliderRow(
     val max = def.maxValue.toInt()
     val label = metricLabel(def)
     val (lowEmoji, highEmoji) = metricEmojis(def)
-    val shown = value.toInt().coerceIn(min, max)
+    // roundToInt, not toInt: Compose's stepped Slider snaps in float, so the
+    // 8th position of a 1..10 range arrives as 7.9999998 and truncation
+    // rendered it as 7 — the scale read 1 2 3 4 5 6 7 7 9 10.
+    val shown = value.roundToInt().coerceIn(min, max)
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(

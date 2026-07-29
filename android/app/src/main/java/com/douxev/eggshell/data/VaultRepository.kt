@@ -29,7 +29,16 @@ import uniffi.transition.freshKdfMaterial
 class VaultRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val prefs: VaultPrefs,
+    // Injected only for wipeAll: the reminder machinery deliberately lives
+    // outside the vault so it works while locked, which also means a vault
+    // wipe cannot reach it without help.
+    private val alarms: com.douxev.eggshell.reminders.AlarmScheduler,
+    private val pendingDoses: com.douxev.eggshell.reminders.PendingDosePrefs,
 ) {
+    // Plain classes rather than Hilt bindings, so built here from the context.
+    private val reminders by lazy { com.douxev.eggshell.reminders.ReminderPrefs(context) }
+    private val labReminders by lazy { com.douxev.eggshell.reminders.LabReminderPrefs(context) }
+
     private val keystore = KeystoreWrapper(VaultPrefs.KEYSTORE_ALIAS_NO_BIO)
     private val keystoreBio = KeystoreWrapper(VaultPrefs.KEYSTORE_ALIAS_BIO)
 
@@ -49,6 +58,19 @@ class VaultRepository @Inject constructor(
     private val dbPath: String
         get() = context.filesDir.resolve("vault.db").absolutePath
 
+    /**
+     * True when there is a real database behind [dbPath].
+     *
+     * `Vault::open` passes `SQLITE_OPEN_CREATE`, which it must for first run —
+     * but on the unlock path that turns a missing or truncated vault.db into a
+     * brand new empty vault that opens happily with whatever key was supplied
+     * (`verify_key` cannot reject a key against zero bytes). The user is shown
+     * an empty app and told nothing, having lost everything. Unlock therefore
+     * refuses to proceed unless the file is actually there.
+     */
+    private val vaultFileExists: Boolean
+        get() = context.filesDir.resolve("vault.db").let { it.isFile && it.length() > 0L }
+
     // -- initialization ------------------------------------------------------
 
     suspend fun initializeKeystoreOnly() = withContext(Dispatchers.IO) {
@@ -57,9 +79,12 @@ class VaultRepository @Inject constructor(
         val raw = key.exportRaw()
         val secret = keystore.getOrCreate(requireBiometric = false)
         val wrapped = keystore.encrypt(secret, raw)
-        prefs.setWrappedKey(wrapped)
-        prefs.mode = VaultPrefs.Mode.KEYSTORE_ONLY
+        // Open the DB before committing the mode. Committing first meant that a
+        // SQLCipher failure left isInitialized true with no working vault, and
+        // `require(!isInitialized)` then made onboarding impossible to repeat —
+        // the app was stuck on the unlock screen for good.
         session = Vault(dbPath, key)
+        prefs.commitModeAndWrappedKey(VaultPrefs.Mode.KEYSTORE_ONLY, wrapped)
     }
 
     suspend fun initializeKeystoreBiometric(
@@ -87,9 +112,8 @@ class VaultRepository @Inject constructor(
             cancelLabel = biometricCopy.cancel,
         )
         val wrapped = unlocked.iv + unlocked.doFinal(raw)
-        prefs.setWrappedKey(wrapped)
-        prefs.mode = VaultPrefs.Mode.KEYSTORE_BIOMETRIC
         session = Vault(dbPath, key)
+        prefs.commitModeAndWrappedKey(VaultPrefs.Mode.KEYSTORE_BIOMETRIC, wrapped)
     }
 
     /**
@@ -149,10 +173,9 @@ class VaultRepository @Inject constructor(
         )
         val secret = keystore.getOrCreate(requireBiometric = false)
         val wrappedByKeystore = keystore.encrypt(secret, wrappedByPass)
-        prefs.setKdfMaterial(kdf.toPrefs())
-        prefs.setWrappedKey(wrappedByKeystore)
-        prefs.mode = VaultPrefs.Mode.KEYSTORE_PASSPHRASE
         session = Vault(dbPath, key)
+        prefs.setKdfMaterial(kdf.toPrefs())
+        prefs.commitModeAndWrappedKey(VaultPrefs.Mode.KEYSTORE_PASSPHRASE, wrappedByKeystore)
     }
 
     suspend fun initializeParanoid(passphrase: String) = withContext(Dispatchers.IO) {
@@ -161,10 +184,9 @@ class VaultRepository @Inject constructor(
         val key = VaultKey.deriveFromPassphrase(
             passphrase, kdf.salt, kdf.mCostKib, kdf.tCost, kdf.pCost,
         )
-        prefs.setKdfMaterial(kdf.toPrefs())
-        prefs.setWrappedKey(null)
-        prefs.mode = VaultPrefs.Mode.PARANOID
         session = Vault(dbPath, key)
+        prefs.setKdfMaterial(kdf.toPrefs())
+        prefs.commitModeAndWrappedKey(VaultPrefs.Mode.PARANOID, null)
     }
 
     // -- change mode ---------------------------------------------------------
@@ -266,9 +288,10 @@ class VaultRepository @Inject constructor(
             VaultPrefs.Mode.KEYSTORE_ONLY -> {
                 val secret = keystore.getOrCreate(requireBiometric = false)
                 val wrapped = keystore.encrypt(secret, rawKey)
-                prefs.setWrappedKey(wrapped)
                 prefs.setKdfMaterial(null)
-                prefs.mode = newMode
+                // commit before the delete below: an apply() left the new mode
+                // only in memory while the old alias was already, durably, gone.
+                prefs.commitModeAndWrappedKey(newMode, wrapped)
                 dropRecoveryOnModeChange(newMode)
                 runCatching { keystoreBio.delete() }
             }
@@ -287,9 +310,8 @@ class VaultRepository @Inject constructor(
                     biometricCopy.title, biometricCopy.subtitle, biometricCopy.cancel,
                 )
                 val wrapped = unlocked.iv + unlocked.doFinal(rawKey)
-                prefs.setWrappedKey(wrapped)
                 prefs.setKdfMaterial(null)
-                prefs.mode = newMode
+                prefs.commitModeAndWrappedKey(newMode, wrapped)
                 runCatching { keystore.delete() }
             }
             VaultPrefs.Mode.KEYSTORE_PASSPHRASE -> {
@@ -302,8 +324,7 @@ class VaultRepository @Inject constructor(
                 val secret = keystore.getOrCreate(requireBiometric = false)
                 val wrappedByKeystore = keystore.encrypt(secret, wrappedByPass)
                 prefs.setKdfMaterial(kdf.toPrefs())
-                prefs.setWrappedKey(wrappedByKeystore)
-                prefs.mode = newMode
+                prefs.commitModeAndWrappedKey(newMode, wrappedByKeystore)
                 dropRecoveryOnModeChange(newMode)
                 runCatching { keystoreBio.delete() }
             }
@@ -325,6 +346,7 @@ class VaultRepository @Inject constructor(
         biometricCopy: BiometricCopy?,
     ): UnlockOutcome = withContext(Dispatchers.IO) {
         val mode = prefs.mode ?: return@withContext UnlockOutcome.NotInitialized
+        if (!vaultFileExists) return@withContext UnlockOutcome.Failed("vault database missing")
         try {
             val key: VaultKey = when (mode) {
                 VaultPrefs.Mode.KEYSTORE_ONLY -> {
@@ -460,6 +482,7 @@ class VaultRepository @Inject constructor(
         biometricCopy: BiometricCopy? = null,
     ): UnlockOutcome = withContext(Dispatchers.IO) {
         val mode = prefs.mode ?: return@withContext UnlockOutcome.NotInitialized
+        if (!vaultFileExists) return@withContext UnlockOutcome.Failed("vault database missing")
         val wrapped = prefs.recoveryWrapped()
             ?: return@withContext UnlockOutcome.Failed("no recovery secret set")
         val kdf = prefs.recoveryKdf()
@@ -563,6 +586,19 @@ class VaultRepository @Inject constructor(
      */
     suspend fun wipeAll() = withContext(Dispatchers.IO) {
         session = null
+        // Silence the phone FIRST. The alarms and their off-vault mirror live
+        // outside the vault precisely so reminders fire while locked — which
+        // meant that after a self-destruct the phone carried on announcing
+        // medication by name, to whoever had just triggered it. A wipe that
+        // leaves the evidence ringing is not a wipe.
+        runCatching {
+            reminders.all().forEach { alarms.cancel(it.scheduleId); alarms.cancelSnooze(it.scheduleId) }
+            reminders.wipe()
+        }
+        runCatching {
+            labReminders.all().forEach { alarms.cancelLab(it.id) }
+        }
+        runCatching { pendingDoses.clear() }
         prefs.wipe()
         runCatching { keystore.delete() }
         runCatching { keystoreBio.delete() }
@@ -593,11 +629,15 @@ class VaultRepository @Inject constructor(
         // Drop the (now-stale) open session; the next unlock opens the restored
         // DB. Recreate the Keystore key so the wrap below is fresh.
         session = null
-        runCatching { keystore.delete() }
-        runCatching { keystoreBio.delete() }
-        // Re-wrap the imported key under the local Keystore (KEYSTORE_ONLY
-        // is the lowest-friction post-import default; the user can promote
-        // to biometric/passphrase later via Settings → Change security mode).
+        // Build and commit the new state BEFORE destroying the old aliases —
+        // the rule this file already states at applyNewMode, and broke here.
+        // Deleting first meant that any throw in the next few lines (a Keystore
+        // that refuses to generate, an encrypt refused because the screen locked
+        // during the import's Argon2id + full-DB decrypt, a commit returning
+        // false) left both aliases gone while prefs still pointed at a blob only
+        // those aliases could open — and importEncrypted has already replaced
+        // vault.db by then. The deletes are not even needed for correctness:
+        // getOrCreate reuses or mints the alias, and encrypt makes a fresh IV.
         val secret = keystore.getOrCreate(requireBiometric = false)
         val wrapped = keystore.encrypt(secret, rawKey)
         // Synchronous, atomic clear-old + write-new. This MUST be durable before
@@ -608,6 +648,9 @@ class VaultRepository @Inject constructor(
         check(prefs.commitRestoredKeystoreOnly(wrapped)) {
             "failed to persist restored vault state"
         }
+        // Durable now: the stale biometric alias can go. Best-effort — a
+        // leftover alias is inert, the restored vault is KEYSTORE_ONLY.
+        runCatching { keystoreBio.delete() }
     }
 
     // -- helpers -------------------------------------------------------------

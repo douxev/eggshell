@@ -104,6 +104,7 @@ import uniffi.transition.JournalEntry
 import uniffi.transition.MetricDefinition
 import uniffi.transition.MetricValue
 import uniffi.transition.NewJournalEntry
+import kotlin.math.roundToInt
 
 @HiltViewModel
 class AddJournalEntryViewModel @Inject constructor(
@@ -758,7 +759,9 @@ private fun columnState(
 ): UInt? {
     val def = definitions.firstOrNull { it.columnName == column } ?: return columnValue(loaded, column)
     if (!def.enabled) return columnValue(loaded, column)
-    return values[def.id]?.toInt()?.toUInt() ?: columnValue(loaded, column)
+    // Truncation here did not just mis-draw the scale, it stored the wrong
+    // number: a mood the user set to 8 was written to the vault as 7.
+    return values[def.id]?.roundToInt()?.toUInt() ?: columnValue(loaded, column)
 }
 
 /**
@@ -774,7 +777,7 @@ private fun customMetricValues(
     val shown = definitions.filter { it.columnName == null && it.enabled }
     val shownIds = shown.map { it.id }.toSet()
     val fromForm = shown.mapNotNull { def ->
-        values[def.id]?.let { MetricValue(metricId = def.id, value = it.toInt().toUInt()) }
+        values[def.id]?.let { MetricValue(metricId = def.id, value = it.roundToInt().toUInt()) }
     }
     val preserved = stored
         .filterKeys { it !in shownIds }

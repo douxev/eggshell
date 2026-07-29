@@ -7,6 +7,10 @@ import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayOutputStream
+import android.provider.MediaStore
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
@@ -39,7 +43,53 @@ class PhotosRepository @Inject constructor(
      * via `<id>.tmp` + fsync + rename, then INSERT the DB row. If the INSERT
      * fails we delete the renamed file so we don't leak orphan ciphertext.
      */
-    suspend fun importFromUri(uri: Uri, category: String?) = withContext(Dispatchers.IO) {
+    /**
+     * When the picked image was actually taken, or null if nothing says.
+     *
+     * Imports used to be stamped `System.currentTimeMillis()`, so adding a
+     * photo from two years ago filed it under today — which quietly ruins the
+     * one feature the module exists for, the before/after span. Read in
+     * decreasing order of trust: the EXIF capture time, then MediaStore's
+     * DATE_TAKEN (which the camera app fills in even on some stripped files),
+     * then the `IMG_20230415_…` / `PXL_20230415_…` convention in the filename.
+     *
+     * EXIF is only *read* here. The bytes we store still go through
+     * [readAndStripExif], so location and device metadata never reach the vault.
+     */
+    fun originalTimestamp(uri: Uri): Long? =
+        exifTimestamp(uri) ?: mediaStoreTimestamp(uri) ?: filenameTimestamp(uri)
+
+    private fun exifTimestamp(uri: Uri): Long? = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            val exif = ExifInterface(stream)
+            val raw = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
+                ?: exif.getAttribute(ExifInterface.TAG_DATETIME)
+                ?: return@use null
+            // EXIF stores local time with no zone, so parse it as local time.
+            val fmt = SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US)
+            fmt.parse(raw)?.time
+        }
+    }.getOrNull()
+
+    private fun mediaStoreTimestamp(uri: Uri): Long? = runCatching {
+        context.contentResolver.query(
+            uri, arrayOf(MediaStore.MediaColumns.DATE_TAKEN), null, null, null,
+        )?.use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0).takeIf { it > 0L } else null
+        }
+    }.getOrNull()
+
+    private fun filenameTimestamp(uri: Uri): Long? = runCatching {
+        val name = uri.lastPathSegment ?: return@runCatching null
+        val m = Regex("(20\\d{2})(\\d{2})(\\d{2})").find(name) ?: return@runCatching null
+        val (y, mo, d) = m.destructured
+        Calendar.getInstance().apply {
+            clear()
+            set(y.toInt(), mo.toInt() - 1, d.toInt(), 12, 0, 0)
+        }.timeInMillis.takeIf { it <= System.currentTimeMillis() }
+    }.getOrNull()
+
+    suspend fun importFromUri(uri: Uri, category: String?, atMs: Long? = null) = withContext(Dispatchers.IO) {
         val session = vault.requireSession()
         val cleaned = readAndStripExif(uri)
             ?: error("could not decode image at $uri")
@@ -66,7 +116,7 @@ class PhotosRepository @Inject constructor(
         try {
             session.addPhotoRecord(
                 NewPhotoRecord(
-                    atMs = System.currentTimeMillis(),
+                    atMs = atMs ?: originalTimestamp(uri) ?: System.currentTimeMillis(),
                     category = category,
                     filePath = final.absolutePath,
                     notes = null,

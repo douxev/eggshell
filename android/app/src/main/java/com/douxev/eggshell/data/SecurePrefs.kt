@@ -35,14 +35,21 @@ object SecurePrefs {
         if (target.all.isEmpty()) {
             val legacy = app.getSharedPreferences(logicalName, Context.MODE_PRIVATE)
             if (legacy.all.isNotEmpty()) {
-                copyInto(legacy, target)
-                app.deleteSharedPreferences(logicalName)
+                // Only delete the source once the copy is provably on disk.
+                // copyInto used to end in apply(), which returns before the
+                // write lands — and the delete right after it is immediate. A
+                // process death in that window destroyed the vault's wrapped
+                // master key, permanently, on the very first release launch
+                // after an upgrade.
+                if (copyInto(legacy, target)) {
+                    app.deleteSharedPreferences(logicalName)
+                }
             }
         }
         return target
     }
 
-    private fun copyInto(from: SharedPreferences, to: SharedPreferences) {
+    private fun copyInto(from: SharedPreferences, to: SharedPreferences): Boolean {
         val editor = to.edit()
         for ((key, value) in from.all) {
             when (value) {
@@ -57,7 +64,7 @@ object SecurePrefs {
                 }
             }
         }
-        editor.apply()
+        return editor.commit()
     }
 
     private fun opaque(logicalName: String): String {

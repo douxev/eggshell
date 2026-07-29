@@ -77,6 +77,7 @@ import uniffi.transition.BleedingEntry
 import uniffi.transition.MetricDefinition
 import uniffi.transition.MetricValue
 import uniffi.transition.NewBleedingEntry
+import kotlin.math.roundToInt
 
 @HiltViewModel
 class AddBleedingEntryViewModel @Inject constructor(
@@ -502,7 +503,7 @@ private fun bleedingMetricValues(
     val shown = definitions.filter { it.enabled }
     val shownIds = shown.map { it.id }.toSet()
     val fromForm = shown.mapNotNull { def ->
-        values[def.id]?.let { MetricValue(metricId = def.id, value = it.toInt().toUInt()) }
+        values[def.id]?.let { MetricValue(metricId = def.id, value = it.roundToInt().toUInt()) }
     }
     val preserved = stored
         .filterKeys { it !in shownIds }
