@@ -91,6 +91,11 @@ fun UnlockScreen(
         subtitle = stringResource(R.string.biometric_unlock_subtitle),
         cancel = stringResource(R.string.action_cancel),
     )
+    val rearmCopy = VaultRepository.BiometricCopy(
+        title = stringResource(R.string.biometric_rearm_title),
+        subtitle = stringResource(R.string.biometric_rearm_subtitle),
+        cancel = stringResource(R.string.action_cancel),
+    )
 
     // Auto-trigger Keystore modes the first time we land here — but ONLY
     // when no decoy is set. With a decoy, the user must first pass the PIN
@@ -145,7 +150,10 @@ fun UnlockScreen(
             onBiometric = { vm.attemptAutoUnlock(activity, biometricCopy) },
             onOpenRecovery = vm::openRecovery,
             onCloseRecovery = vm::closeRecovery,
-            onSubmitRecovery = vm::submitRecovery,
+            // Distinct copy: the prompt that follows a recovery unlock is not
+            // "prove it's you to get in" — they are already in — it is
+            // "re-link the fingerprint that changed".
+            onSubmitRecovery = { s -> vm.submitRecovery(s, activity, rearmCopy) },
         )
     }
 

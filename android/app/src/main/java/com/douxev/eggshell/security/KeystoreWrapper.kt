@@ -35,6 +35,19 @@ class KeystoreWrapper(private val alias: String) {
     }
 
     /**
+     * The key currently stored under this alias, or null — never creates one.
+     *
+     * [getOrCreate] silently mints a fresh key when the alias is gone, which is
+     * the right behaviour at setup time and exactly the wrong one when the
+     * question being asked is "is the existing key still usable?". Probing with
+     * getOrCreate would answer "yes" by manufacturing the answer.
+     */
+    fun existing(): SecretKey? {
+        val ks = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        return runCatching { ks.getKey(alias, null) as? SecretKey }.getOrNull()
+    }
+
+    /**
      * Delete the existing alias (if any) and create a fresh key. Used in
      * setup/mode-change paths where a stale, possibly invalidated key would
      * make every cipher operation throw KeyPermanentlyInvalidatedException

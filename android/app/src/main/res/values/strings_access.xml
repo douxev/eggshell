@@ -86,5 +86,7 @@
     <string name="unlock_recovery_label">Clé de secours</string>
     <string name="unlock_recovery_submit">Déverrouiller</string>
     <string name="unlock_recovery_back">Revenir à l\'empreinte</string>
+    <string name="biometric_rearm_title">Relie ta nouvelle empreinte</string>
+    <string name="biometric_rearm_subtitle">Pose ton doigt pour rouvrir le coffre avec ton empreinte la prochaine fois</string>
     <string name="unlock_recovery_keystore_dead">Ton empreinte ne peut plus ouvrir le coffre sur ce téléphone : Android a invalidé la clé, souvent après l\'ajout d\'une empreinte ou une mise à jour du système. Tes données sont intactes — utilise ta clé de secours.</string>
 </resources>

@@ -432,21 +432,88 @@ class VaultRepository @Inject constructor(
      * This is the path that saves a user whose Keystore key was destroyed by a
      * fingerprint re-enrollment: it never touches the Keystore at all.
      */
-    suspend fun unlockWithRecovery(secret: String): UnlockOutcome = withContext(Dispatchers.IO) {
-        prefs.mode ?: return@withContext UnlockOutcome.NotInitialized
+    suspend fun unlockWithRecovery(
+        secret: String,
+        activity: FragmentActivity? = null,
+        biometricCopy: BiometricCopy? = null,
+    ): UnlockOutcome = withContext(Dispatchers.IO) {
+        val mode = prefs.mode ?: return@withContext UnlockOutcome.NotInitialized
         val wrapped = prefs.recoveryWrapped()
             ?: return@withContext UnlockOutcome.Failed("no recovery secret set")
         val kdf = prefs.recoveryKdf()
             ?: return@withContext UnlockOutcome.Failed("no recovery kdf material")
-        try {
-            val key = VaultKey.unwrapWithPassphrase(
+        val key = try {
+            VaultKey.unwrapWithPassphrase(
                 wrapped, secret, kdf.salt, kdf.mCostKib, kdf.tCost, kdf.pCost,
             )
-            session = Vault(dbPath, key)
-            UnlockOutcome.Success
         } catch (cause: Throwable) {
-            UnlockOutcome.Failed(describe(cause))
+            return@withContext UnlockOutcome.Failed(describe(cause))
         }
+        session = Vault(dbPath, key)
+
+        // The vault is open; from here nothing may turn this into a failure.
+        // Without the re-arm below, a user whose Keystore key died would be
+        // asked for the recovery secret at *every* unlock forever, because
+        // nothing else ever rebuilds that key.
+        if (mode == VaultPrefs.Mode.KEYSTORE_BIOMETRIC && activity != null && biometricCopy != null) {
+            runCatching { rearmBiometricKey(key.exportRaw(), activity, biometricCopy) }
+        }
+        UnlockOutcome.Success
+    }
+
+    /**
+     * Whether the biometric-bound Keystore key can still serve an unlock.
+     *
+     * Silent: on a healthy per-use key `Cipher.init()` succeeds with no prompt,
+     * because authorisation is deferred to the CryptoObject. Anything thrown
+     * here — invalidated by a new fingerprint enrollment, or the
+     * UserNotAuthenticated case — means it cannot, and re-arming is warranted.
+     */
+    private fun biometricKeyUnusable(wrapped: ByteArray): Boolean {
+        val secret = keystoreBio.existing() ?: return true
+        return runCatching { keystoreBio.newDecryptCipher(secret, keystoreBio.ivOf(wrapped)) }.isFailure
+    }
+
+    /**
+     * Rebuild the biometric-bound key and re-wrap the master key under it, so
+     * the next unlock is a fingerprint again rather than the recovery secret.
+     *
+     * Costs one prompt, and cannot be made silent with this key design: the
+     * Keystore key is symmetric and `setUserAuthenticationRequired(true)` gates
+     * *every* operation on it, encryption included — which is why setup shows a
+     * prompt to wrap in the first place. Only an asymmetric key (public half
+     * usable without auth) could wrap invisibly.
+     *
+     * That prompt is not purely a tax. `setInvalidatedByBiometricEnrollment`
+     * destroyed the old key precisely because the set of fingerprints that can
+     * open this phone changed; re-binding the vault to the new set is a
+     * decision worth showing the person making it.
+     *
+     * Safe to fail: the previous key was already unusable, and the recovery
+     * wrap is untouched, so a cancelled prompt costs nothing but a repeat of
+     * the recovery unlock next time.
+     */
+    private suspend fun rearmBiometricKey(
+        rawKey: ByteArray,
+        activity: FragmentActivity,
+        biometricCopy: BiometricCopy,
+    ) {
+        val current = prefs.wrappedKey()
+        if (current != null && !biometricKeyUnusable(current)) return
+        ensureBiometricAvailable(activity)
+        val secret = keystoreBio.recreate(requireBiometric = true)
+        val encryptCipher = Cipher.getInstance(KeystoreWrapper.TRANSFORM).apply {
+            init(Cipher.ENCRYPT_MODE, secret)
+        }
+        val unlocked = BiometricKeystoreUnlock.unlockCipher(
+            activity, encryptCipher,
+            biometricCopy.title, biometricCopy.subtitle, biometricCopy.cancel,
+        )
+        // Only now is the old blob replaceable: if the prompt above had been
+        // cancelled we would still be holding a wrappedKey that matches the
+        // (dead) old alias, which is no worse than before. Overwriting earlier
+        // would strand anyone whose recovery secret is also lost.
+        prefs.setWrappedKey(unlocked.iv + unlocked.doFinal(rawKey))
     }
 
     sealed interface RecoveryOutcome {

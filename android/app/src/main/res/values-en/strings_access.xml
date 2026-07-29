@@ -85,5 +85,7 @@
     <string name="unlock_recovery_label">Recovery key</string>
     <string name="unlock_recovery_submit">Unlock</string>
     <string name="unlock_recovery_back">Back to fingerprint</string>
+    <string name="biometric_rearm_title">Re-link your new fingerprint</string>
+    <string name="biometric_rearm_subtitle">Touch the sensor so your fingerprint opens the vault again next time</string>
     <string name="unlock_recovery_keystore_dead">Your fingerprint can no longer open the vault on this phone: Android invalidated the key, usually after a fingerprint was added or a system update landed. Your data is intact — use your recovery key.</string>
 </resources>

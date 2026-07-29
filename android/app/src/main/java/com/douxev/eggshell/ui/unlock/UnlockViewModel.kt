@@ -232,12 +232,22 @@ class UnlockViewModel @Inject constructor(
         resetToPin()
     }
 
-    fun submitRecovery(secret: String) {
+    /**
+     * The activity and copy are not for the recovery unlock itself — that path
+     * never touches the Keystore. They are for the re-arm that follows it, so
+     * a user whose key was destroyed goes back to using their fingerprint
+     * instead of typing the recovery secret at every single unlock.
+     */
+    fun submitRecovery(
+        secret: String,
+        activity: FragmentActivity?,
+        biometricCopy: VaultRepository.BiometricCopy?,
+    ) {
         if (hasDecoy || !hasRecovery) return
         lastAttemptWasRecovery = true
         _state.value = State.InProgress
         viewModelScope.launch {
-            when (val out = repo.unlockWithRecovery(secret)) {
+            when (val out = repo.unlockWithRecovery(secret, activity, biometricCopy)) {
                 is VaultRepository.UnlockOutcome.Success -> _state.value = State.Success
                 is VaultRepository.UnlockOutcome.Failed -> _state.value = State.Failed(out.reason)
                 VaultRepository.UnlockOutcome.NotInitialized ->
