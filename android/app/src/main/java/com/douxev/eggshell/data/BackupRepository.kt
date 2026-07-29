@@ -13,15 +13,46 @@ import uniffi.transition.importEncrypted
 @Singleton
 class BackupRepository @Inject constructor(
     private val vault: VaultRepository,
+    private val settingsBackup: SettingsBackup,
     @ApplicationContext private val context: Context,
 ) {
+    private val settingsDir: File get() = File(context.filesDir, "settings")
+
+    /**
+     * The settings snapshot rides along as a third blob kind inside the bundle.
+     *
+     * It is written where the Rust exporter already looks, rather than pushed
+     * across the FFI, so neither the export signature nor iOS has to change —
+     * a platform with no settings/ directory simply contributes nothing and
+     * keeps working. Sealed with the vault key like every other blob, so the
+     * file is never readable at rest even in the window before the export
+     * finishes.
+     */
+    private fun writeSettingsSnapshot() {
+        runCatching {
+            settingsDir.mkdirs()
+            val sealed = vault.requireSession().encryptBlob(settingsBackup.snapshot())
+            File(settingsDir, "app-settings.bin").writeBytes(sealed)
+        }
+    }
+
+    private fun clearSettingsSnapshot() {
+        runCatching { settingsDir.listFiles()?.forEach { it.delete() } }
+    }
     /**
      * Export the open vault as an encrypted blob, write it to the dedicated
      * `backup_share` sub-cache, and return the File. Caller hands it to a
      * SAF "save to…" picker or ACTION_SEND.
      */
     suspend fun exportToCache(passphrase: String): File = withContext(Dispatchers.IO) {
-        val bytes = vault.requireSession().exportEncrypted(passphrase)
+        writeSettingsSnapshot()
+        val bytes = try {
+            vault.requireSession().exportEncrypted(passphrase)
+        } finally {
+            // Never leave it lying around: outside an export it has no reason
+            // to exist, and the orphan reaper does not know this directory.
+            clearSettingsSnapshot()
+        }
         val dir = File(context.cacheDir, "backup_share").apply { mkdirs() }
         // Sweep anything from a previous share first. The bundle is encrypted,
         // but it is a complete copy of the vault and it was never purged — one
@@ -64,6 +95,18 @@ class BackupRepository @Inject constructor(
         // keeps the unlinked inode, the next unlock opens the new one.
         val imported = importEncrypted(bundle, passphrase, targetPath)
         try {
+            // Apply the settings before the key is re-wrapped and the process
+            // restarts. The snapshot is sealed with the imported master key, so
+            // this is the one moment we hold what is needed to open it.
+            runCatching {
+                val sealed = File(settingsDir, "app-settings.bin")
+                if (sealed.isFile) {
+                    val key = uniffi.transition.VaultKey.fromRaw(imported.masterKey)
+                    val plain = uniffi.transition.Vault(targetPath, key).decryptBlob(sealed.readBytes())
+                    settingsBackup.restore(plain)
+                }
+            }
+            clearSettingsSnapshot()
             vault.restoreFromImportedKey(imported.masterKey)
         } finally {
             // Best-effort wipe of the master key copy that crossed the FFI.

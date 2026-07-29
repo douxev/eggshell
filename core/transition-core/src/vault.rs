@@ -60,6 +60,12 @@ const MAX_IMPORT_P_COST: u32 = 16;
 /// Blob kinds carried inside a v3 bundle.
 const BLOB_KIND_PHOTO: u8 = 0;
 const BLOB_KIND_VOICE: u8 = 1;
+/// App settings that live outside the database — themes, units, opt-in
+/// notification copy, lab reminders. The platform layer drops a sealed
+/// snapshot into `settings/` before exporting and reads it back after
+/// importing; the core just carries the bytes, since neither Android
+/// SharedPreferences nor iOS UserDefaults are readable from Rust.
+const BLOB_KIND_SETTINGS: u8 = 2;
 
 /// Directory names for the blob stores, relative to the vault DB's parent.
 /// Both platforms use this shape (Android `filesDir/{photos,voice}`, iOS
@@ -67,6 +73,7 @@ const BLOB_KIND_VOICE: u8 = 1;
 /// find them from `db_path` alone instead of having the list handed in.
 const PHOTOS_DIR: &str = "photos";
 const VOICE_DIR: &str = "voice";
+const SETTINGS_DIR: &str = "settings";
 
 /// Deletes a path when it goes out of scope, however that happens.
 ///
@@ -783,18 +790,28 @@ impl Vault {
             .ok_or_else(|| TransitionError::Database("vault path has no parent".into()))?;
         let photos = read_blob_dir(&base.join(PHOTOS_DIR))?;
         let voice = read_blob_dir(&base.join(VOICE_DIR))?;
+        let settings = read_blob_dir(&base.join(SETTINGS_DIR))?;
 
         // 3. Frame the plaintext. v2 was [key || db] with "the rest is the DB"
         //    as load-bearing structure, which is why appending anything to it is
         //    impossible and v3 needs explicit lengths.
-        let blob_bytes: usize = photos.iter().chain(voice.iter()).map(|(n, d)| 11 + n.len() + d.len()).sum();
+        let blob_bytes: usize = photos
+            .iter()
+            .chain(voice.iter())
+            .chain(settings.iter())
+            .map(|(n, d)| 11 + n.len() + d.len())
+            .sum();
         let mut plain = Vec::with_capacity(KEY_LEN + 8 + snapshot_bytes.len() + 4 + blob_bytes);
         plain.extend_from_slice(self.master_key.expose());
         plain.extend_from_slice(&(snapshot_bytes.len() as u64).to_le_bytes());
         plain.extend_from_slice(&snapshot_bytes);
-        let count = (photos.len() + voice.len()) as u32;
+        let count = (photos.len() + voice.len() + settings.len()) as u32;
         plain.extend_from_slice(&count.to_le_bytes());
-        for (kind, list) in [(BLOB_KIND_PHOTO, &photos), (BLOB_KIND_VOICE, &voice)] {
+        for (kind, list) in [
+            (BLOB_KIND_PHOTO, &photos),
+            (BLOB_KIND_VOICE, &voice),
+            (BLOB_KIND_SETTINGS, &settings),
+        ] {
             for (name, data) in list.iter() {
                 plain.push(kind);
                 plain.extend_from_slice(&(name.len() as u16).to_le_bytes());
@@ -956,7 +973,16 @@ pub fn import_encrypted(
         .parent()
         .ok_or_else(|| TransitionError::Database("target path has no parent".into()))?;
     for (kind, name, data) in blobs {
-        let dir = base.join(if kind == BLOB_KIND_VOICE { VOICE_DIR } else { PHOTOS_DIR });
+        // Skip rather than guess. The previous shape defaulted anything that
+        // was not "voice" into photos/, so a record written by a future build
+        // would land in the photo library and be deleted by the orphan reaper
+        // — or worse, be treated as an image.
+        let dir = base.join(match kind {
+            BLOB_KIND_PHOTO => PHOTOS_DIR,
+            BLOB_KIND_VOICE => VOICE_DIR,
+            BLOB_KIND_SETTINGS => SETTINGS_DIR,
+            _ => continue,
+        });
         std::fs::create_dir_all(&dir)
             .map_err(|e| TransitionError::Database(format!("create blob dir: {}", io_kind(&e))))?;
         std::fs::write(dir.join(&name), data)
@@ -1367,6 +1393,37 @@ mod tests {
             std::fs::read(restore_base.join(VOICE_DIR).join("bbb.bin")).unwrap(),
             b"voice-ciphertext",
             "voice blob must be restored byte-for-byte",
+        );
+    }
+
+    #[test]
+    fn v3_carries_the_settings_snapshot_and_ignores_unknown_kinds() {
+        let path = fresh_db_path();
+        let base = path.parent().unwrap().to_path_buf();
+        std::fs::create_dir_all(base.join(SETTINGS_DIR)).unwrap();
+        std::fs::write(base.join(SETTINGS_DIR).join("app-settings.bin"), b"sealed-settings").unwrap();
+
+        let key = VaultKey::random();
+        let bundle = {
+            let vault = Vault::open(path.to_string_lossy().into_owned(), &key).unwrap();
+            vault.export_encrypted("pass".into()).unwrap()
+        };
+
+        let restore_path = fresh_db_path();
+        let restore_base = restore_path.parent().unwrap().to_path_buf();
+        let _ = std::fs::remove_dir_all(restore_base.join(SETTINGS_DIR));
+        import_encrypted(bundle, "pass".into(), restore_path.to_string_lossy().into_owned()).unwrap();
+
+        assert_eq!(
+            std::fs::read(restore_base.join(SETTINGS_DIR).join("app-settings.bin")).unwrap(),
+            b"sealed-settings",
+            "the settings snapshot must survive a round trip",
+        );
+        // And it must land in settings/, never in the photo library — an
+        // unrecognised kind used to default there.
+        assert!(
+            !restore_base.join(PHOTOS_DIR).join("app-settings.bin").exists(),
+            "a settings blob must not be filed as a photo",
         );
     }
 
