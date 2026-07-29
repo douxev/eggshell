@@ -101,7 +101,16 @@ class NoteEditorViewModel @Inject constructor(
         viewModelScope.launch {
             val id = noteId ?: runCatching { repo.create(_title.value, _body.value).id }
                 .getOrNull()?.also { noteId = it } ?: return@launch
-            runCatching { repo.attachImage(id, uri) }
+            val img = runCatching { repo.attachImage(id, uri) }.getOrNull()
+            if (img != null) {
+                // Put the reference IN the text, where the writer expects the
+                // picture to appear, instead of appending it to a gallery under
+                // the note. That is what "a format that integrates text and
+                // images" means in practice.
+                val sep = if (_body.value.isBlank() || _body.value.endsWith("\n")) "" else "\n\n"
+                _body.value = _body.value + sep + imageRefFor(img.id) + "\n"
+                runCatching { repo.update(id, _title.value, _body.value) }
+            }
             reloadImages()
         }
     }
@@ -157,6 +166,7 @@ fun NoteEditorScreen(
     val body by vm.body.collectAsState()
     val images by vm.images.collectAsState()
     var confirmDelete by remember { mutableStateOf(false) }
+    var preview by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     LaunchedEffect(noteId) { vm.load(noteId) }
@@ -211,6 +221,13 @@ fun NoteEditorScreen(
                             modifier = Modifier.padding(start = 6.dp),
                         )
                     }
+                    androidx.compose.material3.TextButton(onClick = { preview = !preview }) {
+                        Text(
+                            stringResource(
+                                if (preview) R.string.notes_edit else R.string.notes_preview
+                            )
+                        )
+                    }
                     if (vm.canDelete) {
                         TextButton(onClick = { confirmDelete = true }) {
                             Icon(
@@ -237,34 +254,57 @@ fun NoteEditorScreen(
                     onBack = { leave() },
                 )
             }
-            item {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = vm::onTitle,
-                    label = { Text(stringResource(R.string.notes_field_title)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            item {
-                OutlinedTextField(
-                    value = body,
-                    onValueChange = vm::onBody,
-                    label = { Text(stringResource(R.string.notes_field_body)) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 200.dp),
-                )
-            }
-            items(images, key = { it.first.id }) { (img, bytes) ->
-                NoteImageCard(bytes = bytes, onRemove = { vm.detach(img) })
+            if (preview) {
+                item {
+                    Text(
+                        title.ifBlank { stringResource(R.string.notes_untitled) },
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.W700,
+                    )
+                }
+                // The body renders as markdown with its images placed where the
+                // references sit, so the preview reads as the finished note
+                // rather than as text followed by an album.
+                items(splitAroundImages(body)) { piece ->
+                    when (piece) {
+                        is BodyPiece.Text ->
+                            if (piece.value.isNotBlank()) MarkdownBody(piece.value)
+                        is BodyPiece.Img -> {
+                            val bytes = images.firstOrNull { it.first.id == piece.imageId }?.second
+                            if (bytes != null) NoteImageCard(bytes = bytes, onRemove = null)
+                        }
+                    }
+                }
+            } else {
+                item {
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = vm::onTitle,
+                        label = { Text(stringResource(R.string.notes_field_title)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = body,
+                        onValueChange = vm::onBody,
+                        label = { Text(stringResource(R.string.notes_field_body)) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 200.dp),
+                    )
+                }
+                items(images, key = { it.first.id }) { (img, bytes) ->
+                    NoteImageCard(bytes = bytes, onRemove = { vm.detach(img) })
+                }
             }
         }
     }
 }
 
 @Composable
-private fun NoteImageCard(bytes: ByteArray, onRemove: () -> Unit) {
+private fun NoteImageCard(bytes: ByteArray, onRemove: (() -> Unit)?) {
     val bitmap = remember(bytes) {
         runCatching { android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
             .getOrNull()
@@ -285,7 +325,7 @@ private fun NoteImageCard(bytes: ByteArray, onRemove: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
-            IconButton(
+            if (onRemove != null) IconButton(
                 onClick = onRemove,
                 modifier = Modifier.align(Alignment.TopEnd),
             ) {
@@ -298,4 +338,25 @@ private fun NoteImageCard(bytes: ByteArray, onRemove: () -> Unit) {
             }
         }
     }
+}
+
+
+/** A body split into text runs and the image references between them. */
+private sealed interface BodyPiece {
+    data class Text(val value: String) : BodyPiece
+    data class Img(val imageId: Long) : BodyPiece
+}
+
+private val REF = Regex("""!\[[^]]*]\(""" + IMAGE_SCHEME + """:(\d+)\)""")
+
+private fun splitAroundImages(body: String): List<BodyPiece> {
+    val out = mutableListOf<BodyPiece>()
+    var cursor = 0
+    for (m in REF.findAll(body)) {
+        if (m.range.first > cursor) out += BodyPiece.Text(body.substring(cursor, m.range.first))
+        m.groupValues[1].toLongOrNull()?.let { out += BodyPiece.Img(it) }
+        cursor = m.range.last + 1
+    }
+    if (cursor < body.length) out += BodyPiece.Text(body.substring(cursor))
+    return out
 }

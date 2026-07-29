@@ -1462,6 +1462,47 @@ mod tests {
     }
 
     #[test]
+    fn note_images_survive_a_backup_round_trip() {
+        let path = fresh_db_path();
+        let base = path.parent().unwrap().to_path_buf();
+        std::fs::create_dir_all(base.join(NOTE_IMAGES_DIR)).unwrap();
+        std::fs::write(base.join(NOTE_IMAGES_DIR).join("n1.bin"), b"note-image-ciphertext").unwrap();
+
+        let key = VaultKey::random();
+        let bundle = {
+            let vault = Vault::open(path.to_string_lossy().into_owned(), &key).unwrap();
+            vault.add_note(crate::notes::NewNote {
+                title: "Kept".into(),
+                body: "body ![](eggshell-note-image:1)".into(),
+                created_ms: 1,
+                updated_ms: 1,
+            }).unwrap();
+            vault.export_encrypted("pass".into()).unwrap()
+        };
+
+        let restore_path = fresh_db_path();
+        let restore_base = restore_path.parent().unwrap().to_path_buf();
+        let _ = std::fs::remove_dir_all(restore_base.join(NOTE_IMAGES_DIR));
+        let imported =
+            import_encrypted(bundle, "pass".into(), restore_path.to_string_lossy().into_owned())
+                .unwrap();
+
+        // The note itself rides in the DB snapshot…
+        let vault = Vault::open(
+            restore_path.to_string_lossy().into_owned(),
+            &VaultKey::from_raw(imported.master_key).unwrap(),
+        ).unwrap();
+        assert_eq!(vault.list_notes().unwrap().len(), 1);
+        // …and its image as its own blob, byte for byte, in its own directory
+        // rather than mixed into the photo library.
+        assert_eq!(
+            std::fs::read(restore_base.join(NOTE_IMAGES_DIR).join("n1.bin")).unwrap(),
+            b"note-image-ciphertext",
+        );
+        assert!(!restore_base.join(PHOTOS_DIR).join("n1.bin").exists());
+    }
+
+    #[test]
     fn v3_carries_the_settings_snapshot_and_ignores_unknown_kinds() {
         let path = fresh_db_path();
         let base = path.parent().unwrap().to_path_buf();

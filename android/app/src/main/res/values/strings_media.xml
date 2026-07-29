@@ -106,4 +106,7 @@
     <string name="notes_image_unreadable">Image illisible</string>
     <string name="notes_delete_title">Supprimer cette note ?</string>
     <string name="notes_delete_body">Le texte et les images qu\'elle contient seront effacés. C\'est définitif.</string>
+    <string name="notes_export">Exporter</string>
+    <string name="notes_preview">Aperçu</string>
+    <string name="notes_edit">Modifier</string>
 </resources>

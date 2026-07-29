@@ -8,4 +8,5 @@
     <cache-path name="pdf_export"   path="pdf_export/"/>
     <cache-path name="photo_export" path="photo_export/"/>
     <cache-path name="voice_share"  path="voice_share/"/>
+    <cache-path name="note_export"  path="note_export/"/>
 </paths>

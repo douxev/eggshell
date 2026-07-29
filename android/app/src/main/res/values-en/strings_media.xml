@@ -106,4 +106,7 @@
     <string name="notes_image_unreadable">Unreadable image</string>
     <string name="notes_delete_title">Delete this note?</string>
     <string name="notes_delete_body">Its text and images will be erased. This cannot be undone.</string>
+    <string name="notes_export">Export</string>
+    <string name="notes_preview">Preview</string>
+    <string name="notes_edit">Edit</string>
 </resources>

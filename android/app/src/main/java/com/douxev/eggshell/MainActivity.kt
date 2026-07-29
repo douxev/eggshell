@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     @Inject lateinit var voice: com.douxev.eggshell.data.VoiceRepository
     @Inject lateinit var pdfExports: com.douxev.eggshell.data.PdfReportExporter
     @Inject lateinit var notes: com.douxev.eggshell.data.NotesRepository
+    @Inject lateinit var noteExports: com.douxev.eggshell.data.NoteExporter
     @Inject lateinit var decoyPresence: com.douxev.eggshell.data.DecoyPresence
 
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
@@ -68,6 +69,7 @@ class MainActivity : AppCompatActivity() {
             runCatching { photos.purgeAllCache() }
             runCatching { voice.purgeAllCache() }
             runCatching { notes.purgeAllCache() }
+            runCatching { noteExports.purgeExports() }
             runCatching { pdfExports.purgeExports() }
             runCatching {
                 com.douxev.eggshell.data.lab.LabResultOcrService
