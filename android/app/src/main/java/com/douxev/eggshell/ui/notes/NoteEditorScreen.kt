@@ -63,6 +63,7 @@ import uniffi.transition.NoteImage
 @HiltViewModel
 class NoteEditorViewModel @Inject constructor(
     private val repo: NotesRepository,
+    private val exporter: com.douxev.eggshell.data.NoteExporter,
 ) : ViewModel() {
 
     private val _title = MutableStateFlow("")
@@ -147,6 +148,21 @@ class NoteEditorViewModel @Inject constructor(
 
     val canDelete: Boolean get() = noteId != null
 
+    /**
+     * Export this one note.
+     *
+     * Saves first: the editor only writes on the way out, so exporting a note
+     * being edited would otherwise ship the last saved version and quietly drop
+     * whatever was just typed.
+     */
+    fun exportThis(onReady: (java.io.File) -> Unit) {
+        viewModelScope.launch {
+            save()
+            val id = noteId ?: return@launch
+            runCatching { exporter.exportToCache(listOf(id)) }.getOrNull()?.let(onReady)
+        }
+    }
+
     private suspend fun reloadImages() {
         val id = noteId ?: return
         val rows = runCatching { repo.images(id) }.getOrDefault(emptyList())
@@ -168,6 +184,7 @@ fun NoteEditorScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(noteId) { vm.load(noteId) }
 
@@ -227,6 +244,11 @@ fun NoteEditorScreen(
                                 if (preview) R.string.notes_edit else R.string.notes_preview
                             )
                         )
+                    }
+                    if (vm.canDelete) {
+                        androidx.compose.material3.TextButton(onClick = {
+                            vm.exportThis { file -> shareNoteZip(ctx, file) }
+                        }) { Text(stringResource(R.string.notes_export)) }
                     }
                     if (vm.canDelete) {
                         TextButton(onClick = { confirmDelete = true }) {
@@ -359,4 +381,24 @@ private fun splitAroundImages(body: String): List<BodyPiece> {
     }
     if (cursor < body.length) out += BodyPiece.Text(body.substring(cursor))
     return out
+}
+
+
+/**
+ * Share the archive through our own FileProvider — the only way another app is
+ * allowed to read a file out of our cache, and the reason note_export had to be
+ * declared in file_provider_paths.xml.
+ */
+private fun shareNoteZip(context: android.content.Context, file: java.io.File) {
+    runCatching {
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context, context.packageName + ".fileprovider", file,
+        )
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(android.content.Intent.createChooser(intent, null))
+    }
 }
