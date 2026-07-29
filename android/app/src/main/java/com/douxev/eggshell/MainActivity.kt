@@ -52,7 +52,6 @@ class MainActivity : AppCompatActivity() {
     @Inject lateinit var pdfExports: com.douxev.eggshell.data.PdfReportExporter
     @Inject lateinit var notes: com.douxev.eggshell.data.NotesRepository
     @Inject lateinit var noteExports: com.douxev.eggshell.data.NoteExporter
-    @Inject lateinit var decoyPresence: com.douxev.eggshell.data.DecoyPresence
 
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStop(owner: LifecycleOwner) {
@@ -98,6 +97,9 @@ class MainActivity : AppCompatActivity() {
      * two overrides below catch all 25 call sites without touching any of them.
      */
     private var leavingForOwnActivity = false
+
+    /** Last FLAG_SECURE value actually pushed to the window. See the collector. */
+    private var lastSecureApplied: Boolean? = null
 
     override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
         leavingForOwnActivity = true
@@ -156,18 +158,29 @@ class MainActivity : AppCompatActivity() {
                 kotlinx.coroutines.flow.combine(
                     securityPrefs.blockScreenshots,
                     rootViewModel.route,
-                    decoyPresence.onScreen,
-                ) { block, route, decoyOnScreen ->
-                    // Onboarding and Unlock accept PINs and passphrases, so
-                    // they are always secure. Home follows the user's setting —
-                    // and that deliberately includes the decoy, which renders
-                    // inside the Unlock route: a plain notes app does not refuse
-                    // screenshots or show a blank card in Recents, so forcing
-                    // the flag there is itself the tell it was meant to prevent.
-                    val forceSecure = route == AppRootViewModel.Route.Onboarding ||
-                        (route == AppRootViewModel.Route.Unlock && !decoyOnScreen)
+                ) { block, route ->
+                    // Deliberately NOT conditioned on the decoy any more.
+                    //
+                    // Dropping the flag while the facade was up was meant to fix
+                    // a tell (a plain notes app does not refuse screenshots).
+                    // But toggling FLAG_SECURE destroys and recreates the
+                    // window's surface, and this collector restarts on every
+                    // STARTED — so leaving the app and coming back flipped it at
+                    // the exact moment of return and left a white screen. A
+                    // cosmetic tell is a far smaller problem than an app that
+                    // does not draw, and this is the wrong lever for it: the
+                    // honest fix is a stable per-session decision, not one that
+                    // changes under the user.
+                    val forceSecure = route != AppRootViewModel.Route.Home
                     block || forceSecure
                 }.collect { secure ->
+                    // Only touch the window when the answer actually changed.
+                    // repeatOnLifecycle re-emits the current value on every
+                    // restart, so without this the flag was re-applied on each
+                    // foreground — and a redundant add/clear is not free, it
+                    // costs a surface recreation.
+                    if (secure == lastSecureApplied) return@collect
+                    lastSecureApplied = secure
                     if (secure) {
                         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
                     } else {

@@ -134,6 +134,28 @@ class UnlockViewModel @Inject constructor(
     val attemptsLeft: StateFlow<Int?> = _attemptsLeft.asStateFlow()
 
     init {
+        // Reset when the vault closes.
+        //
+        // UnlockScreen is called straight from AppRoot rather than inside a
+        // NavHost, so hiltViewModel() scopes this to the ACTIVITY and it
+        // survives being navigated away from. After a successful unlock the
+        // state stayed Success — and once background locking started sending
+        // the router back to Unlock, the screen recomposed against that stale
+        // Success, hit `onUnlocked(); return`, drew nothing, refreshed, was
+        // sent back to Unlock, and span. A white screen, every time.
+        //
+        // The decoy never showed it because that path ends at Decoy and never
+        // reaches Success at all.
+        viewModelScope.launch {
+            repo.unlocked.collect { open ->
+                if (!open && _state.value is State.Success) {
+                    lastAttemptWasRecovery = false
+                    _keystoreUnusable.value = false
+                    _accessGatePassed.value = false
+                    _state.value = initialState()
+                }
+            }
+        }
         viewModelScope.launch {
             while (isActive) {
                 _lockoutMs.value = throttle.lockedOutMs()
