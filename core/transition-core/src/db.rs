@@ -41,18 +41,31 @@ impl Database {
     /// without running migrations. Returns `Ok` on success or
     /// `TransitionError::WrongKey` if the key does not match.
     pub fn verify_key(path: &Path, key: &MasterKey) -> Result<(), TransitionError> {
-        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(map_sql)?;
-        set_key(&conn, key.expose())?;
-        // Forcing a read of sqlite_schema fails fast if the key is wrong.
-        conn.query_row("SELECT count(*) FROM sqlite_schema", [], |r| r.get::<_, i64>(0))
-            .map(|_| ())
-            .map_err(|e| match e {
-                rusqlite::Error::SqliteFailure(err, _) if err.extended_code == 26 => {
-                    TransitionError::WrongKey
-                }
-                other => map_sql(other),
-            })
+        // Map at the OUTER level, not around the sqlite_schema read.
+        //
+        // A wrong key does not surface where the old code looked for it: with
+        // SQLCipher the failure comes out of `set_key`'s own PRAGMA batch,
+        // which had already funnelled it through map_sql into a generic
+        // Database("sqlite code 26"). The WrongKey arm sat downstream of that
+        // and was therefore unreachable — callers could never distinguish
+        // "wrong passphrase" from "your vault is damaged", which are very
+        // different things to tell someone about their medical records.
+        let attempt = || -> Result<(), TransitionError> {
+            let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(map_sql)?;
+            set_key(&conn, key.expose())?;
+            // Forcing a read of sqlite_schema fails fast if the key is wrong.
+            conn.query_row("SELECT count(*) FROM sqlite_schema", [], |r| r.get::<_, i64>(0))
+                .map(|_| ())
+                .map_err(map_sql)
+        };
+        attempt().map_err(|e| match e {
+            // SQLITE_NOTADB (26) is SQLCipher's answer to a key that does not
+            // decrypt. sanitize_db_err has already flattened it to a string by
+            // this point, so match on that rather than re-plumbing every layer.
+            TransitionError::Database(ref msg) if msg.contains("26") => TransitionError::WrongKey,
+            other => other,
+        })
     }
 
     /// Borrow the underlying connection. Other modules in `transition-core`
@@ -74,6 +87,18 @@ impl Database {
         let current: u32 = tx
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .map_err(map_sql)?;
+        // A database from a NEWER build has tables and columns this binary does
+        // not know about. The migration loop below simply does not run in that
+        // case, so the vault used to open silently and then fail one query at a
+        // time, deep inside whichever screen happened to touch the unknown
+        // shape. Refuse up front and say why — the user needs to update the
+        // app, not to conclude their data is corrupt. Reachable in practice:
+        // restore a backup made by a newer version, or downgrade the APK.
+        if current > CURRENT_SCHEMA_VERSION {
+            return Err(TransitionError::Database(format!(
+                "this vault was written by a newer version of Eggshell (schema {current}, this build understands {CURRENT_SCHEMA_VERSION}); update the app"
+            )));
+        }
         for version in (current + 1)..=CURRENT_SCHEMA_VERSION {
             apply_migration(&tx, version)?;
             tx.pragma_update(None, "user_version", version)
@@ -352,5 +377,57 @@ mod tests {
         assert_eq!(loaded.kdf_salt.as_deref(), Some(&[42u8; 16][..]));
         assert_eq!(loaded.kdf_m_cost_kib, Some(64 * 1024));
         assert_eq!(loaded.wrapped_db_key.as_deref(), Some(&[7u8; 48][..]));
+    }
+}
+#[cfg(test)]
+mod newer_schema_tests {
+    use super::*;
+    use crate::crypto::MasterKey;
+
+    fn tmp_db() -> std::path::PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!("eggshell-schema-{}-{:?}.db", std::process::id(), std::thread::current().id()));
+        let _ = std::fs::remove_file(&p);
+        p
+    }
+
+    #[test]
+    fn a_vault_from_a_newer_build_is_refused_with_an_actionable_message() {
+        let path = tmp_db();
+        let key = MasterKey::generate();
+        {
+            let db = Database::open(&path, &key).unwrap();
+            db.conn()
+                .pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION + 5)
+                .unwrap();
+        }
+        let err = match Database::open(&path, &key) {
+            Err(e) => e,
+            Ok(_) => panic!("a newer-schema vault must not open"),
+        };
+        let msg = format!("{err}");
+        assert!(msg.contains("newer version"), "unexpected message: {msg}");
+        assert!(msg.contains("update the app"), "message must tell the user what to do: {msg}");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn verify_key_actually_reports_wrong_key() {
+        let path = tmp_db();
+        let right = MasterKey::generate();
+        { Database::open(&path, &right).unwrap(); }
+
+        // The right key verifies.
+        Database::verify_key(&path, &right).unwrap();
+
+        // The wrong one must come back as WrongKey, not as a generic Database
+        // error — callers branch on this to tell "bad passphrase" apart from
+        // "your vault is damaged", which are very different things to be told.
+        let wrong = MasterKey::generate();
+        match Database::verify_key(&path, &wrong) {
+            Err(TransitionError::WrongKey) => {}
+            other => panic!("expected WrongKey, got {other:?}"),
+        }
+        let _ = std::fs::remove_file(&path);
     }
 }

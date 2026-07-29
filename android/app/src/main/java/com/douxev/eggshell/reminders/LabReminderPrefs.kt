@@ -14,6 +14,22 @@ class LabReminderPrefs(context: Context) {
     private val prefs: SharedPreferences =
         com.douxev.eggshell.data.SecurePrefs.get(context, PREFS_NAME)
 
+    /**
+     * Labels are user-typed and often diagnostic ("bilan hormonal T4",
+     * "contrôle post-op"). The medication mirror has always sealed its
+     * equivalent; this one stored the same class of text in the clear, so a
+     * forensic dump of shared_prefs read the reason for every appointment.
+     */
+    private val obfuscator = com.douxev.eggshell.security.MetadataObfuscator()
+
+    /**
+     * Entries written before sealing existed carry no tag byte. [open] would
+     * read their first character as one and return null, silently dropping the
+     * reminder, so fall back to the raw string and let the next write seal it.
+     */
+    private fun readLabel(raw: String?): String? =
+        raw?.let { obfuscator.open(it) ?: it }
+
     /** Free-form category tag: "lab" (default), "photo", "voice", "journal".
      *  The category is what lets the Reminders screen group entries into
      *  separate sections with the right icon and notification copy. */
@@ -32,7 +48,7 @@ class LabReminderPrefs(context: Context) {
         val ids = prefs.getString(KEY_IDS, null).orEmpty().split(',')
             .mapNotNull { it.trim().toLongOrNull() }
         return ids.mapNotNull { id ->
-            val label = prefs.getString(key("label", id), null) ?: return@mapNotNull null
+            val label = readLabel(prefs.getString(key("label", id), null)) ?: return@mapNotNull null
             val kind = prefs.getString(key("kind", id), null) ?: return@mapNotNull null
             Entry(
                 id = id,
@@ -56,7 +72,7 @@ class LabReminderPrefs(context: Context) {
         val ids = (all().map { it.id } + entry.id).distinct()
         prefs.edit().apply {
             putString(KEY_IDS, ids.joinToString(","))
-            putString(key("label", entry.id), entry.label)
+            putString(key("label", entry.id), obfuscator.seal(entry.label) ?: entry.label)
             putString(key("kind", entry.id), entry.kind)
             entry.intervalDays?.let { putInt(key("interval", entry.id), it) }
                 ?: run { remove(key("interval", entry.id)) }

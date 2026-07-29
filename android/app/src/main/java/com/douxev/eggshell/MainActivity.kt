@@ -67,6 +67,10 @@ class MainActivity : AppCompatActivity() {
             runCatching { photos.purgeAllCache() }
             runCatching { voice.purgeAllCache() }
             runCatching { pdfExports.purgeExports() }
+            runCatching {
+                com.douxev.eggshell.data.lab.LabResultOcrService
+                    .purgeDecryptedCache(applicationContext)
+            }
             if (vault.currentMode == com.douxev.eggshell.security.VaultPrefs.Mode.PARANOID) {
                 vault.lock()
             }

@@ -247,5 +247,20 @@ class LabResultOcrService @Inject constructor(
     companion object {
         private const val MAX_PDF_PAGES = 50
         private const val MAX_PIXELS_PER_SIDE = 1500
+
+        /**
+         * Wipe any decrypted PDF an interrupted OCR run left behind.
+         *
+         * The service already sweeps on its way in and deletes in `finally`,
+         * but a process death between the two left cleartext lab results in
+         * the cache until the *next* OCR run — which may never come. Called
+         * from the app's background purge, alongside the photo, voice and
+         * report caches.
+         */
+        fun purgeDecryptedCache(context: android.content.Context) {
+            runCatching {
+                File(context.cacheDir, "lab_decrypt").listFiles()?.forEach { it.delete() }
+            }
+        }
     }
 }
