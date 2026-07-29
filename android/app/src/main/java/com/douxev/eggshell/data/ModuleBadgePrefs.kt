@@ -33,6 +33,7 @@ class ModuleBadgePrefs @Inject constructor(
         Bleeding("bleeding"),
         Appointments("appointments"),
         Meds("meds"),
+        Notes("notes"),
     }
 
     private val prefs: SharedPreferences = SecurePrefs.get(context, PREFS_NAME)

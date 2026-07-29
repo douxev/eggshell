@@ -66,6 +66,11 @@ const BLOB_KIND_VOICE: u8 = 1;
 /// importing; the core just carries the bytes, since neither Android
 /// SharedPreferences nor iOS UserDefaults are readable from Rust.
 const BLOB_KIND_SETTINGS: u8 = 2;
+/// Images embedded in notes. Their own kind, and their own directory: sharing
+/// `photos/` would put them in front of the progress-photo orphan reaper,
+/// which deletes any .bin whose basename is not in photo_records — at the very
+/// first unlock after they were written.
+const BLOB_KIND_NOTE_IMAGE: u8 = 3;
 
 /// Directory names for the blob stores, relative to the vault DB's parent.
 /// Both platforms use this shape (Android `filesDir/{photos,voice}`, iOS
@@ -74,6 +79,7 @@ const BLOB_KIND_SETTINGS: u8 = 2;
 const PHOTOS_DIR: &str = "photos";
 const VOICE_DIR: &str = "voice";
 const SETTINGS_DIR: &str = "settings";
+const NOTE_IMAGES_DIR: &str = "note_images";
 
 /// Deletes a path when it goes out of scope, however that happens.
 ///
@@ -670,6 +676,57 @@ impl Vault {
         crate::bleeding::delete(&*self.db()?, id)
     }
 
+    // -- Notes -------------------------------------------------------------
+
+    pub fn add_note(&self, n: crate::notes::NewNote) -> Result<crate::notes::Note, TransitionError> {
+        crate::notes::add(&*self.db()?, n)
+    }
+
+    pub fn list_notes(&self) -> Result<Vec<crate::notes::Note>, TransitionError> {
+        crate::notes::list(&*self.db()?)
+    }
+
+    pub fn get_note(&self, id: i64) -> Result<Option<crate::notes::Note>, TransitionError> {
+        crate::notes::get(&*self.db()?, id)
+    }
+
+    pub fn update_note(
+        &self,
+        id: i64,
+        title: String,
+        body: String,
+        updated_ms: i64,
+    ) -> Result<crate::notes::Note, TransitionError> {
+        crate::notes::update(&*self.db()?, id, title, body, updated_ms)
+    }
+
+    pub fn delete_note(&self, id: i64) -> Result<(), TransitionError> {
+        crate::notes::delete(&*self.db()?, id)
+    }
+
+    pub fn reorder_notes(&self, ids_in_order: Vec<i64>) -> Result<(), TransitionError> {
+        crate::notes::reorder(&*self.db()?, ids_in_order)
+    }
+
+    pub fn add_note_image(
+        &self,
+        img: crate::notes::NewNoteImage,
+    ) -> Result<crate::notes::NoteImage, TransitionError> {
+        crate::notes::add_image(&*self.db()?, img)
+    }
+
+    pub fn note_images(&self, note_id: i64) -> Result<Vec<crate::notes::NoteImage>, TransitionError> {
+        crate::notes::images_for(&*self.db()?, note_id)
+    }
+
+    pub fn all_note_image_paths(&self) -> Result<Vec<String>, TransitionError> {
+        crate::notes::all_image_paths(&*self.db()?)
+    }
+
+    pub fn delete_note_image(&self, id: i64) -> Result<(), TransitionError> {
+        crate::notes::delete_image(&*self.db()?, id)
+    }
+
     // -- Appointments / notes ("RDV") ----------------------------------------
 
     pub fn add_appointment(
@@ -791,6 +848,7 @@ impl Vault {
         let photos = read_blob_dir(&base.join(PHOTOS_DIR))?;
         let voice = read_blob_dir(&base.join(VOICE_DIR))?;
         let settings = read_blob_dir(&base.join(SETTINGS_DIR))?;
+        let note_images = read_blob_dir(&base.join(NOTE_IMAGES_DIR))?;
 
         // 3. Frame the plaintext. v2 was [key || db] with "the rest is the DB"
         //    as load-bearing structure, which is why appending anything to it is
@@ -799,18 +857,20 @@ impl Vault {
             .iter()
             .chain(voice.iter())
             .chain(settings.iter())
+            .chain(note_images.iter())
             .map(|(n, d)| 11 + n.len() + d.len())
             .sum();
         let mut plain = Vec::with_capacity(KEY_LEN + 8 + snapshot_bytes.len() + 4 + blob_bytes);
         plain.extend_from_slice(self.master_key.expose());
         plain.extend_from_slice(&(snapshot_bytes.len() as u64).to_le_bytes());
         plain.extend_from_slice(&snapshot_bytes);
-        let count = (photos.len() + voice.len() + settings.len()) as u32;
+        let count = (photos.len() + voice.len() + settings.len() + note_images.len()) as u32;
         plain.extend_from_slice(&count.to_le_bytes());
         for (kind, list) in [
             (BLOB_KIND_PHOTO, &photos),
             (BLOB_KIND_VOICE, &voice),
             (BLOB_KIND_SETTINGS, &settings),
+            (BLOB_KIND_NOTE_IMAGE, &note_images),
         ] {
             for (name, data) in list.iter() {
                 plain.push(kind);
@@ -981,6 +1041,7 @@ pub fn import_encrypted(
             BLOB_KIND_PHOTO => PHOTOS_DIR,
             BLOB_KIND_VOICE => VOICE_DIR,
             BLOB_KIND_SETTINGS => SETTINGS_DIR,
+            BLOB_KIND_NOTE_IMAGE => NOTE_IMAGES_DIR,
             _ => continue,
         });
         std::fs::create_dir_all(&dir)
@@ -1076,7 +1137,11 @@ fn rewrite_blob_paths(db_path: &str, key: &VaultKey, base: &Path) -> Result<(), 
     let vault = Vault::open(db_path.to_string(), key)?;
     let guard = vault.db()?;
     let conn = guard.conn();
-    for (table, dir) in [("photo_records", PHOTOS_DIR), ("voice_clips", VOICE_DIR)] {
+    for (table, dir) in [
+        ("photo_records", PHOTOS_DIR),
+        ("voice_clips", VOICE_DIR),
+        ("note_images", NOTE_IMAGES_DIR),
+    ] {
         let target = base.join(dir);
         let target = target.to_string_lossy().to_string();
         // SQLite has no basename(); rtrim/replace gymnastics would be fragile
@@ -1668,6 +1733,16 @@ mod tests {
                 guard
                     .conn()
                     .execute("ALTER TABLE dose_schedules DROP COLUMN label", [])
+                    .unwrap();
+                // Rewinding user_version is not enough on its own: everything
+                // migrations 14+ created still exists, and re-running them
+                // against it fails ("table notes already exists"). A genuine
+                // schema-13 database has none of it, so drop it too. This list
+                // grows with every future migration that creates a table —
+                // that is the price of simulating an old schema from a new one.
+                guard
+                    .conn()
+                    .execute_batch("DROP TABLE IF EXISTS note_images; DROP TABLE IF EXISTS notes;")
                     .unwrap();
                 guard.conn().pragma_update(None, "user_version", 13).unwrap();
             }

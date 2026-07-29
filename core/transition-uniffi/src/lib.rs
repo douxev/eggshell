@@ -23,6 +23,7 @@ pub use transition_core::metrics::{
 };
 pub use transition_core::bleeding::{BleedingEntry, NewBleedingEntry};
 pub use transition_core::appointments::{Appointment, NewAppointment};
+pub use transition_core::notes::{NewNote, NewNoteImage, Note, NoteImage};
 pub use transition_core::photos::{NewPhotoRecord, PhotoRecord};
 pub use transition_core::voice::{NewVoiceClip, VoiceClip};
 
@@ -479,6 +480,52 @@ impl Vault {
 
     pub fn delete_bleeding_entry(&self, id: i64) -> Result<(), TransitionError> {
         self.inner.delete_bleeding_entry(id)
+    }
+
+    pub fn add_note(&self, note: NewNote) -> Result<Note, TransitionError> {
+        self.inner.add_note(note)
+    }
+
+    pub fn list_notes(&self) -> Result<Vec<Note>, TransitionError> {
+        self.inner.list_notes()
+    }
+
+    pub fn get_note(&self, id: i64) -> Result<Option<Note>, TransitionError> {
+        self.inner.get_note(id)
+    }
+
+    pub fn update_note(
+        &self,
+        id: i64,
+        title: String,
+        body: String,
+        updated_ms: i64,
+    ) -> Result<Note, TransitionError> {
+        self.inner.update_note(id, title, body, updated_ms)
+    }
+
+    pub fn delete_note(&self, id: i64) -> Result<(), TransitionError> {
+        self.inner.delete_note(id)
+    }
+
+    pub fn reorder_notes(&self, ids_in_order: Vec<i64>) -> Result<(), TransitionError> {
+        self.inner.reorder_notes(ids_in_order)
+    }
+
+    pub fn add_note_image(&self, img: NewNoteImage) -> Result<NoteImage, TransitionError> {
+        self.inner.add_note_image(img)
+    }
+
+    pub fn note_images(&self, note_id: i64) -> Result<Vec<NoteImage>, TransitionError> {
+        self.inner.note_images(note_id)
+    }
+
+    pub fn all_note_image_paths(&self) -> Result<Vec<String>, TransitionError> {
+        self.inner.all_note_image_paths()
+    }
+
+    pub fn delete_note_image(&self, id: i64) -> Result<(), TransitionError> {
+        self.inner.delete_note_image(id)
     }
 
     pub fn add_appointment(&self, appt: NewAppointment) -> Result<Appointment, TransitionError> {

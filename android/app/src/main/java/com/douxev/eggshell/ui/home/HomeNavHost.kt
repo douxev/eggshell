@@ -135,6 +135,7 @@ fun HomeNavHost(
                     onOpenWeight = { nav.navigate(Routes.measures(MeasuresTab.WEIGHT)) },
                     onOpenPhotos = { nav.navigate(Routes.PHOTOS) },
                     onOpenVoice = { nav.navigate(Routes.VOICE) },
+                    onOpenNotes = { nav.navigate(Routes.NOTES) },
                     onOpenFullJournal = { nav.navigate(Routes.JOURNAL_ADD) },
                     onAddMedication = { nav.navigate(Routes.MED_ADD) },
                     onMoodSaved = { confirmSaved(offerViewJournal = true) },
@@ -305,6 +306,28 @@ fun HomeNavHost(
             composable(Routes.PHOTOS) { PhotosScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.VOICE) { VoiceScreen(onBack = { nav.popBackStack() }) }
 
+            // ---- Notes ----------------------------------------------------
+            composable(Routes.NOTES) {
+                com.douxev.eggshell.ui.notes.NotesScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenNote = { id -> nav.navigate("notes/edit?id=$id") },
+                    onNewNote = { nav.navigate("notes/edit?id=-1") },
+                )
+            }
+            composable(
+                Routes.NOTE_EDIT,
+                arguments = listOf(navArgument("id") {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                }),
+            ) { entry ->
+                val id = entry.arguments?.getLong("id") ?: -1L
+                com.douxev.eggshell.ui.notes.NoteEditorScreen(
+                    noteId = id.takeIf { it >= 0 },
+                    onBack = { nav.popBackStack() },
+                )
+            }
+
             // ---- Réglages : trois portes ----------------------------------
             composable(Routes.SETTINGS) {
                 SettingsHubScreen(
@@ -403,6 +426,9 @@ object Routes {
 
     const val PHOTOS = "photos"
     const val VOICE = "voice"
+
+    const val NOTES = "notes"
+    const val NOTE_EDIT = "notes/edit?id={id}"
 
     const val SETTINGS = "settings"
     const val SETTINGS_MODULES = "settings/modules"

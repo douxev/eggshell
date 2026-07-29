@@ -50,6 +50,7 @@ class MainActivity : AppCompatActivity() {
     @Inject lateinit var photos: com.douxev.eggshell.data.PhotosRepository
     @Inject lateinit var voice: com.douxev.eggshell.data.VoiceRepository
     @Inject lateinit var pdfExports: com.douxev.eggshell.data.PdfReportExporter
+    @Inject lateinit var notes: com.douxev.eggshell.data.NotesRepository
     @Inject lateinit var decoyPresence: com.douxev.eggshell.data.DecoyPresence
 
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
@@ -66,6 +67,7 @@ class MainActivity : AppCompatActivity() {
             // whatever photos the user chose to include.
             runCatching { photos.purgeAllCache() }
             runCatching { voice.purgeAllCache() }
+            runCatching { notes.purgeAllCache() }
             runCatching { pdfExports.purgeExports() }
             runCatching {
                 com.douxev.eggshell.data.lab.LabResultOcrService
@@ -256,6 +258,7 @@ class AppRootViewModel @Inject constructor(
     private val whatsNew: WhatsNewPrefs,
     private val photos: PhotosRepository,
     private val voice: VoiceRepository,
+    private val notesRepo: com.douxev.eggshell.data.NotesRepository,
 ) : ViewModel() {
 
     enum class Route { Onboarding, Unlock, RecoverySetup, Home }
@@ -345,6 +348,7 @@ class AppRootViewModel @Inject constructor(
                 // with what the user can actually see in the app.
                 runCatching { photos.cleanupOrphans() }
                 runCatching { voice.cleanupOrphans() }
+                runCatching { notesRepo.cleanupOrphans() }
             }
         }
     }

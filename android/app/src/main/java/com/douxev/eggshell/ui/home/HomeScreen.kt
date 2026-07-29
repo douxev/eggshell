@@ -109,6 +109,7 @@ fun HomeScreen(
     onOpenWeight: () -> Unit,
     onOpenPhotos: () -> Unit,
     onOpenVoice: () -> Unit,
+    onOpenNotes: () -> Unit,
     onOpenFullJournal: () -> Unit,
     onAddMedication: () -> Unit,
     onMoodSaved: () -> Unit,
@@ -196,6 +197,7 @@ fun HomeScreen(
                     ModuleBadgePrefs.Module.Weight -> onOpenWeight()
                     ModuleBadgePrefs.Module.Photos -> onOpenPhotos()
                     ModuleBadgePrefs.Module.Voice -> onOpenVoice()
+                    ModuleBadgePrefs.Module.Notes -> onOpenNotes()
                 }
             },
         )

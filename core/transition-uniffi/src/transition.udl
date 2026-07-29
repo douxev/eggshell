@@ -323,6 +323,28 @@ interface Vault {
     [Throws=TransitionError]
     void delete_bleeding_entry(i64 id);
 
+    // Notes
+    [Throws=TransitionError]
+    Note add_note(NewNote note);
+    [Throws=TransitionError]
+    sequence<Note> list_notes();
+    [Throws=TransitionError]
+    Note? get_note(i64 id);
+    [Throws=TransitionError]
+    Note update_note(i64 id, string title, string body, i64 updated_ms);
+    [Throws=TransitionError]
+    void delete_note(i64 id);
+    [Throws=TransitionError]
+    void reorder_notes(sequence<i64> ids_in_order);
+    [Throws=TransitionError]
+    NoteImage add_note_image(NewNoteImage img);
+    [Throws=TransitionError]
+    sequence<NoteImage> note_images(i64 note_id);
+    [Throws=TransitionError]
+    sequence<string> all_note_image_paths();
+    [Throws=TransitionError]
+    void delete_note_image(i64 id);
+
     // Appointments / notes ("RDV")
     [Throws=TransitionError]
     Appointment add_appointment(NewAppointment appt);
@@ -521,6 +543,37 @@ dictionary NewBleedingEntry {
     i64 at_ms;
     boolean? is_spotting;
     string? free_text;
+};
+
+// -- Notes -------------------------------------------------------------------
+
+dictionary Note {
+    i64 id;
+    string title;
+    string body;
+    i64 sort_order;
+    i64 created_ms;
+    i64 updated_ms;
+};
+
+dictionary NewNote {
+    string title;
+    string body;
+    i64 created_ms;
+    i64 updated_ms;
+};
+
+dictionary NoteImage {
+    i64 id;
+    i64 note_id;
+    string file_path;
+    i64 position;
+};
+
+dictionary NewNoteImage {
+    i64 note_id;
+    string file_path;
+    i64 position;
 };
 
 // -- Appointments / notes ("RDV") --------------------------------------------

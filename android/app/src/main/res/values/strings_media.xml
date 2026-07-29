@@ -92,4 +92,18 @@
     <string name="photos_date_detected">Date lue sur la photo. Touche-la pour la corriger.</string>
     <string name="photos_date_unknown">Aucune date trouvée sur cette photo — aujourd\'hui par défaut. Touche-la pour la corriger.</string>
     <string name="photos_date_confirm">Ajouter</string>
+    <string name="notes_title">Notes</string>
+    <string name="notes_add">Nouvelle note</string>
+    <string name="notes_untitled">Sans titre</string>
+    <string name="notes_empty">Rien ici pour l\'instant. Une première note ?</string>
+    <string name="notes_reorder_cd">Déplacer la note</string>
+    <string name="notes_editor_title">Note</string>
+    <string name="notes_field_title">Titre</string>
+    <string name="notes_field_body">Écris ici…</string>
+    <string name="notes_add_image">Image</string>
+    <string name="notes_image_cd">Image de la note</string>
+    <string name="notes_remove_image">Retirer l\'image</string>
+    <string name="notes_image_unreadable">Image illisible</string>
+    <string name="notes_delete_title">Supprimer cette note ?</string>
+    <string name="notes_delete_body">Le texte et les images qu\'elle contient seront effacés. C\'est définitif.</string>
 </resources>

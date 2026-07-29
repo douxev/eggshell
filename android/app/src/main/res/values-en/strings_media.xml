@@ -92,4 +92,18 @@
     <string name="photos_date_detected">Date read from the photo. Tap it to correct.</string>
     <string name="photos_date_unknown">No date found on this photo — today by default. Tap it to correct.</string>
     <string name="photos_date_confirm">Add</string>
+    <string name="notes_title">Notes</string>
+    <string name="notes_add">New note</string>
+    <string name="notes_untitled">Untitled</string>
+    <string name="notes_empty">Nothing here yet. Write a first note?</string>
+    <string name="notes_reorder_cd">Move note</string>
+    <string name="notes_editor_title">Note</string>
+    <string name="notes_field_title">Title</string>
+    <string name="notes_field_body">Write here…</string>
+    <string name="notes_add_image">Image</string>
+    <string name="notes_image_cd">Note image</string>
+    <string name="notes_remove_image">Remove image</string>
+    <string name="notes_image_unreadable">Unreadable image</string>
+    <string name="notes_delete_title">Delete this note?</string>
+    <string name="notes_delete_body">Its text and images will be erased. This cannot be undone.</string>
 </resources>
