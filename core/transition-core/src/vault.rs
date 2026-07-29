@@ -682,8 +682,49 @@ impl Vault {
         crate::notes::add(&*self.db()?, n)
     }
 
-    pub fn list_notes(&self) -> Result<Vec<crate::notes::Note>, TransitionError> {
-        crate::notes::list(&*self.db()?)
+    pub fn list_notes(
+        &self,
+        folder_id: Option<i64>,
+    ) -> Result<Vec<crate::notes::Note>, TransitionError> {
+        crate::notes::list(&*self.db()?, folder_id)
+    }
+
+    pub fn move_note_to_folder(
+        &self,
+        id: i64,
+        folder_id: Option<i64>,
+    ) -> Result<(), TransitionError> {
+        crate::notes::move_to_folder(&*self.db()?, id, folder_id)
+    }
+
+    pub fn add_note_folder(
+        &self,
+        f: crate::notes::NewNoteFolder,
+    ) -> Result<crate::notes::NoteFolder, TransitionError> {
+        crate::notes::add_folder(&*self.db()?, f)
+    }
+
+    pub fn list_note_folders(
+        &self,
+        parent_id: Option<i64>,
+    ) -> Result<Vec<crate::notes::NoteFolder>, TransitionError> {
+        crate::notes::list_folders(&*self.db()?, parent_id)
+    }
+
+    pub fn rename_note_folder(&self, id: i64, name: String) -> Result<(), TransitionError> {
+        crate::notes::rename_folder(&*self.db()?, id, name)
+    }
+
+    pub fn note_folder_contents_count(&self, id: i64) -> Result<i64, TransitionError> {
+        crate::notes::folder_contents_count(&*self.db()?, id)
+    }
+
+    pub fn note_image_paths_under_folder(&self, id: i64) -> Result<Vec<String>, TransitionError> {
+        crate::notes::image_paths_under_folder(&*self.db()?, id)
+    }
+
+    pub fn delete_note_folder(&self, id: i64) -> Result<(), TransitionError> {
+        crate::notes::delete_folder(&*self.db()?, id)
     }
 
     pub fn get_note(&self, id: i64) -> Result<Option<crate::notes::Note>, TransitionError> {
@@ -1472,6 +1513,7 @@ mod tests {
         let bundle = {
             let vault = Vault::open(path.to_string_lossy().into_owned(), &key).unwrap();
             vault.add_note(crate::notes::NewNote {
+                folder_id: None,
                 title: "Kept".into(),
                 body: "body ![](eggshell-note-image:1)".into(),
                 created_ms: 1,
@@ -1492,7 +1534,7 @@ mod tests {
             restore_path.to_string_lossy().into_owned(),
             &VaultKey::from_raw(imported.master_key).unwrap(),
         ).unwrap();
-        assert_eq!(vault.list_notes().unwrap().len(), 1);
+        assert_eq!(vault.list_notes(None).unwrap().len(), 1);
         // …and its image as its own blob, byte for byte, in its own directory
         // rather than mixed into the photo library.
         assert_eq!(
@@ -1783,7 +1825,9 @@ mod tests {
                 // that is the price of simulating an old schema from a new one.
                 guard
                     .conn()
-                    .execute_batch("DROP TABLE IF EXISTS note_images; DROP TABLE IF EXISTS notes;")
+                    .execute_batch(
+                        "DROP TABLE IF EXISTS note_images;\n                         DROP TABLE IF EXISTS notes;\n                         DROP TABLE IF EXISTS note_folders;",
+                    )
                     .unwrap();
                 guard.conn().pragma_update(None, "user_version", 13).unwrap();
             }

@@ -109,4 +109,13 @@
     <string name="notes_export">Exporter</string>
     <string name="notes_preview">Aperçu</string>
     <string name="notes_edit">Modifier</string>
+    <string name="notes_new_folder">Nouveau dossier</string>
+    <string name="notes_folder_name">Nom du dossier</string>
+    <string name="notes_move_here">Déplacer ici</string>
+    <string name="notes_folder_delete_title">Supprimer ce dossier ?</string>
+    <plurals name="notes_folder_delete_body">
+        <item quantity="zero">Ce dossier est vide. Il sera supprimé.</item>
+        <item quantity="one">Il contient %1$d note, qui sera supprimée avec lui. C\'est définitif.</item>
+        <item quantity="other">Il contient %1$d notes, qui seront supprimées avec lui. C\'est définitif.</item>
+    </plurals>
 </resources>

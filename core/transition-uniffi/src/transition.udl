@@ -327,7 +327,7 @@ interface Vault {
     [Throws=TransitionError]
     Note add_note(NewNote note);
     [Throws=TransitionError]
-    sequence<Note> list_notes();
+    sequence<Note> list_notes(i64? folder_id);
     [Throws=TransitionError]
     Note? get_note(i64 id);
     [Throws=TransitionError]
@@ -336,6 +336,20 @@ interface Vault {
     void delete_note(i64 id);
     [Throws=TransitionError]
     void reorder_notes(sequence<i64> ids_in_order);
+    [Throws=TransitionError]
+    void move_note_to_folder(i64 id, i64? folder_id);
+    [Throws=TransitionError]
+    NoteFolder add_note_folder(NewNoteFolder folder);
+    [Throws=TransitionError]
+    sequence<NoteFolder> list_note_folders(i64? parent_id);
+    [Throws=TransitionError]
+    void rename_note_folder(i64 id, string name);
+    [Throws=TransitionError]
+    i64 note_folder_contents_count(i64 id);
+    [Throws=TransitionError]
+    sequence<string> note_image_paths_under_folder(i64 id);
+    [Throws=TransitionError]
+    void delete_note_folder(i64 id);
     [Throws=TransitionError]
     NoteImage add_note_image(NewNoteImage img);
     [Throws=TransitionError]
@@ -549,6 +563,7 @@ dictionary NewBleedingEntry {
 
 dictionary Note {
     i64 id;
+    i64? folder_id;
     string title;
     string body;
     i64 sort_order;
@@ -557,10 +572,25 @@ dictionary Note {
 };
 
 dictionary NewNote {
+    i64? folder_id;
     string title;
     string body;
     i64 created_ms;
     i64 updated_ms;
+};
+
+dictionary NoteFolder {
+    i64 id;
+    string name;
+    i64? parent_id;
+    i64 sort_order;
+    i64 created_ms;
+};
+
+dictionary NewNoteFolder {
+    string name;
+    i64? parent_id;
+    i64 created_ms;
 };
 
 dictionary NoteImage {

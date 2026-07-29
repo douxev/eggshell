@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -23,6 +24,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -92,13 +96,54 @@ class NotesViewModel @Inject constructor(
     private val _notes = MutableStateFlow<List<Note>>(emptyList())
     val notes: StateFlow<List<Note>> = _notes.asStateFlow()
 
+    private val _folders = MutableStateFlow<List<uniffi.transition.NoteFolder>>(emptyList())
+    val folders: StateFlow<List<uniffi.transition.NoteFolder>> = _folders.asStateFlow()
+
+    /** Which folder is on screen. Null is the root. */
+    private var folderId: Long? = null
+
+    fun openFolder(id: Long?) { folderId = id; refresh() }
+
     private val _loading = MutableStateFlow(true)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
     fun refresh() {
         viewModelScope.launch {
-            _notes.value = runCatching { repo.list() }.getOrDefault(emptyList())
+            _folders.value = runCatching { repo.folders(folderId) }.getOrDefault(emptyList())
+            _notes.value = runCatching { repo.list(folderId) }.getOrDefault(emptyList())
             _loading.value = false
+        }
+    }
+
+    fun createFolder(name: String) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            runCatching { repo.createFolder(name.trim(), folderId) }
+            refresh()
+        }
+    }
+
+    /**
+     * Ask before deleting: the SQL cascade is silent, so the count is what lets
+     * the confirmation say what is actually about to go.
+     */
+    fun folderContents(id: Long, onCount: (Long) -> Unit) {
+        viewModelScope.launch { onCount(runCatching { repo.folderContentsCount(id) }.getOrDefault(0)) }
+    }
+
+    fun deleteFolder(id: Long) {
+        viewModelScope.launch {
+            runCatching { repo.deleteFolder(id) }
+            refresh()
+        }
+    }
+
+    fun moveSelectedTo(target: Long?) {
+        val ids = _selected.value
+        _selected.value = emptySet()
+        viewModelScope.launch {
+            ids.forEach { runCatching { repo.moveToFolder(it, target) } }
+            refresh()
         }
     }
 
@@ -130,7 +175,10 @@ class NotesViewModel @Inject constructor(
  */
 @Composable
 fun NotesScreen(
+    folderId: Long?,
+    folderName: String?,
     onBack: () -> Unit,
+    onOpenFolder: (Long, String) -> Unit,
     onOpenNote: (Long) -> Unit,
     onNewNote: () -> Unit,
     vm: NotesViewModel = hiltViewModel(),
@@ -138,8 +186,11 @@ fun NotesScreen(
     val notes by vm.notes.collectAsState()
     val loading by vm.loading.collectAsState()
     val selected by vm.selected.collectAsState()
+    val folders by vm.folders.collectAsState()
+    var newFolder by remember { mutableStateOf(false) }
+    var pendingFolderDelete by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    LaunchedEffect(Unit) { vm.refresh() }
+    LaunchedEffect(folderId) { vm.openFolder(folderId) }
 
     // Back leaves selection mode before it leaves the screen — the same rule
     // every list with a selection mode follows.
@@ -149,6 +200,36 @@ fun NotesScreen(
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
         // Offset by one: the header occupies index 0 of the same list.
         vm.move(from.index - 1, to.index - 1)
+    }
+
+    if (newFolder) {
+        NameFolderDialog(
+            onDismiss = { newFolder = false },
+            onConfirm = { name -> newFolder = false; vm.createFolder(name) },
+        )
+    }
+    pendingFolderDelete?.let { (id, count) ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pendingFolderDelete = null },
+            title = { Text(stringResource(R.string.notes_folder_delete_title)) },
+            text = {
+                Text(
+                    androidx.compose.ui.res.pluralStringResource(
+                        R.plurals.notes_folder_delete_body, count.toInt(), count.toInt(),
+                    )
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    pendingFolderDelete = null; vm.deleteFolder(id)
+                }) { Text(stringResource(R.string.action_delete)) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { pendingFolderDelete = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 
     Scaffold(
@@ -189,7 +270,32 @@ fun NotesScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item(key = "header") {
-                ScreenHeader(title = stringResource(R.string.notes_title), onBack = onBack)
+                ScreenHeader(
+                    title = folderName ?: stringResource(R.string.notes_title),
+                    onBack = onBack,
+                    actions = {
+                        androidx.compose.material3.TextButton(onClick = { newFolder = true }) {
+                            Text(stringResource(R.string.notes_new_folder))
+                        }
+                    },
+                )
+            }
+
+            items(folders, key = { "f\${it.id}" }) { folder ->
+                FolderRow(
+                    name = folder.name,
+                    onClick = { onOpenFolder(folder.id, folder.name) },
+                    onDelete = {
+                        vm.folderContents(folder.id) { count ->
+                            pendingFolderDelete = folder.id to count
+                        }
+                    },
+                    // Moving into a folder is the one bulk action that needs a
+                    // destination, so it only appears while something is picked.
+                    onMoveHere = if (selected.isNotEmpty()) {
+                        { vm.moveSelectedTo(folder.id) }
+                    } else null,
+                )
             }
 
             if (!loading && notes.isEmpty()) {
@@ -285,4 +391,72 @@ private fun shareNotesZip(context: android.content.Context, file: java.io.File) 
         }
         context.startActivity(android.content.Intent.createChooser(intent, null))
     }
+}
+
+
+@Composable
+private fun FolderRow(
+    name: String,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+    onMoveHere: (() -> Unit)?,
+) {
+    EggCard(onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Filled.Folder,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+            Text(
+                name,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 10.dp),
+            )
+            if (onMoveHere != null) {
+                androidx.compose.material3.TextButton(onClick = onMoveHere) {
+                    Text(stringResource(R.string.notes_move_here))
+                }
+            } else {
+                androidx.compose.material3.TextButton(onClick = onDelete) {
+                    Text(
+                        stringResource(R.string.action_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NameFolderDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.notes_new_folder)) },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.notes_folder_name)) },
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = { onConfirm(name) },
+                enabled = name.isNotBlank(),
+            ) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
 }

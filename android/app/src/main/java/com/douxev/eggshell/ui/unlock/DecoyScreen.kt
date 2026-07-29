@@ -453,30 +453,26 @@ private fun NoteCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
+    // Delegates to the shared renderer. Only the paint is ours: the pastel
+    // sticky-note look is what an ordinary notes app looks like, and it must
+    // keep looking exactly like this — the storage stays entirely separate,
+    // in plain prefs, and never touches the vault.
+    com.douxev.eggshell.ui.notes.NoteCardView(
+        note = com.douxev.eggshell.ui.notes.NoteUi(note.id, note.title, note.body),
+        index = note.tintIndex,
+        skin = decoySkin(),
+        elevated = elevated,
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
-        color = note.tint(),
-        contentColor = Color(0xFF1A1A1A),
-        tonalElevation = if (elevated) 8.dp else 0.dp,
-        shadowElevation = if (elevated) 8.dp else 0.dp,
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            if (note.title.isNotBlank()) {
-                Text(
-                    note.title,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.W700),
-                    maxLines = 2,
-                )
-            }
-            Text(note.body, style = MaterialTheme.typography.bodySmall, maxLines = 8)
-        }
-    }
+        modifier = modifier,
+    )
 }
+
+/** The decoy's paint, handed to the shared renderer. */
+private fun decoySkin() = com.douxev.eggshell.ui.notes.NoteSkin(
+    cardColor = { i -> PastelTints[i.coerceIn(PastelTints.indices)] },
+    cardContentColor = Color(0xFF1A1A1A),
+    cardShape = RoundedCornerShape(14.dp),
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -525,39 +521,16 @@ private fun EditNote(
                 .padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            BasicTextField(
-                value = title,
-                onValueChange = { title = it },
-                textStyle = TextStyle(
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.W700,
-                    color = Color(0xFF1A1A1A),
+            com.douxev.eggshell.ui.notes.NoteEditorFields(
+                title = title,
+                body = body,
+                labels = com.douxev.eggshell.ui.notes.NoteLabels(
+                    titlePlaceholder = "Titre",
+                    bodyPlaceholder = "Note",
                 ),
-                cursorBrush = SolidColor(Color(0xFF1A1A1A)),
-                decorationBox = { inner ->
-                    if (title.isEmpty()) Text(
-                        "Titre",
-                        style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.W700),
-                        color = Color(0xFF1A1A1A).copy(alpha = 0.4f),
-                    )
-                    inner()
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            BasicTextField(
-                value = body,
-                onValueChange = { body = it },
-                textStyle = TextStyle(fontSize = 16.sp, color = Color(0xFF1A1A1A)),
-                cursorBrush = SolidColor(Color(0xFF1A1A1A)),
-                decorationBox = { inner ->
-                    if (body.isEmpty()) Text(
-                        "Note",
-                        style = TextStyle(fontSize = 16.sp),
-                        color = Color(0xFF1A1A1A).copy(alpha = 0.4f),
-                    )
-                    inner()
-                },
-                modifier = Modifier.fillMaxWidth(),
+                contentColor = Color(0xFF1A1A1A),
+                onTitle = { title = it },
+                onBody = { body = it },
             )
         }
     }

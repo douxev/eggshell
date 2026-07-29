@@ -23,7 +23,9 @@ pub use transition_core::metrics::{
 };
 pub use transition_core::bleeding::{BleedingEntry, NewBleedingEntry};
 pub use transition_core::appointments::{Appointment, NewAppointment};
-pub use transition_core::notes::{NewNote, NewNoteImage, Note, NoteImage};
+pub use transition_core::notes::{
+    NewNote, NewNoteFolder, NewNoteImage, Note, NoteFolder, NoteImage,
+};
 pub use transition_core::photos::{NewPhotoRecord, PhotoRecord};
 pub use transition_core::voice::{NewVoiceClip, VoiceClip};
 
@@ -486,8 +488,36 @@ impl Vault {
         self.inner.add_note(note)
     }
 
-    pub fn list_notes(&self) -> Result<Vec<Note>, TransitionError> {
-        self.inner.list_notes()
+    pub fn list_notes(&self, folder_id: Option<i64>) -> Result<Vec<Note>, TransitionError> {
+        self.inner.list_notes(folder_id)
+    }
+
+    pub fn move_note_to_folder(&self, id: i64, folder_id: Option<i64>) -> Result<(), TransitionError> {
+        self.inner.move_note_to_folder(id, folder_id)
+    }
+
+    pub fn add_note_folder(&self, folder: NewNoteFolder) -> Result<NoteFolder, TransitionError> {
+        self.inner.add_note_folder(folder)
+    }
+
+    pub fn list_note_folders(&self, parent_id: Option<i64>) -> Result<Vec<NoteFolder>, TransitionError> {
+        self.inner.list_note_folders(parent_id)
+    }
+
+    pub fn rename_note_folder(&self, id: i64, name: String) -> Result<(), TransitionError> {
+        self.inner.rename_note_folder(id, name)
+    }
+
+    pub fn note_folder_contents_count(&self, id: i64) -> Result<i64, TransitionError> {
+        self.inner.note_folder_contents_count(id)
+    }
+
+    pub fn note_image_paths_under_folder(&self, id: i64) -> Result<Vec<String>, TransitionError> {
+        self.inner.note_image_paths_under_folder(id)
+    }
+
+    pub fn delete_note_folder(&self, id: i64) -> Result<(), TransitionError> {
+        self.inner.delete_note_folder(id)
     }
 
     pub fn get_note(&self, id: i64) -> Result<Option<Note>, TransitionError> {

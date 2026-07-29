@@ -135,7 +135,7 @@ fun HomeNavHost(
                     onOpenWeight = { nav.navigate(Routes.measures(MeasuresTab.WEIGHT)) },
                     onOpenPhotos = { nav.navigate(Routes.PHOTOS) },
                     onOpenVoice = { nav.navigate(Routes.VOICE) },
-                    onOpenNotes = { nav.navigate(Routes.NOTES) },
+                    onOpenNotes = { nav.navigate("notes") },
                     onOpenFullJournal = { nav.navigate(Routes.JOURNAL_ADD) },
                     onAddMedication = { nav.navigate(Routes.MED_ADD) },
                     onMoodSaved = { confirmSaved(offerViewJournal = true) },
@@ -307,9 +307,24 @@ fun HomeNavHost(
             composable(Routes.VOICE) { VoiceScreen(onBack = { nav.popBackStack() }) }
 
             // ---- Notes ----------------------------------------------------
-            composable(Routes.NOTES) {
+            composable(
+                Routes.NOTES,
+                arguments = listOf(
+                    navArgument("folder") { type = NavType.LongType; defaultValue = -1L },
+                    navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                ),
+            ) { entry ->
+                val folder = entry.arguments?.getLong("folder") ?: -1L
+                val name = entry.arguments?.getString("name").orEmpty()
                 com.douxev.eggshell.ui.notes.NotesScreen(
+                    folderId = folder.takeIf { it >= 0 },
+                    folderName = name.takeIf { it.isNotBlank() },
                     onBack = { nav.popBackStack() },
+                    // Pushing the same route onto itself is how the tree is
+                    // walked; the back stack is the breadcrumb.
+                    onOpenFolder = { id, label ->
+                        nav.navigate("notes?folder=$id&name=" + android.net.Uri.encode(label))
+                    },
                     onOpenNote = { id -> nav.navigate("notes/edit?id=$id") },
                     onNewNote = { nav.navigate("notes/edit?id=-1") },
                 )
@@ -427,7 +442,7 @@ object Routes {
     const val PHOTOS = "photos"
     const val VOICE = "voice"
 
-    const val NOTES = "notes"
+    const val NOTES = "notes?folder={folder}&name={name}"
     const val NOTE_EDIT = "notes/edit?id={id}"
 
     const val SETTINGS = "settings"

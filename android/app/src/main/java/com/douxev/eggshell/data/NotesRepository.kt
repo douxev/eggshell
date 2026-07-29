@@ -42,20 +42,64 @@ class NotesRepository @Inject constructor(
         File(context.cacheDir, "note_images").apply { mkdirs() }
     }
 
-    suspend fun list(): List<Note> = withContext(Dispatchers.IO) {
-        vault.requireSession().listNotes()
+    suspend fun list(folderId: Long?): List<Note> = withContext(Dispatchers.IO) {
+        vault.requireSession().listNotes(folderId)
+    }
+
+    suspend fun folders(parentId: Long?): List<uniffi.transition.NoteFolder> =
+        withContext(Dispatchers.IO) { vault.requireSession().listNoteFolders(parentId) }
+
+    suspend fun createFolder(name: String, parentId: Long?): uniffi.transition.NoteFolder =
+        withContext(Dispatchers.IO) {
+            vault.requireSession().addNoteFolder(
+                uniffi.transition.NewNoteFolder(
+                    name = name, parentId = parentId, createdMs = System.currentTimeMillis(),
+                )
+            )
+        }
+
+    suspend fun renameFolder(id: Long, name: String) = withContext(Dispatchers.IO) {
+        vault.requireSession().renameNoteFolder(id, name)
+    }
+
+    /** How many notes a folder deletion would take with it, subfolders included. */
+    suspend fun folderContentsCount(id: Long): Long = withContext(Dispatchers.IO) {
+        vault.requireSession().noteFolderContentsCount(id)
+    }
+
+    /**
+     * Delete a folder, everything nested inside it, and the image files those
+     * notes owned.
+     *
+     * The paths are collected BEFORE the delete: the SQL cascade removes the
+     * rows that name them, and after that nothing on disk says which files
+     * belonged to anything.
+     */
+    suspend fun deleteFolder(id: Long) = withContext(Dispatchers.IO) {
+        val session = vault.requireSession()
+        val doomed = runCatching { session.noteImagePathsUnderFolder(id) }.getOrDefault(emptyList())
+        session.deleteNoteFolder(id)
+        doomed.forEach { runCatching { File(it).delete() } }
+    }
+
+    suspend fun moveToFolder(noteId: Long, folderId: Long?) = withContext(Dispatchers.IO) {
+        vault.requireSession().moveNoteToFolder(noteId, folderId)
     }
 
     suspend fun get(id: Long): Note? = withContext(Dispatchers.IO) {
         vault.requireSession().getNote(id)
     }
 
-    suspend fun create(title: String, body: String): Note = withContext(Dispatchers.IO) {
-        val now = System.currentTimeMillis()
-        vault.requireSession().addNote(
-            NewNote(title = title, body = body, createdMs = now, updatedMs = now)
-        )
-    }
+    suspend fun create(title: String, body: String, folderId: Long? = null): Note =
+        withContext(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            vault.requireSession().addNote(
+                NewNote(
+                    folderId = folderId, title = title, body = body,
+                    createdMs = now, updatedMs = now,
+                )
+            )
+        }
 
     suspend fun update(id: Long, title: String, body: String): Note = withContext(Dispatchers.IO) {
         vault.requireSession().updateNote(id, title, body, System.currentTimeMillis())

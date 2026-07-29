@@ -109,4 +109,13 @@
     <string name="notes_export">Export</string>
     <string name="notes_preview">Preview</string>
     <string name="notes_edit">Edit</string>
+    <string name="notes_new_folder">New folder</string>
+    <string name="notes_folder_name">Folder name</string>
+    <string name="notes_move_here">Move here</string>
+    <string name="notes_folder_delete_title">Delete this folder?</string>
+    <plurals name="notes_folder_delete_body">
+        <item quantity="zero">This folder is empty. It will be deleted.</item>
+        <item quantity="one">It holds %1$d note, which will be deleted with it. This cannot be undone.</item>
+        <item quantity="other">It holds %1$d notes, which will be deleted with them. This cannot be undone.</item>
+    </plurals>
 </resources>
