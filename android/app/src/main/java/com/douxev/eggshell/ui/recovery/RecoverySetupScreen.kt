@@ -146,11 +146,29 @@ fun RecoverySetupScreen(
                     label = stringResource(R.string.recovery_setup_field_secret),
                     isError = tooShort,
                     supportingText = {
+                        // Says what the length actually buys rather than a
+                        // context-free "weak / strong". This wrap has no
+                        // Keystore layer in front of it, so length is the only
+                        // thing standing between a prefs dump and the vault —
+                        // and each extra character is worth about 90x, far more
+                        // than any KDF tuning we can do.
                         Text(
-                            stringResource(
-                                R.string.recovery_setup_min_hint,
-                                RecoverySetupViewModel.MIN_LENGTH,
-                            )
+                            when {
+                                secret.isEmpty() -> stringResource(
+                                    R.string.recovery_setup_len_hint,
+                                    RecoverySetupViewModel.RECOMMENDED_LENGTH,
+                                )
+                                secret.length < RecoverySetupViewModel.MIN_LENGTH ->
+                                    stringResource(
+                                        R.string.recovery_setup_min_hint,
+                                        RecoverySetupViewModel.MIN_LENGTH,
+                                    )
+                                secret.length < RecoverySetupViewModel.WEAK_BELOW ->
+                                    stringResource(R.string.recovery_setup_strength_weak)
+                                secret.length < RecoverySetupViewModel.RECOMMENDED_LENGTH ->
+                                    stringResource(R.string.recovery_setup_strength_fair)
+                                else -> stringResource(R.string.recovery_setup_strength_strong)
+                            }
                         )
                     },
                 )
@@ -226,10 +244,23 @@ class RecoverySetupViewModel @Inject constructor(
 
     companion object {
         /**
-         * Short enough not to push people towards writing it on a sticky note,
-         * long enough that Argon2id has something to work with — this wrap is
-         * the one that has no Keystore layer in front of it.
+         * Hard floor. Kept low on purpose — refusing a short key would only
+         * push people towards not finishing this screen at all, and a weak
+         * recovery key still beats the alternative it replaces, which was
+         * losing the vault outright to a fingerprint re-enrollment.
+         *
+         * Against the hardened Argon2id parameters this wrap uses (128 MiB,
+         * t=4 — see VaultRepository.RECOVERY_M_COST_KIB) a determined attacker
+         * with a prefs dump manages on the order of 500 guesses/s, which puts
+         * a human-chosen 8-character secret at roughly a day. Hence the
+         * guidance below rather than a silent acceptance.
          */
         const val MIN_LENGTH = 8
+
+        /** Below this, say plainly that it will not hold. */
+        const val WEAK_BELOW = 12
+
+        /** At or above this, offline brute force stops being a realistic path. */
+        const val RECOMMENDED_LENGTH = 16
     }
 }

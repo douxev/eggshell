@@ -89,4 +89,8 @@
     <string name="biometric_rearm_title">Relie ta nouvelle empreinte</string>
     <string name="biometric_rearm_subtitle">Pose ton doigt pour rouvrir le coffre avec ton empreinte la prochaine fois</string>
     <string name="unlock_recovery_keystore_dead">Ton empreinte ne peut plus ouvrir le coffre sur ce téléphone : Android a invalidé la clé, souvent après l\'ajout d\'une empreinte ou une mise à jour du système. Tes données sont intactes — utilise ta clé de secours.</string>
+    <string name="recovery_setup_len_hint">%1$d caractères recommandés. 8 minimum.</string>
+    <string name="recovery_setup_strength_weak">Courte : quelqu\'un qui copie le contenu de ton téléphone pourrait la retrouver en un jour ou deux. 12 caractères de plus la rendraient hors d\'atteinte.</string>
+    <string name="recovery_setup_strength_fair">Correcte. Quelques caractères de plus et elle devient hors d\'atteinte.</string>
+    <string name="recovery_setup_strength_strong">Solide — hors d\'atteinte, même pour quelqu\'un qui copierait tout ton téléphone.</string>
 </resources>

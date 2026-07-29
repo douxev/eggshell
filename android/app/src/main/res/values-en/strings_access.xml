@@ -88,4 +88,8 @@
     <string name="biometric_rearm_title">Re-link your new fingerprint</string>
     <string name="biometric_rearm_subtitle">Touch the sensor so your fingerprint opens the vault again next time</string>
     <string name="unlock_recovery_keystore_dead">Your fingerprint can no longer open the vault on this phone: Android invalidated the key, usually after a fingerprint was added or a system update landed. Your data is intact — use your recovery key.</string>
+    <string name="recovery_setup_len_hint">%1$d characters recommended. 8 minimum.</string>
+    <string name="recovery_setup_strength_weak">Short: someone who copies your phone\'s contents could work it out in a day or two. Another 12 characters would put it out of reach.</string>
+    <string name="recovery_setup_strength_fair">Reasonable. A few more characters and it is out of reach.</string>
+    <string name="recovery_setup_strength_strong">Strong — out of reach, even for someone who copied your whole phone.</string>
 </resources>

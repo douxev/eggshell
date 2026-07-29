@@ -9,6 +9,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import com.douxev.eggshell.data.VaultRepository
@@ -28,6 +31,33 @@ class UnlockViewModel @Inject constructor(
 
     /** Whether a second, non-Keystore way into the vault exists. */
     val hasRecovery: Boolean get() = repo.hasRecoverySecret
+
+    /**
+     * True once the access PIN has been entered correctly this session.
+     *
+     * Only meaningful on a decoy install, where it is the difference between
+     * "someone is holding this phone" and "the owner is holding this phone".
+     */
+    private val _accessGatePassed = MutableStateFlow(false)
+
+    /**
+     * Whether the recovery field may be shown at all.
+     *
+     * Without a decoy: as soon as a recovery secret exists. With one: only
+     * after the access PIN has been passed. The earlier rule — never, under a
+     * decoy — was a straight bug: `needsRecoverySetup` does not exempt decoy
+     * installs, so those users were forced through a mandatory gate to create
+     * a key the app then refused to ever accept, leaving the permanent
+     * data-loss hole this whole feature exists to close wide open for them.
+     */
+    val recoveryReachable: StateFlow<Boolean> =
+        _accessGatePassed
+            .map { gatePassed -> repo.hasRecoverySecret && (!hasDecoy || gatePassed) }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.Eagerly,
+                repo.hasRecoverySecret && !decoy.hasAccessPin,
+            )
 
     sealed interface State {
         /** Initial / waiting for input. */
@@ -144,15 +174,28 @@ class UnlockViewModel @Inject constructor(
             val accessHit = decoy.accessMatches(input)
             when {
                 decoyHit -> {
-                    // Decoy hits don't count as failed attempts — the user
-                    // (or a snooper) entered a "valid" PIN by design.
-                    throttle.reset()
+                    // Deliberately neither reset nor recorded as a failure.
+                    //
+                    // Resetting handed the snooper an unlimited, un-throttled
+                    // oracle: alternate the decoy PIN with a guess at the real
+                    // one and the ladder never climbs, the wipe never fires.
+                    // The decoy PIN is the one credential the adversary is most
+                    // likely to have been given or to have watched being typed.
+                    //
+                    // Counting it as a failure is the opposite trap: anyone who
+                    // knows the decoy could then destroy the vault by entering
+                    // it a dozen times. Leaving the counter untouched is the
+                    // only option that neither helps nor punishes.
                     clearThrottleDisplay()
                     _state.value = State.Decoy
                 }
                 accessHit -> {
                     throttle.reset()
                     clearThrottleDisplay()
+                    // The one gate that proves this is the owner and not the
+                    // person the decoy exists to mislead. It is what makes the
+                    // recovery field safe to expose on a decoy install.
+                    _accessGatePassed.value = true
                     _state.value = when (mode) {
                         VaultPrefs.Mode.KEYSTORE_ONLY,
                         VaultPrefs.Mode.KEYSTORE_BIOMETRIC -> State.AccessGranted
@@ -221,7 +264,7 @@ class UnlockViewModel @Inject constructor(
      * vault straight from the screen built to hide that it exists.
      */
     fun openRecovery() {
-        if (hasDecoy || !hasRecovery) return
+        if (!recoveryReachable.value) return
         lastAttemptWasRecovery = true
         _state.value = State.AwaitingRecovery
     }
@@ -243,13 +286,32 @@ class UnlockViewModel @Inject constructor(
         activity: FragmentActivity?,
         biometricCopy: VaultRepository.BiometricCopy?,
     ) {
-        if (hasDecoy || !hasRecovery) return
+        if (!recoveryReachable.value) return
         lastAttemptWasRecovery = true
+        // Same backoff ladder as the PIN, on its own counter, and with no wipe
+        // threshold: this is the surface a locked-out owner reaches for, so
+        // destroying their vault over a typo would invert its purpose. Without
+        // it the field was an unthrottled online brute-force oracle against the
+        // real vault — the only unlock surface in the app without a limiter.
+        val waiting = throttle.recoveryLockedOutMs()
+        if (waiting > 0) {
+            _lockoutMs.value = waiting
+            _state.value = State.Throttled(waiting)
+            return
+        }
         _state.value = State.InProgress
         viewModelScope.launch {
             when (val out = repo.unlockWithRecovery(secret, activity, biometricCopy)) {
-                is VaultRepository.UnlockOutcome.Success -> _state.value = State.Success
-                is VaultRepository.UnlockOutcome.Failed -> _state.value = State.Failed(out.reason)
+                is VaultRepository.UnlockOutcome.Success -> {
+                    throttle.resetRecovery()
+                    clearThrottleDisplay()
+                    _state.value = State.Success
+                }
+                is VaultRepository.UnlockOutcome.Failed -> {
+                    throttle.recordRecoveryFailure()
+                    _lockoutMs.value = throttle.recoveryLockedOutMs()
+                    _state.value = State.Failed(out.reason)
+                }
                 VaultRepository.UnlockOutcome.NotInitialized ->
                     _state.value = State.Failed("not initialized")
                 // Unreachable in practice: this path never touches the Keystore,
@@ -316,7 +378,7 @@ class UnlockViewModel @Inject constructor(
                 // recovery surface may exist, and with no recovery secret set
                 // there is nowhere to send them — both fall back to the plain
                 // error, which is at least honest about the dead end.
-                if (hasRecovery && !hasDecoy) {
+                if (recoveryReachable.value) {
                     lastAttemptWasRecovery = true
                     _state.value = State.AwaitingRecovery
                 } else {

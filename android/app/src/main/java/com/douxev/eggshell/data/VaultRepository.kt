@@ -269,6 +269,7 @@ class VaultRepository @Inject constructor(
                 prefs.setWrappedKey(wrapped)
                 prefs.setKdfMaterial(null)
                 prefs.mode = newMode
+                dropRecoveryOnModeChange(newMode)
                 runCatching { keystoreBio.delete() }
             }
             VaultPrefs.Mode.KEYSTORE_BIOMETRIC -> {
@@ -303,6 +304,7 @@ class VaultRepository @Inject constructor(
                 prefs.setKdfMaterial(kdf.toPrefs())
                 prefs.setWrappedKey(wrappedByKeystore)
                 prefs.mode = newMode
+                dropRecoveryOnModeChange(newMode)
                 runCatching { keystoreBio.delete() }
             }
             VaultPrefs.Mode.PARANOID -> error("paranoid handled separately")
@@ -413,13 +415,33 @@ class VaultRepository @Inject constructor(
         } ?: return@withContext RecoveryOutcome.Failed("missing credentials")
 
         try {
-            val kdf = freshKdfMaterial()
+            // Deliberately costlier Argon2id than the rest of the app.
+            //
+            // This is the one wrap with no Keystore layer in front of it — that
+            // is what lets it survive a broken Keystore, and also what makes it
+            // offline-brute-forceable straight out of a prefs dump. It is used
+            // twice in a vault's life (here, and in an emergency), so seconds
+            // are affordable where the unlock path's sub-second budget is not.
+            //
+            // 128 MiB rather than the 256 the arithmetic would like: Argon2
+            // allocates natively and the release profile is panic = "abort", so
+            // an allocation that fails on a 2 GB phone is a process kill, not an
+            // error. Many people this app is for are not on flagships. Length is
+            // the real lever anyway — each extra character is worth ~90x, where
+            // this doubling is worth ~2.7x.
+            val fresh = freshKdfMaterial()
+            val kdf = VaultPrefs.Kdf(
+                salt = fresh.salt,
+                mCostKib = RECOVERY_M_COST_KIB,
+                tCost = RECOVERY_T_COST,
+                pCost = fresh.pCost,
+            )
             val wrapped = VaultKey.fromRaw(rawKey).wrapWithPassphrase(
                 secret, kdf.salt, kdf.mCostKib, kdf.tCost, kdf.pCost,
             )
             // Synchronous: the gate that forced this screen reads `hasRecovery`,
             // so it must be true on disk before we let the user past it.
-            if (prefs.commitRecovery(wrapped, kdf.toPrefs())) RecoveryOutcome.Success
+            if (prefs.commitRecovery(wrapped, kdf)) RecoveryOutcome.Success
             else RecoveryOutcome.Failed("failed to persist recovery wrap")
         } catch (t: Throwable) {
             RecoveryOutcome.Failed(describe(t))
@@ -516,6 +538,16 @@ class VaultRepository @Inject constructor(
         prefs.setWrappedKey(unlocked.iv + unlocked.doFinal(rawKey))
     }
 
+    /**
+     * The recovery wrap only exists to compensate for KEYSTORE_BIOMETRIC having
+     * a single point of failure. Carrying it into a mode the user deliberately
+     * upgraded to would silently leave an 8-character, Keystore-free second
+     * door on the same master key — a downgrade disguised as a hardening.
+     */
+    private fun dropRecoveryOnModeChange(newMode: VaultPrefs.Mode) {
+        if (newMode != VaultPrefs.Mode.KEYSTORE_BIOMETRIC) prefs.clearRecovery()
+    }
+
     sealed interface RecoveryOutcome {
         data object Success : RecoveryOutcome
         data class Failed(val reason: String) : RecoveryOutcome
@@ -582,6 +614,13 @@ class VaultRepository @Inject constructor(
 
     private fun FreshKdfMaterial.toPrefs() =
         VaultPrefs.Kdf(salt = salt, mCostKib = mCostKib, tCost = tCost, pCost = pCost)
+
+    companion object {
+        // Not `const`: UInt is an inline class, which const val does not accept.
+        /** See setRecoverySecret for why these differ from the app default. */
+        val RECOVERY_M_COST_KIB: UInt = 128u * 1024u
+        val RECOVERY_T_COST: UInt = 4u
+    }
 
     data class BiometricCopy(
         val title: String,
