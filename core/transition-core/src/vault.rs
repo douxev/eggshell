@@ -35,6 +35,82 @@ const BUNDLE_MAGIC_V2: &[u8; 8] = b"TRNSITN2";
 /// the source device's Keystore — which by definition the user no longer
 /// has access to (otherwise they wouldn't be restoring).
 const BUNDLE_MAGIC_V1: &[u8; 8] = b"TRNSITN1";
+/// v3 adds the photo and voice blobs, which v2 silently left behind: a v2
+/// restore returned every database row while every picture and recording
+/// stayed on the old device.
+const BUNDLE_MAGIC_V3: &[u8; 8] = b"TRNSITN3";
+
+/// magic + salt + m_cost + t_cost + p_cost. Identical for v2 and v3, and now
+/// stated once: it used to exist as two unlinked copies of the same
+/// arithmetic, and a mismatch between them would silently shift the AAD
+/// window and surface as "wrong passphrase".
+const BUNDLE_HEADER_LEN: usize = 8 + SALT_LEN + 4 + 4 + 4;
+
+/// Ceilings on Argon2 parameters read out of an untrusted bundle.
+///
+/// These are attacker-controlled bytes and the release profile is
+/// `panic = "abort"`, so an absurd `m_cost_kib` is not an error the user sees
+/// — it is the process being killed by a failed multi-gigabyte allocation.
+/// The bounds sit far above anything the app itself produces (64 MiB / t=3,
+/// and 128 MiB / t=4 for recovery wraps) so no legitimate bundle is refused.
+const MAX_IMPORT_M_COST_KIB: u32 = 1024 * 1024; // 1 GiB
+const MAX_IMPORT_T_COST: u32 = 16;
+const MAX_IMPORT_P_COST: u32 = 16;
+
+/// Blob kinds carried inside a v3 bundle.
+const BLOB_KIND_PHOTO: u8 = 0;
+const BLOB_KIND_VOICE: u8 = 1;
+
+/// Directory names for the blob stores, relative to the vault DB's parent.
+/// Both platforms use this shape (Android `filesDir/{photos,voice}`, iOS
+/// `Application Support/eggshell/{photos,voice}`), which is what lets the core
+/// find them from `db_path` alone instead of having the list handed in.
+const PHOTOS_DIR: &str = "photos";
+const VOICE_DIR: &str = "voice";
+
+/// Deletes a path when it goes out of scope, however that happens.
+///
+/// The snapshot is a complete SQLCipher copy of the vault. It used to be
+/// removed by a straight-line call placed *after* a `?`, so any early return
+/// — and with v3 payloads the read is exactly where ENOSPC shows up — left a
+/// full copy of the vault sitting in the app's data directory forever.
+struct ScopedFile(String);
+
+impl Drop for ScopedFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+/// Collect `<dir>/*.bin`, returning (basename, bytes) pairs.
+///
+/// The blobs are copied verbatim: they are already sealed with
+/// HKDF(master_key, "eggshell::files::v1"), and the bundle already carries the
+/// master key, so re-encrypting them would only cost time.
+fn read_blob_dir(dir: &Path) -> Result<Vec<(String, Vec<u8>)>, TransitionError> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        // No directory means no media of that kind — a normal, empty vault.
+        Err(_) => return Ok(Vec::new()),
+    };
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("bin") {
+            continue;
+        }
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        let bytes = std::fs::read(&path)
+            .map_err(|e| TransitionError::Database(format!("read blob: {}", io_kind(&e))))?;
+        out.push((name, bytes));
+    }
+    // Deterministic order so a bundle is reproducible for a given vault.
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(out)
+}
 
 /// A 32-byte symmetric key, used both to encrypt SQLCipher and as the
 /// plaintext that the native side wraps with Keystore/Keychain.
@@ -687,6 +763,10 @@ impl Vault {
         // 1. Snapshot the DB to a temp file so we don't race writers.
         let snapshot_path = format!("{}.snapshot-{}", self.db_path, std::process::id());
         let _ = std::fs::remove_file(&snapshot_path);
+        // Registered before the VACUUM: from here on, every exit path — including
+        // the `?` on the read below, which is where a full-media export will hit
+        // ENOSPC — removes the full vault copy on its way out.
+        let _snapshot_guard = ScopedFile(snapshot_path.clone());
         {
             let guard = self.db()?;
             guard
@@ -696,22 +776,43 @@ impl Vault {
         }
         let snapshot_bytes = std::fs::read(&snapshot_path)
             .map_err(|e| TransitionError::Database(format!("read snapshot: {}", io_kind(&e))))?;
-        let _ = std::fs::remove_file(&snapshot_path);
 
-        // 2. Build [master_key || snapshot].
-        let mut plain = Vec::with_capacity(KEY_LEN + snapshot_bytes.len());
+        // 2. Collect the media blobs, which v2 left behind entirely.
+        let base = Path::new(&self.db_path)
+            .parent()
+            .ok_or_else(|| TransitionError::Database("vault path has no parent".into()))?;
+        let photos = read_blob_dir(&base.join(PHOTOS_DIR))?;
+        let voice = read_blob_dir(&base.join(VOICE_DIR))?;
+
+        // 3. Frame the plaintext. v2 was [key || db] with "the rest is the DB"
+        //    as load-bearing structure, which is why appending anything to it is
+        //    impossible and v3 needs explicit lengths.
+        let blob_bytes: usize = photos.iter().chain(voice.iter()).map(|(n, d)| 11 + n.len() + d.len()).sum();
+        let mut plain = Vec::with_capacity(KEY_LEN + 8 + snapshot_bytes.len() + 4 + blob_bytes);
         plain.extend_from_slice(self.master_key.expose());
+        plain.extend_from_slice(&(snapshot_bytes.len() as u64).to_le_bytes());
         plain.extend_from_slice(&snapshot_bytes);
+        let count = (photos.len() + voice.len()) as u32;
+        plain.extend_from_slice(&count.to_le_bytes());
+        for (kind, list) in [(BLOB_KIND_PHOTO, &photos), (BLOB_KIND_VOICE, &voice)] {
+            for (name, data) in list.iter() {
+                plain.push(kind);
+                plain.extend_from_slice(&(name.len() as u16).to_le_bytes());
+                plain.extend_from_slice(name.as_bytes());
+                plain.extend_from_slice(&(data.len() as u64).to_le_bytes());
+                plain.extend_from_slice(data);
+            }
+        }
 
-        // 3. Derive KEK from passphrase + fresh params, AEAD-encrypt with header AAD.
+        // 4. Derive KEK from passphrase + fresh params, AEAD-encrypt with header AAD.
         let params = KdfParams::recommended();
         let kek = params.derive(passphrase.as_bytes())?;
-        let header = build_bundle_header(BUNDLE_MAGIC_V2, &params);
+        let header = build_bundle_header(BUNDLE_MAGIC_V3, &params);
         let blob = encrypt_with_aad(&kek, &plain, &header)?;
-        // Wipe plaintext (contains master key + DB bytes).
+        // Wipe plaintext (contains master key + DB bytes + media).
         plain.fill(0);
 
-        // 4. Pack bundle: header || nonce || ciphertext.
+        // 5. Pack bundle: header || nonce || ciphertext.
         let mut out = Vec::with_capacity(header.len() + NONCE_LEN + blob.ciphertext.len());
         out.extend_from_slice(&header);
         out.extend_from_slice(&blob.nonce);
@@ -765,14 +866,27 @@ pub fn import_encrypted(
             "backup format v1 is no longer supported; re-export from your source device".into(),
         ));
     }
-    if magic != &BUNDLE_MAGIC_V2[..] {
+    let has_blobs = if magic == &BUNDLE_MAGIC_V3[..] {
+        true
+    } else if magic == &BUNDLE_MAGIC_V2[..] {
+        false
+    } else {
+        // Distinguish "made by a newer Eggshell" from "not one of our files at
+        // all", so the UI can tell the user to update instead of implying their
+        // backup is corrupt. The version lives in byte 7, as documented on the
+        // magic constants — until now nothing actually read it.
+        let newer = magic.starts_with(b"TRNSITN") && magic[7] > BUNDLE_MAGIC_V3[7];
         return Err(TransitionError::Crypto(
-            "unrecognised backup bundle (bad magic)".into(),
+            if newer {
+                "this backup was made by a newer version of Eggshell; update the app and try again"
+            } else {
+                "unrecognised backup bundle (bad magic)"
+            }
+            .into(),
         ));
-    }
+    };
 
-    const HEADER_LEN: usize = 8 + SALT_LEN + 4 + 4 + 4;
-    if bundle.len() < HEADER_LEN + NONCE_LEN {
+    if bundle.len() < BUNDLE_HEADER_LEN + NONCE_LEN {
         return Err(TransitionError::Crypto("backup bundle truncated".into()));
     }
 
@@ -786,12 +900,30 @@ pub fn import_encrypted(
     cursor += 4;
     let p_cost = u32::from_le_bytes(bundle[cursor..cursor + 4].try_into().unwrap());
     cursor += 4;
+
+    // These are attacker-controlled and feed an allocator under panic = "abort".
+    // Reject them as data rather than letting them kill the process.
+    if m_cost_kib == 0
+        || t_cost == 0
+        || p_cost == 0
+        || m_cost_kib > MAX_IMPORT_M_COST_KIB
+        || t_cost > MAX_IMPORT_T_COST
+        || p_cost > MAX_IMPORT_P_COST
+    {
+        return Err(TransitionError::Crypto(
+            "backup bundle declares implausible key-derivation parameters".into(),
+        ));
+    }
+
     let mut nonce = [0u8; NONCE_LEN];
     nonce.copy_from_slice(&bundle[cursor..cursor + NONCE_LEN]);
     cursor += NONCE_LEN;
     let ciphertext = bundle[cursor..].to_vec();
 
-    let header = bundle[..HEADER_LEN].to_vec();
+    // AAD is the bytes as received, not a re-serialization — it must stay that
+    // way, and it must cover exactly the header, or new header fields would
+    // become unauthenticated while everything still decrypted.
+    let header = bundle[..BUNDLE_HEADER_LEN].to_vec();
     let params = KdfParams::from_persisted(salt, m_cost_kib, t_cost, p_cost);
     let kek = params.derive(passphrase.as_bytes())?;
     let blob = EncryptedBlob { nonce, ciphertext };
@@ -803,7 +935,13 @@ pub fn import_encrypted(
         ));
     }
     let master_key = plain[..KEY_LEN].to_vec();
-    let db_bytes = &plain[KEY_LEN..];
+
+    let (db_bytes, blobs) = if has_blobs {
+        parse_v3_payload(&plain)?
+    } else {
+        // v2: "everything after the key is the DB" was the whole framing.
+        (&plain[KEY_LEN..], Vec::new())
+    };
 
     // Write the DB atomically (tmp + rename) so a crash mid-write doesn't
     // leave a corrupted vault.db that blocks the next unlock.
@@ -814,7 +952,138 @@ pub fn import_encrypted(
     std::fs::rename(&tmp_path, &target_db_path)
         .map_err(|e| TransitionError::Database(format!("rename db: {}", io_kind(&e))))?;
 
+    let base = Path::new(&target_db_path)
+        .parent()
+        .ok_or_else(|| TransitionError::Database("target path has no parent".into()))?;
+    for (kind, name, data) in blobs {
+        let dir = base.join(if kind == BLOB_KIND_VOICE { VOICE_DIR } else { PHOTOS_DIR });
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| TransitionError::Database(format!("create blob dir: {}", io_kind(&e))))?;
+        std::fs::write(dir.join(&name), data)
+            .map_err(|e| TransitionError::Database(format!("write blob: {}", io_kind(&e))))?;
+    }
+
+    // Repoint the rows at this device.
+    //
+    // photo_records.file_path and voice_clips.file_path are ABSOLUTE paths from
+    // whichever device produced the backup. On iOS they embed a container UUID
+    // that changes on every reinstall, so without this a restore hands back
+    // rows that all point at a directory which no longer exists — blobs present
+    // on disk, every picture broken. Runs for v2 bundles too: they carry no
+    // blobs, but leaving the rows pointing at a foreign device helps nobody.
+    let key = VaultKey::from_raw(master_key.clone())?;
+    rewrite_blob_paths(&target_db_path, &key, base)?;
+
     Ok(ImportedVault { master_key })
+}
+
+/// Split a v3 plaintext into the DB image and the media blobs.
+///
+/// Every length is validated against the remaining buffer before it is used to
+/// slice: the payload is attacker-controlled once the passphrase is known, and
+/// an out-of-range slice is a panic, which `panic = "abort"` turns into a
+/// process kill rather than a caught error.
+#[allow(clippy::type_complexity)]
+fn parse_v3_payload(plain: &[u8]) -> Result<(&[u8], Vec<(u8, String, Vec<u8>)>), TransitionError> {
+    let short = || TransitionError::Crypto("backup bundle truncated".into());
+    let mut c = KEY_LEN;
+
+    let db_len = read_u64(plain, &mut c).ok_or_else(short)? as usize;
+    if plain.len() < c + db_len {
+        return Err(short());
+    }
+    let db_bytes = &plain[c..c + db_len];
+    c += db_len;
+
+    let count = read_u32(plain, &mut c).ok_or_else(short)? as usize;
+    let mut blobs = Vec::with_capacity(count.min(4096));
+    for _ in 0..count {
+        if c >= plain.len() {
+            return Err(short());
+        }
+        let kind = plain[c];
+        c += 1;
+        let name_len = read_u16(plain, &mut c).ok_or_else(short)? as usize;
+        if plain.len() < c + name_len {
+            return Err(short());
+        }
+        let name = String::from_utf8(plain[c..c + name_len].to_vec())
+            .map_err(|_| TransitionError::Crypto("backup contains a non-UTF-8 filename".into()))?;
+        // Never let a bundle write outside the blob directory.
+        if name.contains('/') || name.contains('\\') || name.contains("..") || name.is_empty() {
+            return Err(TransitionError::Crypto(
+                "backup contains an unsafe filename".into(),
+            ));
+        }
+        c += name_len;
+        let data_len = read_u64(plain, &mut c).ok_or_else(short)? as usize;
+        if plain.len() < c + data_len {
+            return Err(short());
+        }
+        blobs.push((kind, name, plain[c..c + data_len].to_vec()));
+        c += data_len;
+    }
+    Ok((db_bytes, blobs))
+}
+
+fn read_u16(b: &[u8], c: &mut usize) -> Option<u16> {
+    let v = b.get(*c..*c + 2)?.try_into().ok()?;
+    *c += 2;
+    Some(u16::from_le_bytes(v))
+}
+
+fn read_u32(b: &[u8], c: &mut usize) -> Option<u32> {
+    let v = b.get(*c..*c + 4)?.try_into().ok()?;
+    *c += 4;
+    Some(u32::from_le_bytes(v))
+}
+
+fn read_u64(b: &[u8], c: &mut usize) -> Option<u64> {
+    let v = b.get(*c..*c + 8)?.try_into().ok()?;
+    *c += 8;
+    Some(u64::from_le_bytes(v))
+}
+
+/// Point photo_records / voice_clips at this device's blob directories,
+/// preserving each row's basename.
+fn rewrite_blob_paths(db_path: &str, key: &VaultKey, base: &Path) -> Result<(), TransitionError> {
+    let vault = Vault::open(db_path.to_string(), key)?;
+    let guard = vault.db()?;
+    let conn = guard.conn();
+    for (table, dir) in [("photo_records", PHOTOS_DIR), ("voice_clips", VOICE_DIR)] {
+        let target = base.join(dir);
+        let target = target.to_string_lossy().to_string();
+        // SQLite has no basename(); rtrim/replace gymnastics would be fragile
+        // across path separators, so do the split in Rust.
+        let rows: Vec<(i64, String)> = {
+            let mut stmt = conn
+                .prepare(&format!("SELECT rowid, file_path FROM {table}"))
+                .map_err(crate::sanitize_db_err)?;
+            let mapped = stmt
+                .query_map([], |r| Ok((r.get(0)?, r.get::<_, String>(1)?)))
+                .map_err(crate::sanitize_db_err)?;
+            mapped.collect::<Result<_, _>>().map_err(crate::sanitize_db_err)?
+        };
+        for (rowid, old) in rows {
+            let name = Path::new(&old)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default()
+                .to_string();
+            if name.is_empty() {
+                continue;
+            }
+            let fresh = format!("{target}/{name}");
+            if fresh != old {
+                conn.execute(
+                    &format!("UPDATE {table} SET file_path = ?1 WHERE rowid = ?2"),
+                    rusqlite::params![fresh, rowid],
+                )
+                .map_err(crate::sanitize_db_err)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Standalone helper: convert a hormone value between known units.
@@ -996,6 +1265,174 @@ mod tests {
     /// re-open with the *imported* master key, confirm the row is still there.
     /// This is the exact path that was broken before — we'd lose access to
     /// the restored DB because the local Keystore-wrapped key didn't match.
+    #[allow(dead_code)]
+    /// Rebuilds a v2 bundle exactly as the shipped exporter did, so the v2
+    /// READ path stays pinned forever.
+    ///
+    /// Without this every backup test builds its fixture with the current
+    /// exporter, so flipping export to v3 leaves v2 compatibility — the stated
+    /// hard requirement — completely untested while all tests stay green.
+    fn export_v2_bundle(vault: &Vault, passphrase: &str) -> Vec<u8> {
+        let snapshot_path = format!("{}.v2test", vault.db_path);
+        let _ = std::fs::remove_file(&snapshot_path);
+        {
+            let guard = vault.db().unwrap();
+            guard
+                .conn()
+                .execute(&format!("VACUUM INTO '{}'", snapshot_path), [])
+                .unwrap();
+        }
+        let snapshot = std::fs::read(&snapshot_path).unwrap();
+        let _ = std::fs::remove_file(&snapshot_path);
+
+        let mut plain = Vec::new();
+        plain.extend_from_slice(vault.master_key.expose());
+        plain.extend_from_slice(&snapshot);
+
+        let params = KdfParams::recommended();
+        let kek = params.derive(passphrase.as_bytes()).unwrap();
+        let header = build_bundle_header(BUNDLE_MAGIC_V2, &params);
+        let blob = encrypt_with_aad(&kek, &plain, &header).unwrap();
+        let mut out = Vec::new();
+        out.extend_from_slice(&header);
+        out.extend_from_slice(&blob.nonce);
+        out.extend_from_slice(&blob.ciphertext);
+        out
+    }
+
+    #[test]
+    fn v2_bundles_still_restore_after_v3() {
+        let path = fresh_db_path();
+        let key = VaultKey::random();
+        let master = key.export_raw();
+        let bundle = {
+            let vault = Vault::open(path.to_string_lossy().into_owned(), &key).unwrap();
+            vault.add_medication(
+                crate::medication::NewMedication {
+                    name: "Spironolactone".into(),
+                    kind: "anti-androgen".into(),
+                    route: "oral".into(),
+                    default_dose: None,
+                    default_dose_unit: None,
+                    color: None,
+                    notes: None,
+                },
+                1_700_000_000_000,
+            ).unwrap();
+            export_v2_bundle(&vault, "pass")
+        };
+        assert_eq!(&bundle[..8], &BUNDLE_MAGIC_V2[..], "fixture must be a v2 bundle");
+
+        let restore_path = fresh_db_path();
+        let imported =
+            import_encrypted(bundle, "pass".into(), restore_path.to_string_lossy().into_owned())
+                .unwrap();
+        assert_eq!(imported.master_key, master);
+        let vault =
+            Vault::open(restore_path.to_string_lossy().into_owned(), &VaultKey::from_raw(imported.master_key).unwrap())
+                .unwrap();
+        assert_eq!(vault.list_medications(false).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn v3_roundtrip_carries_photo_and_voice_blobs() {
+        let path = fresh_db_path();
+        let base = path.parent().unwrap().to_path_buf();
+        std::fs::create_dir_all(base.join(PHOTOS_DIR)).unwrap();
+        std::fs::create_dir_all(base.join(VOICE_DIR)).unwrap();
+        std::fs::write(base.join(PHOTOS_DIR).join("aaa.bin"), b"photo-ciphertext").unwrap();
+        std::fs::write(base.join(VOICE_DIR).join("bbb.bin"), b"voice-ciphertext").unwrap();
+
+        let key = VaultKey::random();
+        let bundle = {
+            let vault = Vault::open(path.to_string_lossy().into_owned(), &key).unwrap();
+            vault.export_encrypted("pass".into()).unwrap()
+        };
+        assert_eq!(&bundle[..8], &BUNDLE_MAGIC_V3[..]);
+
+        // Restore into a different directory: the blobs must travel with it.
+        let restore_path = fresh_db_path();
+        let restore_base = restore_path.parent().unwrap().to_path_buf();
+        let _ = std::fs::remove_dir_all(restore_base.join(PHOTOS_DIR));
+        let _ = std::fs::remove_dir_all(restore_base.join(VOICE_DIR));
+
+        import_encrypted(bundle, "pass".into(), restore_path.to_string_lossy().into_owned()).unwrap();
+
+        assert_eq!(
+            std::fs::read(restore_base.join(PHOTOS_DIR).join("aaa.bin")).unwrap(),
+            b"photo-ciphertext",
+            "photo blob must be restored byte-for-byte",
+        );
+        assert_eq!(
+            std::fs::read(restore_base.join(VOICE_DIR).join("bbb.bin")).unwrap(),
+            b"voice-ciphertext",
+            "voice blob must be restored byte-for-byte",
+        );
+    }
+
+    #[test]
+    fn restore_repoints_absolute_blob_paths_at_this_device() {
+        let path = fresh_db_path();
+        let key = VaultKey::random();
+        {
+            let vault = Vault::open(path.to_string_lossy().into_owned(), &key).unwrap();
+            let guard = vault.db().unwrap();
+            guard.conn().execute(
+                "INSERT INTO photo_records (at_ms, file_path) VALUES (1, '/var/mobile/Containers/Data/Application/DEAD-BEEF/photos/zzz.bin')",
+                [],
+            ).unwrap();
+        }
+        let bundle = {
+            let vault = Vault::open(path.to_string_lossy().into_owned(), &key).unwrap();
+            vault.export_encrypted("pass".into()).unwrap()
+        };
+
+        let restore_path = fresh_db_path();
+        let imported =
+            import_encrypted(bundle, "pass".into(), restore_path.to_string_lossy().into_owned())
+                .unwrap();
+        let vault = Vault::open(
+            restore_path.to_string_lossy().into_owned(),
+            &VaultKey::from_raw(imported.master_key).unwrap(),
+        ).unwrap();
+        let guard = vault.db().unwrap();
+        let stored: String = guard
+            .conn()
+            .query_row("SELECT file_path FROM photo_records LIMIT 1", [], |r| r.get(0))
+            .unwrap();
+        let expected = restore_path.parent().unwrap().join(PHOTOS_DIR).join("zzz.bin");
+        assert_eq!(
+            stored,
+            expected.to_string_lossy(),
+            "a stale foreign absolute path must be repointed at this device",
+        );
+    }
+
+    #[test]
+    fn absurd_kdf_params_are_rejected_not_allocated() {
+        let path = fresh_db_path();
+        let key = VaultKey::random();
+        let mut bundle = {
+            let vault = Vault::open(path.to_string_lossy().into_owned(), &key).unwrap();
+            vault.export_encrypted("pass".into()).unwrap()
+        };
+        // m_cost sits right after magic + salt. 4 TiB would abort the process
+        // under panic = "abort" if it ever reached the allocator.
+        let off = 8 + SALT_LEN;
+        bundle[off..off + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+
+        let err = import_encrypted(
+            bundle,
+            "pass".into(),
+            fresh_db_path().to_string_lossy().into_owned(),
+        )
+        .unwrap_err();
+        assert!(
+            format!("{err}").contains("implausible"),
+            "expected a typed refusal, got: {err}",
+        );
+    }
+
     #[test]
     fn backup_export_then_import_roundtrip() {
         let path = fresh_db_path();
