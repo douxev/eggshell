@@ -23,6 +23,7 @@ import com.douxev.eggshell.reminders.LabReminderPrefs
 @Singleton
 class SettingsBackup @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val alarms: com.douxev.eggshell.reminders.AlarmScheduler,
 ) {
 
     fun snapshot(): ByteArray {
@@ -96,6 +97,13 @@ class SettingsBackup @Inject constructor(
                     category = o.optString("category"),
                 )
             )
+        }
+        // Re-arm them. The entry alone is inert: alarms live in AlarmManager,
+        // which knows nothing about a restore, so without this the reminders
+        // would reappear in the list and then never fire again.
+        val now = System.currentTimeMillis()
+        for (e in labPrefs.all()) {
+            if (e.nextDueAtMs > now) runCatching { alarms.scheduleLab(e.id, e.nextDueAtMs) }
         }
     }
 

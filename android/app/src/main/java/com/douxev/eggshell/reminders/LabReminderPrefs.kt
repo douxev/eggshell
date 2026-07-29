@@ -82,11 +82,15 @@ class LabReminderPrefs(context: Context) {
                 ?: run { remove(key("minute", entry.id)) }
             putLong(key("next", entry.id), entry.nextDueAtMs)
             putString(key("cat", entry.id), entry.category)
-        }.apply()
+        // commit, not apply: these are user-authored reminders, and the
+        // restore path writes them immediately before the import kills the
+        // process to force a clean relaunch — an async write is exactly what
+        // that kill drops. It cost the restored lab reminders every time.
+        }.commit()
     }
 
     fun setNextDue(id: Long, nextDueAtMs: Long) {
-        prefs.edit().putLong(key("next", id), nextDueAtMs).apply()
+        prefs.edit().putLong(key("next", id), nextDueAtMs).commit()
     }
 
     fun remove(id: Long) {
@@ -100,7 +104,7 @@ class LabReminderPrefs(context: Context) {
             remove(key("minute", id))
             remove(key("next", id))
             remove(key("cat", id))
-        }.apply()
+        }.commit()
     }
 
     fun nextId(): Long = (all().maxOfOrNull { it.id } ?: 0L) + 1L
