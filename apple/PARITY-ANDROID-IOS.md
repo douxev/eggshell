@@ -7,9 +7,9 @@
 
 ## 0. Delta depuis la 2.0.3 (mis à jour le 2026-07-30)
 
-> iOS ne sort PAS de 2.1.0. Le bump et l’entrée de nouveautés ont été annulés
-> le 2026-07-30 : on comble d’abord les écarts listés ici. `MARKETING_VERSION`
-> reste à 2.0.3.
+> iOS sort bien en 2.1.0 : les trois écarts ci-dessous ont été comblés le
+> 2026-07-30 (module Notes, clé de récupération, famille Autres).
+> `MARKETING_VERSION` est repassé à 2.1.0.
 
 > **Le corps de ce document, daté du 2026-06-06, n'est plus fiable.** En
 > vérifiant quatre de ses affirmations le 2026-07-30, les quatre étaient

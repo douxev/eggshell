@@ -14,7 +14,7 @@ enum WhatsNewCatalog {
     /// a version-14 entry was already in the list, so the 2.0.0 notes could
     /// never surface on their own — anyone who had seen the sheet at 13 was
     /// already past the gate.
-    static let latestVersion: Int = 14
+    static let latestVersion: Int = 18
 
     struct Release: Identifiable {
         var id: Int { version }
@@ -24,12 +24,18 @@ enum WhatsNewCatalog {
     }
 
     /// Releases, newest first.
-    ///
-    /// No 2.1.0 entry: iOS is not shipping that version. Android 2.1.0 is the
-    /// notes module, the recovery key and the Autres family, and none of them
-    /// exist here — the release notes would describe screens the user cannot
-    /// open. The next entry goes in when the features do.
     static let releases: [Release] = [
+        Release(
+            version: 18,
+            title: "Quoi de neuf",
+            highlights: [
+                "Notes — un carnet en markdown : images, dossiers, réorganisation. L'export ZIP emporte les pièces jointes.",
+                "Clé de récupération — une seconde façon d'ouvrir le coffre. Ajouter une empreinte ou un visage au téléphone ne peut plus t'enfermer dehors.",
+                "Sauvegardes complètes — tes photos et tes mémos vocaux voyagent maintenant dans l'export chiffré, et reviennent à la restauration.",
+                "Coffre plus prudent — une sauvegarde écrite par une version plus récente est refusée au lieu d'être lue à moitié, et une mauvaise phrase secrète est signalée comme telle.",
+                "Carnet de rêves — bientôt. Le module est déjà visible, grisé, dans Réglages → Modules.",
+            ]
+        ),
         Release(
             version: 14,
             title: "Quoi de neuf",

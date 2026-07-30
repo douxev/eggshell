@@ -17,18 +17,39 @@ final class NotesStore: ObservableObject {
     /// Decrypted attachments, kept for the lifetime of the screen only.
     @Published private(set) var images: [Int64: UIImage] = [:]
 
-    private let session: VaultService
+    /// Set once, after unlock. `@StateObject` has to build this object before a
+    /// session exists, so the session arrives afterwards rather than through
+    /// the initialiser — which is also what lets the views own the store
+    /// directly instead of through a republishing wrapper.
+    private var session: VaultService?
+    private(set) var isAttached = false
 
-    init(session: VaultService) { self.session = session }
+    init() {}
+
+    func attach(_ session: VaultService) {
+        guard !isAttached else { return }
+        self.session = session
+        isAttached = true
+    }
+
+    /// The session, or a throwing stand-in. Every call site already runs inside
+    /// a `do` or a `try?`, so an un-attached store degrades to "nothing
+    /// happened" rather than trapping.
+    private func requireSession() throws -> VaultService {
+        guard let session else { throw VaultError.notProvisioned }
+        return session
+    }
 
     // MARK: Listing
 
     func load(folderId: Int64?) async {
         do {
-            async let f = session.listNoteFolders(parentId: folderId)
-            async let n = session.listNotes(folderId: folderId)
-            folders = try await f
-            notes = try await n
+            // Sequential, not `async let`: VaultService is one actor and the
+            // core answers `VaultBusy` when hit concurrently, so overlapping
+            // these would buy nothing and could fail.
+            let session = try requireSession()
+            folders = try await session.listNoteFolders(parentId: folderId)
+            notes = try await session.listNotes(folderId: folderId)
         } catch {
             self.error = "On n'a pas réussi à ouvrir tes notes."
         }
@@ -40,7 +61,7 @@ final class NotesStore: ObservableObject {
     func create(title: String, body: String, folderId: Int64?) async -> Note? {
         let now = Time.nowMs()
         do {
-            let note = try await session.addNote(
+            let note = try await requireSession().addNote(
                 NewNote(folderId: folderId, title: title, body: body,
                         createdMs: now, updatedMs: now))
             notes.append(note)
@@ -53,7 +74,7 @@ final class NotesStore: ObservableObject {
 
     func update(_ id: Int64, title: String, body: String) async {
         do {
-            let updated = try await session.updateNote(id, title: title, body: body)
+            let updated = try await requireSession().updateNote(id, title: title, body: body)
             if let i = notes.firstIndex(where: { $0.id == id }) { notes[i] = updated }
         } catch {
             self.error = "On n'a pas réussi à enregistrer cette note."
@@ -67,8 +88,8 @@ final class NotesStore: ObservableObject {
     /// disk until the orphan sweep noticed.
     func delete(_ id: Int64) async {
         do {
-            let doomed = (try? await session.noteImages(noteId: id)) ?? []
-            try await session.deleteNote(id)
+            let doomed = (try? await requireSession().noteImages(noteId: id)) ?? []
+            try await requireSession().deleteNote(id)
             doomed.forEach { AppPaths.secureDelete(URL(fileURLWithPath: $0.filePath)) }
             notes.removeAll { $0.id == id }
         } catch {
@@ -82,7 +103,7 @@ final class NotesStore: ObservableObject {
 
     func move(_ id: Int64, toFolder folderId: Int64?) async {
         do {
-            try await session.moveNote(id, toFolder: folderId)
+            try await requireSession().moveNote(id, toFolder: folderId)
             notes.removeAll { $0.id == id }
         } catch {
             self.error = "On n'a pas réussi à déplacer cette note."
@@ -93,7 +114,7 @@ final class NotesStore: ObservableObject {
     func reorder(_ ordered: [Note]) async {
         notes = ordered
         do {
-            try await session.reorderNotes(ordered.map(\.id))
+            try await requireSession().reorderNotes(ordered.map(\.id))
         } catch {
             self.error = "On n'a pas réussi à enregistrer l'ordre."
         }
@@ -103,7 +124,7 @@ final class NotesStore: ObservableObject {
 
     func createFolder(named name: String, parentId: Int64?) async {
         do {
-            let folder = try await session.addNoteFolder(
+            let folder = try await requireSession().addNoteFolder(
                 NewNoteFolder(name: name, parentId: parentId, createdMs: Time.nowMs()))
             folders.append(folder)
         } catch {
@@ -111,30 +132,32 @@ final class NotesStore: ObservableObject {
         }
     }
 
-    func renameFolder(_ id: Int64, to name: String) async {
+    /// Rename, then re-read the level.
+    ///
+    /// Rebuilding the row locally would mean spelling out `NoteFolder.init`,
+    /// whose memberwise signature is generated from the UDL and moves whenever
+    /// a field is added there. One extra query is cheaper than a struct literal
+    /// that silently rots.
+    func renameFolder(_ id: Int64, to name: String, in parentId: Int64?) async {
         do {
+            let session = try requireSession()
             try await session.renameNoteFolder(id, name: name)
-            if let i = folders.firstIndex(where: { $0.id == id }) {
-                folders[i] = NoteFolder(id: folders[i].id, name: name,
-                                        parentId: folders[i].parentId,
-                                        sortOrder: folders[i].sortOrder,
-                                        createdMs: folders[i].createdMs)
-            }
+            folders = try await session.listNoteFolders(parentId: parentId)
         } catch {
             self.error = "On n'a pas réussi à renommer ce dossier."
         }
     }
 
     func folderContentsCount(_ id: Int64) async -> Int64 {
-        (try? await session.noteFolderContentsCount(id)) ?? 0
+        (try? await requireSession().noteFolderContentsCount(id)) ?? 0
     }
 
     /// Delete a folder, everything nested inside it, and the files those notes
     /// owned. Paths first, for the same reason as `delete(_:)`.
     func deleteFolder(_ id: Int64) async {
         do {
-            let doomed = (try? await session.noteImagePathsUnderFolder(id)) ?? []
-            try await session.deleteNoteFolder(id)
+            let doomed = (try? await requireSession().noteImagePathsUnderFolder(id)) ?? []
+            try await requireSession().deleteNoteFolder(id)
             doomed.forEach { AppPaths.secureDelete(URL(fileURLWithPath: $0)) }
             folders.removeAll { $0.id == id }
         } catch {
@@ -156,10 +179,10 @@ final class NotesStore: ObservableObject {
             return nil
         }
         do {
-            let url = try await session.encryptBlobToFile(cleaned, in: AppPaths.noteImagesDir)
-            let position = Int64((try? await session.noteImages(noteId: noteId).count) ?? 0)
+            let url = try await requireSession().encryptBlobToFile(cleaned, in: AppPaths.noteImagesDir)
+            let position = Int64((try? await requireSession().noteImages(noteId: noteId).count) ?? 0)
             do {
-                let row = try await session.addNoteImage(
+                let row = try await requireSession().addNoteImage(
                     NewNoteImage(noteId: noteId, filePath: url.path, position: position))
                 images[row.id] = image
                 return row.id
@@ -176,9 +199,9 @@ final class NotesStore: ObservableObject {
 
     /// Decrypt every attachment of a note into `images`, for rendering.
     func loadImages(noteId: Int64) async {
-        guard let rows = try? await session.noteImages(noteId: noteId) else { return }
+        guard let rows = try? await requireSession().noteImages(noteId: noteId) else { return }
         for row in rows where images[row.id] == nil {
-            if let data = try? await session.decryptBlobFile(URL(fileURLWithPath: row.filePath)),
+            if let data = try? await requireSession().decryptBlobFile(URL(fileURLWithPath: row.filePath)),
                let ui = UIImage(data: data) {
                 images[row.id] = ui
             }
@@ -186,9 +209,9 @@ final class NotesStore: ObservableObject {
     }
 
     func detach(imageId: Int64, noteId: Int64) async {
-        guard let rows = try? await session.noteImages(noteId: noteId),
+        guard let rows = try? await requireSession().noteImages(noteId: noteId),
               let row = rows.first(where: { $0.id == imageId }) else { return }
-        try? await session.deleteNoteImage(imageId)
+        try? await requireSession().deleteNoteImage(imageId)
         AppPaths.secureDelete(URL(fileURLWithPath: row.filePath))
         images.removeValue(forKey: imageId)
     }
@@ -201,7 +224,7 @@ final class NotesStore: ObservableObject {
     /// them at import. Matching whole paths would make every restored image
     /// look orphaned and delete the lot at the first unlock.
     func cleanupOrphans() async {
-        guard let tracked = try? await session.allNoteImagePaths() else { return }
+        guard let tracked = try? await requireSession().allNoteImagePaths() else { return }
         let keep = Set(tracked.map { URL(fileURLWithPath: $0).lastPathComponent })
         let dir = AppPaths.noteImagesDir
         let files = (try? FileManager.default.contentsOfDirectory(

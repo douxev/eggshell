@@ -16,7 +16,7 @@ struct NotesView: View {
     var folderId: Int64?
     var folderName: String?
 
-    @StateObject private var store: NotesStoreHolder = NotesStoreHolder()
+    @StateObject private var store = NotesStore()
 
     @State private var selection: Set<Int64> = []
     @State private var selecting = false
@@ -32,7 +32,7 @@ struct NotesView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metrics.blockGap) {
-                if let error = store.inner?.error {
+                if let error = store.error {
                     ErrorCardView(error)
                 }
                 if folders.isEmpty && notes.isEmpty {
@@ -68,11 +68,13 @@ struct NotesView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
         .task {
-            if store.inner == nil, let session = app.session {
-                store.inner = NotesStore(session: session)
-                await store.inner?.cleanupOrphans()
-            }
-            await store.inner?.load(folderId: folderId)
+            guard let session = app.session else { return }
+            let firstTime = !store.isAttached
+            store.attach(session)
+            // Once per screen, not per appearance: the sweep walks the whole
+            // attachment directory.
+            if firstTime { await store.cleanupOrphans() }
+            await store.load(folderId: folderId)
         }
         .alert("Nouveau dossier", isPresented: $showNewFolder) {
             TextField("Nom", text: $newFolderName)
@@ -81,7 +83,7 @@ struct NotesView: View {
                 let name = newFolderName.trimmingCharacters(in: .whitespaces)
                 newFolderName = ""
                 guard !name.isEmpty else { return }
-                Task { await store.inner?.createFolder(named: name, parentId: folderId) }
+                Task { await store.createFolder(named: name, parentId: folderId) }
             }
         }
         .alert("Renommer", isPresented: Binding(
@@ -94,7 +96,7 @@ struct NotesView: View {
                 let name = renameText.trimmingCharacters(in: .whitespaces)
                 guard let folder = renaming, !name.isEmpty else { renaming = nil; return }
                 renaming = nil
-                Task { await store.inner?.renameFolder(folder.id, to: name) }
+                Task { await store.renameFolder(folder.id, to: name, in: folderId) }
             }
         }
         .confirmationDialog(
@@ -109,7 +111,7 @@ struct NotesView: View {
             Button("Supprimer", role: .destructive) {
                 guard let folder = confirmFolderDelete else { return }
                 confirmFolderDelete = nil
-                Task { await store.inner?.deleteFolder(folder.id) }
+                Task { await store.deleteFolder(folder.id) }
             }
             Button("Annuler", role: .cancel) { confirmFolderDelete = nil }
         } message: {
@@ -122,8 +124,8 @@ struct NotesView: View {
 
     // MARK: Rows
 
-    private var folders: [NoteFolder] { store.inner?.folders ?? [] }
-    private var notes: [Note] { store.inner?.notes ?? [] }
+    private var folders: [NoteFolder] { store.folders }
+    private var notes: [Note] { store.notes }
 
     private var separator: some View {
         Rectangle()
@@ -145,7 +147,7 @@ struct NotesView: View {
             Button("Renommer") { renameText = folder.name; renaming = folder }
             Button("Supprimer", role: .destructive) {
                 Task {
-                    folderDeleteCount = await store.inner?.folderContentsCount(folder.id) ?? 0
+                    folderDeleteCount = await store.folderContentsCount(folder.id)
                     confirmFolderDelete = folder
                 }
             }
@@ -176,11 +178,11 @@ struct NotesView: View {
             Button("Exporter") { export(notes: [note], name: note.title) }
             if folderId != nil {
                 Button("Sortir du dossier") {
-                    Task { await store.inner?.move(note.id, toFolder: nil) }
+                    Task { await store.move(note.id, toFolder: nil) }
                 }
             }
             Button("Supprimer", role: .destructive) {
-                Task { await store.inner?.delete(note.id) }
+                Task { await store.delete(note.id) }
             }
         }
     }
@@ -193,7 +195,7 @@ struct NotesView: View {
             Menu {
                 Button {
                     Task {
-                        guard let note = await store.inner?.create(
+                        guard let note = await store.create(
                             title: "", body: "", folderId: folderId) else { return }
                         router.push(.noteEditor(id: note.id))
                     }
@@ -235,7 +237,7 @@ struct NotesView: View {
                     Button(role: .destructive) {
                         let doomed = selection
                         selection.removeAll()
-                        Task { await store.inner?.delete(ids: doomed) }
+                        Task { await store.delete(ids: doomed) }
                     } label: { Label("Supprimer", systemImage: "trash") }
                 }
             }
@@ -255,31 +257,6 @@ struct NotesView: View {
             }
         }
     }
-}
-
-/// `NotesStore` is `@MainActor` and needs a session that only exists after
-/// unlock, so it cannot be built in a `@StateObject` initialiser. This holder
-/// owns it and is what the view actually observes.
-@MainActor
-final class NotesStoreHolder: ObservableObject {
-    @Published var inner: NotesStore? {
-        didSet { bind() }
-    }
-    private var task: Task<Void, Never>?
-
-    /// Re-publish the store's changes as our own: nesting an ObservableObject
-    /// inside another does not forward `objectWillChange`.
-    private func bind() {
-        task?.cancel()
-        guard let inner else { return }
-        task = Task { [weak self] in
-            for await _ in inner.objectWillChange.values {
-                self?.objectWillChange.send()
-            }
-        }
-    }
-
-    deinit { task?.cancel() }
 }
 
 /// A file handed to the share sheet. Identifiable so `.sheet(item:)` can drive

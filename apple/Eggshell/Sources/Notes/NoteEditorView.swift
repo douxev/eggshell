@@ -1,6 +1,7 @@
 import PhotosUI
 import SwiftUI
 import TransitionCore
+import UIKit
 
 /// One note, open.
 ///
@@ -14,7 +15,7 @@ struct NoteEditorView: View {
 
     let noteId: Int64
 
-    @StateObject private var holder = NotesStoreHolder()
+    @StateObject private var store = NotesStore()
     @State private var title = ""
     @State private var body_ = ""
     @State private var editing = false
@@ -23,6 +24,12 @@ struct NoteEditorView: View {
     @State private var exportURL: ShareableFile?
     @State private var confirmDelete = false
     @State private var saveTask: Task<Void, Never>?
+    /// Set by the delete path. Without it the flush below would write the note
+    /// straight back out after it was deleted — `onDisappear` fires *after*
+    /// `dismiss()`, and the core treats an update of a missing row as an error
+    /// rather than a no-op, so the screen would leave an error behind it on the
+    /// way out.
+    @State private var deleted = false
 
     var body: some View {
         ScrollView {
@@ -50,9 +57,10 @@ struct NoteEditorView: View {
         .task { await load() }
         .onDisappear {
             saveTask?.cancel()
-            // The debounce may still be pending; commit synchronously-ish so
-            // leaving the screen never loses the last keystrokes.
-            Task { await holder.inner?.update(noteId, title: title, body: body_) }
+            // The debounce may still be pending; flush it so leaving the screen
+            // never loses the last keystrokes.
+            guard !deleted else { return }
+            Task { await store.update(noteId, title: title, body: body_) }
         }
         .onChange(of: pickerItem) { _, item in
             guard let item else { return }
@@ -64,7 +72,8 @@ struct NoteEditorView: View {
             Button("Supprimer", role: .destructive) {
                 Task {
                     saveTask?.cancel()
-                    await holder.inner?.delete(noteId)
+                    deleted = true
+                    await store.delete(noteId)
                     dismiss()
                 }
             }
@@ -96,7 +105,7 @@ struct NoteEditorView: View {
 
     private var rendered: some View {
         NoteBodyView(body_) { imageId in
-            if let image = holder.inner?.images[imageId] {
+            if let image = store.images[imageId] {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
@@ -156,14 +165,15 @@ struct NoteEditorView: View {
     private func load() async {
         guard !loaded, let session = app.session else { return }
         loaded = true
-        let store = NotesStore(session: session)
-        holder.inner = store
-        guard let note = try? await session.getNote(noteId) else { return }
-        title = note?.title ?? ""
-        body_ = note?.body ?? ""
+        store.attach(session)
+        // `getNote` is optional-returning and `try?` adds a second layer;
+        // flatten both before touching it.
+        guard let note = (try? await session.getNote(noteId)) ?? nil else { return }
+        title = note.title
+        body_ = note.body
         // A note with nothing in it has nothing to render: start in the editor
         // rather than on an empty page with no visible way forward.
-        editing = (note?.body ?? "").isEmpty
+        editing = note.body.isEmpty
         await store.loadImages(noteId: noteId)
     }
 
@@ -173,7 +183,7 @@ struct NoteEditorView: View {
         saveTask = Task {
             try? await Task.sleep(nanoseconds: 700_000_000)
             guard !Task.isCancelled else { return }
-            await holder.inner?.update(noteId, title: title, body: body_)
+            await store.update(noteId, title: title, body: body_)
         }
     }
 
@@ -181,7 +191,6 @@ struct NoteEditorView: View {
         defer { pickerItem = nil }
         guard let data = try? await item.loadTransferable(type: Data.self),
               let image = UIImage(data: data),
-              let store = holder.inner,
               let imageId = await store.attach(image, to: noteId) else { return }
         // The marker goes on its own line, with a blank line before it, so the
         // block parser sees an image and not a paragraph that happens to
@@ -192,17 +201,17 @@ struct NoteEditorView: View {
     }
 
     private func remove(imageId: Int64) async {
-        await holder.inner?.detach(imageId: imageId, noteId: noteId)
+        await store.detach(imageId: imageId, noteId: noteId)
         body_ = body_.components(separatedBy: .newlines)
             .filter { NoteImageRef.imageId(inMarkerLine: $0) != imageId }
             .joined(separator: "\n")
-        await holder.inner?.update(noteId, title: title, body: body_)
+        await store.update(noteId, title: title, body: body_)
     }
 
     private func export() {
         guard let session = app.session else { return }
         Task {
-            guard let note = try? await session.getNote(noteId), let note else { return }
+            guard let note = (try? await session.getNote(noteId)) ?? nil else { return }
             let name = note.title.trimmingCharacters(in: .whitespaces)
             if let url = try? await NoteExporter.zip(
                 notes: [note], session: session,

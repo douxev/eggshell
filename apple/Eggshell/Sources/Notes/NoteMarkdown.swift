@@ -125,7 +125,7 @@ struct NoteBodyView<ImageView: View>: View {
     @Environment(\.palette) private var palette
     /// Not named `body`: that name belongs to the View requirement below.
     let markdown: String
-    @ViewBuilder let image: (Int64) -> ImageView
+    let image: (Int64) -> ImageView
 
     init(_ markdown: String, @ViewBuilder image: @escaping (Int64) -> ImageView) {
         self.markdown = markdown
