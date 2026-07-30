@@ -5,6 +5,47 @@
 > Android : ~20 100 lignes Kotlin/Compose · iOS : ~5 200 lignes SwiftUI · cœur Rust partagé via uniffi.
 
 
+## 0. Delta depuis la 2.0.3 (mis à jour le 2026-07-30)
+
+Le corps du document date du 2026-06-06 et reste valable ; cette section note ce
+qui a bougé entre la 2.0.3 et la 2.1.0 sans réécrire le reste. Deux corrections
+au passage : l'onglet et le toggle **Menstruations existent** désormais côté iOS
+(§3 et §4.6 les donnent absents), et **`latestVersion` du What's New était figé à
+13** alors qu'une entrée 14 était déjà en tête de liste — les notes de la 2.0.0
+n'ont donc jamais pu s'afficher toutes seules. Corrigé en 2.1.0.
+
+### Ce qu'iOS a gagné sans une ligne de Swift
+
+Le format de sauvegarde est passé en v3 : le bundle chiffré emporte maintenant
+les fichiers, pas seulement la base. Le cœur les lit dans les dossiers frères de
+`vault.db` (`photos/`, `voice/`, `settings/`, `note_images/`), et `AppPaths` les
+pose déjà exactement là. Un dossier absent est lu comme vide, donc les deux que
+seul Android écrit ne coûtent rien à iOS. **Les exports iOS sont complets dès la
+2.1.0**, sans modification côté app. L'import, lui, reste un stub côté iOS, donc
+l'asymétrie du rang 11 du backlog s'aggrave : on peut désormais exporter
+davantage sans pouvoir rien restaurer.
+
+Deux durcissements viennent aussi du cœur : une sauvegarde écrite par un schéma
+plus récent est refusée au lieu d'être lue à moitié, et `verify_key` renvoie
+enfin `WrongKey` au lieu d'une erreur de base de données brute.
+
+### Nouveaux écarts, tous côté iOS
+
+| Écart | Ce que le cœur fournit déjà | Ce qui manque à iOS |
+|---|---|---|
+| **Module Notes** (markdown, images, dossiers imbriqués, réordonnancement, multi-sélection, export ZIP avec pièces jointes) | Toute l'API est dans l'UDL : `add/list/get/update/delete/reorder_note`, `move_note_to_folder`, `add/list/rename/delete_note_folder`, `note_folder_contents_count`, `note_image_paths_under_folder`, `add_note_image`, `note_images`, `all_note_image_paths`, `delete_note_image` | Aucun wrapper dans `VaultService`, aucune vue. C'est exactement la cause racine du §4.1, sur un domaine neuf. |
+| **Clé de récupération** (second enveloppage Argon2id 128 Mio/t=4, ré-armement de la clé biométrique, écran bloquant pour les comptes en mode empreinte) | `set_recovery_secret` / `unlock_with_recovery` côté coffre | Rien. C'est le plus critique : sur Android, ajouter une empreinte au téléphone pouvait enfermer dehors définitivement, et iOS n'a aucun filet équivalent. |
+| **Famille « Autres » + tuile grisée « Carnet de rêves »** | — (pur UI) | `FeaturesStore` a 8 champs, pas de `notes` ; `FeaturesView` affiche « ACTIVÉS SUR 8 » en dur et n'a pas de notion de famille. |
+| **Schéma 15** (`note_folders`, `notes`, `note_images`) | Migration appliquée par le cœur partagé | Rien à faire : iOS migre en ouvrant le coffre. Une version iOS **antérieure** refusera proprement un coffre en schéma 15 plutôt que de le corrompre. |
+
+### Ordre conseillé
+
+1. Envelopper l'API notes dans `VaultService` — mécanique, débloque tout le reste.
+2. La clé de récupération, avant le module Notes : c'est de la sécurité, pas du confort.
+3. `import_encrypted` (rang 11 du backlog), maintenant que les exports contiennent des fichiers.
+4. Le module Notes lui-même, en dernier — c'est le plus gros et le moins risqué à décaler.
+
+
 ## 1. Vue d'ensemble
 
 L'app iOS d'Eggshell est un portage en cours qui couvre le « happy path » mais reste loin de la parité avec Android : globalement de l'ordre de 35-40 % de parité fonctionnelle pondérée. Le socle est solide là où il s'appuie directement sur le cœur Rust partagé (cryptographie du coffre, 4 modes de sécurité, KDF Argon2id, conversion d'unités hormonales, CRUD de base médicaments/journal/hormones/photos/voix) — ces zones sont à parité réelle. En revanche, dès qu'une fonctionnalité demande du code plateforme (planification système, OCR, détection de pitch, rendu PDF, widget, FLAG_SECURE) ou un domaine non encore enveloppé, iOS s'effondre : domaines entiers sont totalement absents (saignements/cycle, métriques personnalisables, corrélation, export PDF, widget, restauration de sauvegarde, déguisement d'icône). La cause racine la plus structurante n'est PAS le cœur Rust mais la couche d'enrobage VaultService.swift, qui n'expose qu'un sous-ensemble de l'API uniffi : j'ai vérifié dans transition.udl que le cœur fournit bel et bien update_medication, log/list_treatment_change, list_dose_events_between, delete_schedule, les metric definitions/values, les bleeding entries, update_journal_entry et import_encrypted — toutes absentes de VaultService. Le commentaire iOS prétendant que « le cœur n'a pas de primitive d'update » pour le journal est factuellement faux (update_journal_entry existe ligne 220 de l'UDL). Deux points méritent une attention sécurité immédiate : l'absence de strip EXIF à l'import photo (fuite GPS potentielle, critique pour une app de transition) et le toggle « bloquer les captures d'écran » qui est purement décoratif (jamais appliqué). Enfin, une divergence de données silencieuse et grave existe : le catalogue de types de médicaments iOS (hrt/blocker/supplement/other) ne correspond pas aux 7 identifiants cliniques Android, ce qui corrompt la lisibilité croisée des données dans la base partagée.
