@@ -9,7 +9,12 @@ import SwiftUI
 
 enum WhatsNewCatalog {
     /// Highest version code. Compared against WhatsNewStore.lastSeen.
-    static let latestVersion: Int = 13
+    ///
+    /// Must be the version of the FIRST entry in `releases`. It sat at 13 while
+    /// a version-14 entry was already in the list, so the 2.0.0 notes could
+    /// never surface on their own — anyone who had seen the sheet at 13 was
+    /// already past the gate.
+    static let latestVersion: Int = 18
 
     struct Release: Identifiable {
         var id: Int { version }
@@ -19,7 +24,22 @@ enum WhatsNewCatalog {
     }
 
     /// Releases, newest first.
+    ///
+    /// Deliberately shorter than the android list for the same version. Most of
+    /// what 2.1.0 added — the notes module, the recovery key, the launcher
+    /// families — is android UI over shared core primitives this app does not
+    /// wrap yet, and announcing it here would promise screens that do not
+    /// exist. What is listed is what iOS genuinely gained, which came from the
+    /// core alone.
     static let releases: [Release] = [
+        Release(
+            version: 18,
+            title: "Quoi de neuf",
+            highlights: [
+                "Sauvegardes complètes — tes photos et tes mémos vocaux voyagent maintenant dans l'export chiffré, pas seulement la base. Tes anciennes sauvegardes restent restaurables.",
+                "Coffre plus prudent — une sauvegarde écrite par une version plus récente est refusée au lieu d'être lue à moitié, et une mauvaise phrase secrète est enfin signalée comme telle plutôt qu'en erreur de base de données.",
+            ]
+        ),
         Release(
             version: 14,
             title: "Quoi de neuf",
