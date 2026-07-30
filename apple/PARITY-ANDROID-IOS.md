@@ -7,12 +7,24 @@
 
 ## 0. Delta depuis la 2.0.3 (mis à jour le 2026-07-30)
 
-Le corps du document date du 2026-06-06 et reste valable ; cette section note ce
-qui a bougé entre la 2.0.3 et la 2.1.0 sans réécrire le reste. Deux corrections
-au passage : l'onglet et le toggle **Menstruations existent** désormais côté iOS
-(§3 et §4.6 les donnent absents), et **`latestVersion` du What's New était figé à
-13** alors qu'une entrée 14 était déjà en tête de liste — les notes de la 2.0.0
-n'ont donc jamais pu s'afficher toutes seules. Corrigé en 2.1.0.
+> **Le corps de ce document, daté du 2026-06-06, n'est plus fiable.** En
+> vérifiant quatre de ses affirmations le 2026-07-30, les quatre étaient
+> périmées (voir « Affirmations de juin devenues fausses » ci-dessous). Les
+> pourcentages du §2 et les listes du §3 sont donc à re-auditer avant de servir
+> de base à une décision. Cette section-ci est vérifiée au source.
+
+### Affirmations de juin devenues fausses
+
+| §2/§3 affirme | Réalité au 2026-07-30 |
+|---|---|
+| Saignements/cycle « totalement absent », toggle `bleeding` absent de `FeaturesStore` | L'onglet, le toggle et le champ existent. |
+| Restauration de sauvegarde = stub « Bientôt disponible » | `VaultManager.restore(fromBundle:)` est complet, avec purge des prefs locales avant d'écrire le wrap restauré — il commente même le parallèle avec `restoreFromImportedKey` d'Android. UI dans `AdvancedSettingsView.restoreSection`. |
+| Pas de strip EXIF à l'import photo (« fuite GPS potentielle, critique ») | `PhotosView.importImage` ré-encode en JPEG sans métadonnées avant chiffrement. |
+| Toggle « bloquer les captures d'écran » purement décoratif | `PrivacyShield` existe et est appliqué via le modifier `.privacyShield(enabled:)`. |
+
+Autre correction, côté What's New : **`latestVersion` était figé à 13** alors
+qu'une entrée 14 était déjà en tête de liste — les notes de la 2.0.0 n'ont donc
+jamais pu s'afficher toutes seules. Corrigé en 2.1.0.
 
 ### Ce qu'iOS a gagné sans une ligne de Swift
 
@@ -21,9 +33,10 @@ les fichiers, pas seulement la base. Le cœur les lit dans les dossiers frères 
 `vault.db` (`photos/`, `voice/`, `settings/`, `note_images/`), et `AppPaths` les
 pose déjà exactement là. Un dossier absent est lu comme vide, donc les deux que
 seul Android écrit ne coûtent rien à iOS. **Les exports iOS sont complets dès la
-2.1.0**, sans modification côté app. L'import, lui, reste un stub côté iOS, donc
-l'asymétrie du rang 11 du backlog s'aggrave : on peut désormais exporter
-davantage sans pouvoir rien restaurer.
+2.1.0**, sans modification côté app — et la restauration existant réellement
+(voir le tableau ci-dessus), l'aller-retour complet fonctionne des deux côtés :
+`import_encrypted` réécrit les fichiers dans les dossiers frères du `targetDbPath`
+et repointe les chemins absolus. Le rang 11 du backlog est donc à retirer.
 
 Deux durcissements viennent aussi du cœur : une sauvegarde écrite par un schéma
 plus récent est refusée au lieu d'être lue à moitié, et `verify_key` renvoie
