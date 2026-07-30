@@ -101,6 +101,8 @@
     <string name="set_wn_4_sub">La date de prise de vue est lue dans le fichier, et reste corrigeable à la main si elle est fausse.</string>
     <string name="set_wn_5_title">Carnet de rêves</string>
     <string name="set_wn_5_sub">Bientôt. Le module est déjà visible, grisé, dans Réglages → Modules.</string>
+    <string name="set_wn_6_title">Corrections importantes</string>
+    <string name="set_wn_6_sub">Le déverrouillage par empreinte après une mise à jour, l’écran blanc au retour dans l’app, les rappels de bilan qui n’étaient pas restaurés, et plusieurs détails qui trahissaient le mode leurre.</string>
 
     <!-- ============ Ressources ============ -->
     <string name="set_resources_intro">Des sites, des lignes d’écoute et des associations. Le lien s’ouvre dans ton navigateur — rien ne passe par eggshell.</string>

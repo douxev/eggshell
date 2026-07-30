@@ -96,6 +96,8 @@
     <string name="set_wn_4_sub">The capture date is read from the file, and stays editable by hand when it is wrong.</string>
     <string name="set_wn_5_title">Dream journal</string>
     <string name="set_wn_5_sub">Coming soon. The module is already there, greyed out, under Settings → Modules.</string>
+    <string name="set_wn_6_title">Important fixes</string>
+    <string name="set_wn_6_sub">Fingerprint unlock after an update, the white screen when coming back to the app, lab reminders that were not restored, and several details that gave the decoy away.</string>
 
     <!-- ============ Resources ============ -->
     <string name="set_resources_intro">Websites, helplines and associations. The link opens in your browser — nothing goes through eggshell.</string>

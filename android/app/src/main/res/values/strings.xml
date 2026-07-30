@@ -349,6 +349,7 @@
     <!-- ===== What's new sheet ===== -->
     <string name="whats_new_version_fmt">Version %1$s</string>
     <string name="whats_new_got_it">C\'est parti</string>
+    <string name="whats_new_changelog_link">Voir le changelog GitHub</string>
     <!-- ===== Features (per-view toggles) ===== -->
     <string name="feature_medications_title">Médics</string>
     <string name="feature_medications_sub">Catalogue de traitements, prises, rotation des sites d\'injection.</string>
