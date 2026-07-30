@@ -11,12 +11,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -60,39 +59,34 @@ data class WhatsNewRelease(
  */
 object WhatsNewCatalog {
     val LATEST: WhatsNewRelease = WhatsNewRelease(
-        versionCode = 14,
-        versionName = "2.0.0",
+        versionCode = 18,
+        versionName = "2.1.0",
         titleRes = R.string.set_wn_title,
         highlights = listOf(
             WhatsNewHighlight(
-                icon = Icons.Filled.Home,
+                icon = Icons.Filled.Description,
                 titleRes = R.string.set_wn_1_title,
                 subRes = R.string.set_wn_1_sub,
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Check,
+                icon = Icons.Filled.Key,
                 titleRes = R.string.set_wn_2_title,
                 subRes = R.string.set_wn_2_sub,
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Schedule,
+                icon = Icons.Filled.CloudDone,
                 titleRes = R.string.set_wn_3_title,
                 subRes = R.string.set_wn_3_sub,
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Apps,
+                icon = Icons.Filled.PhotoCamera,
                 titleRes = R.string.set_wn_4_title,
                 subRes = R.string.set_wn_4_sub,
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.PictureAsPdf,
+                icon = Icons.Filled.Bedtime,
                 titleRes = R.string.set_wn_5_title,
                 subRes = R.string.set_wn_5_sub,
-            ),
-            WhatsNewHighlight(
-                icon = Icons.Filled.Science,
-                titleRes = R.string.set_wn_6_title,
-                subRes = R.string.set_wn_6_sub,
             ),
         ),
     )
@@ -115,8 +109,8 @@ fun WhatsNewSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                // Six highlights overflow a short screen; the sheet scrolls
-                // rather than clipping the confirm button out of reach.
+                // A full list of highlights overflows a short screen; the sheet
+                // scrolls rather than clipping the confirm button out of reach.
                 .verticalScroll(rememberScrollState())
                 .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),

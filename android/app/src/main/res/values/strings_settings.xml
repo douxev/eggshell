@@ -88,18 +88,19 @@
 
     <!-- ============ Quoi de neuf ============ -->
     <string name="set_wn_title">Quoi de neuf</string>
-    <string name="set_wn_1_title">Un seul accueil</string>
-    <string name="set_wn_1_sub">Plus de barre d’onglets : tes huit modules tiennent sur l’accueil, et le retour y ramène toujours.</string>
-    <string name="set_wn_2_title">Cocher une dose sans naviguer</string>
-    <string name="set_wn_2_sub">La prochaine prise et ton humeur du jour se notent depuis l’accueil, en un geste.</string>
-    <string name="set_wn_3_title">Régularité lisible</string>
-    <string name="set_wn_3_sub">Un graphique montre l’écart de chaque prise à l’heure prévue, sans jamais inventer de chiffre.</string>
-    <string name="set_wn_4_title">Réglages en trois portes</string>
-    <string name="set_wn_4_sub">Modules, Sécurité, Apparence &amp; langue. Les rappels remontent d’un cran.</string>
-    <string name="set_wn_5_title">Le rapport médecin part avec toi</string>
-    <string name="set_wn_5_sub">Il se prépare depuis Rendez-vous, avec les périodes et les sections que tu choisis.</string>
-    <string name="set_wn_6_title">Analyses importées plus finement</string>
-    <string name="set_wn_6_sub">La lecture d’un PDF retient aussi le laboratoire, pour que ton médecin sache d’où vient la valeur.</string>
+    <!-- 2.1.0. Réécrites à chaque version : seule LATEST est jamais affichée,
+         donc garder les entrées d’une version passée ne ferait que des chaînes
+         mortes que les traductions devraient suivre. -->
+    <string name="set_wn_1_title">Notes</string>
+    <string name="set_wn_1_sub">Un carnet en markdown : images, dossiers, réorganisation. L’export ZIP emporte les pièces jointes.</string>
+    <string name="set_wn_2_title">Clé de récupération</string>
+    <string name="set_wn_2_sub">Une seconde façon d’ouvrir le coffre. Ajouter une empreinte au téléphone ne peut plus t’enfermer dehors.</string>
+    <string name="set_wn_3_title">Sauvegardes complètes</string>
+    <string name="set_wn_3_sub">Les photos, les mémos vocaux et tes réglages voyagent avec le coffre. Tes anciennes sauvegardes restent restaurables.</string>
+    <string name="set_wn_4_title">Photos datées toutes seules</string>
+    <string name="set_wn_4_sub">La date de prise de vue est lue dans le fichier, et reste corrigeable à la main si elle est fausse.</string>
+    <string name="set_wn_5_title">Carnet de rêves</string>
+    <string name="set_wn_5_sub">Bientôt. Le module est déjà visible, grisé, dans Réglages → Modules.</string>
 
     <!-- ============ Ressources ============ -->
     <string name="set_resources_intro">Des sites, des lignes d’écoute et des associations. Le lien s’ouvre dans ton navigateur — rien ne passe par eggshell.</string>

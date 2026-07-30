@@ -86,18 +86,16 @@
 
     <!-- ============ What’s new ============ -->
     <string name="set_wn_title">What’s new</string>
-    <string name="set_wn_1_title">A single home</string>
-    <string name="set_wn_1_sub">No more tab bar: your eight modules fit on home, and back always brings you there.</string>
-    <string name="set_wn_2_title">Tick a dose without navigating</string>
-    <string name="set_wn_2_sub">The next dose and today’s mood are logged from home, in one gesture.</string>
-    <string name="set_wn_3_title">Readable regularity</string>
-    <string name="set_wn_3_sub">A chart shows how far each dose landed from its planned time, and never invents a number.</string>
-    <string name="set_wn_4_title">Settings in three doors</string>
-    <string name="set_wn_4_sub">Modules, Security, Appearance &amp; language. Reminders move up a level.</string>
-    <string name="set_wn_5_title">The doctor report travels with you</string>
-    <string name="set_wn_5_sub">You prepare it from Appointments, with the periods and sections you choose.</string>
-    <string name="set_wn_6_title">Finer lab imports</string>
-    <string name="set_wn_6_sub">Reading a PDF now keeps the lab name too, so your doctor knows where a value came from.</string>
+    <string name="set_wn_1_title">Notes</string>
+    <string name="set_wn_1_sub">A markdown notebook: images, folders, reordering. The ZIP export carries the attachments with it.</string>
+    <string name="set_wn_2_title">Recovery key</string>
+    <string name="set_wn_2_sub">A second way into the vault. Adding a fingerprint to your phone can no longer lock you out.</string>
+    <string name="set_wn_3_title">Complete backups</string>
+    <string name="set_wn_3_sub">Photos, voice memos and your settings now travel with the vault. Your older backups still restore.</string>
+    <string name="set_wn_4_title">Photos date themselves</string>
+    <string name="set_wn_4_sub">The capture date is read from the file, and stays editable by hand when it is wrong.</string>
+    <string name="set_wn_5_title">Dream journal</string>
+    <string name="set_wn_5_sub">Coming soon. The module is already there, greyed out, under Settings → Modules.</string>
 
     <!-- ============ Resources ============ -->
     <string name="set_resources_intro">Websites, helplines and associations. The link opens in your browser — nothing goes through eggshell.</string>
