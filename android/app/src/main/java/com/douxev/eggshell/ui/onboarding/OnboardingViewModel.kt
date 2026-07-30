@@ -124,6 +124,7 @@ class OnboardingViewModel @Inject constructor(
     val voiceOn: StateFlow<Boolean> = features.voiceTab
     val bleedingOn: StateFlow<Boolean> = features.bleeding
     val appointmentsOn: StateFlow<Boolean> = features.appointments
+    val notesOn: StateFlow<Boolean> = features.notes
 
     fun setMedications(v: Boolean) = features.setMedications(v)
     fun setJournal(v: Boolean) = features.setJournal(v)
@@ -133,6 +134,7 @@ class OnboardingViewModel @Inject constructor(
     fun setVoice(v: Boolean) = features.setVoiceTab(v)
     fun setBleeding(v: Boolean) = features.setBleeding(v)
     fun setAppointments(v: Boolean) = features.setAppointments(v)
+    fun setNotes(v: Boolean) = features.setNotes(v)
 
     /** Whether the chosen mode derives the key from a passphrase the user must
      *  not lose — gates the "note ta phrase secrète" warning of step 3. */

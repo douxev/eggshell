@@ -478,7 +478,9 @@
     <string name="appointment_error">Something went wrong.</string>
     <string name="appointment_reminder_title">Appointment reminder</string>
     <string name="appointment_reminder_body">You have an upcoming appointment.</string>
-    <string name="feature_appointments_title">Appointments / Notes</string>
+    <string name="feature_appointments_title">Appointments</string>
     <string name="feature_appointments_sub">Note medical appointments, professionals and to-dos.</string>
+    <string name="feature_notes_title">Notes</string>
+    <string name="feature_notes_sub">A markdown notebook, with images and folders.</string>
     <string name="widget_lab_title">Blood work due</string>
 </resources>

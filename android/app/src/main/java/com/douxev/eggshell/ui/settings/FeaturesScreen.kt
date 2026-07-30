@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Bloodtype
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.EditNote
@@ -26,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -74,9 +76,9 @@ class FeaturesViewModel @Inject constructor(
 }
 
 /**
- * Porte « Modules » — the eight switches, in family order (§2.2): Traitement,
- * then Ressenti, then Évolution. The tile colour of each family is echoed on
- * the leading icon so the door reads like the launcher it governs.
+ * Porte « Modules » — the switches, in family order (§2.2): Traitement, then
+ * Ressenti, then Évolution, then Autres. The tile colour of each family is
+ * echoed on the leading icon so the door reads like the launcher it governs.
  *
  * Turning a module off never removes a destination — only its launcher tile.
  * The hint at the top says so, because the old behaviour (tabs appearing and
@@ -207,14 +209,31 @@ fun FeaturesScreen(
                     onCheckedChange = vm::setVoiceTab,
                 )
             }
+
+            // -- Famille Autres ----------------------------------------------
             item {
                 ModuleRow(
                     icon = Icons.Filled.Description,
-                    family = ModuleFamily.Evolution,
+                    family = ModuleFamily.Other,
                     title = stringResource(R.string.set_module_notes),
                     subtitle = stringResource(R.string.set_module_notes_sub),
                     checked = notes,
                     onCheckedChange = vm::setNotes,
+                )
+            }
+            item {
+                // Announced, not shipped. Shown switched on because that is what
+                // it will be when it lands, and inert because there is nothing
+                // behind it yet — an enabled switch here would persist a choice
+                // against a module that does not exist.
+                ModuleRow(
+                    icon = Icons.Filled.Bedtime,
+                    family = ModuleFamily.Other,
+                    title = stringResource(R.string.set_module_dreams),
+                    subtitle = stringResource(R.string.set_module_dreams_sub),
+                    checked = true,
+                    onCheckedChange = {},
+                    enabled = false,
                 )
             }
 
@@ -223,8 +242,8 @@ fun FeaturesScreen(
     }
 }
 
-/** The three launcher families (§2.2) — colour code only, never a screen. */
-private enum class ModuleFamily { Treatment, Feeling, Evolution }
+/** The launcher families (§2.2) — colour code only, never a screen. */
+private enum class ModuleFamily { Treatment, Feeling, Evolution, Other }
 
 @Composable
 private fun ModuleRow(
@@ -234,20 +253,26 @@ private fun ModuleRow(
     subtitle: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
 ) {
     val container: Color = when (family) {
         ModuleFamily.Treatment -> MaterialTheme.colorScheme.primaryContainer
         ModuleFamily.Feeling -> MaterialTheme.colorScheme.tertiaryContainer
         ModuleFamily.Evolution -> EggColors.evolutionContainer
+        ModuleFamily.Other -> EggColors.otherContainer
     }
     val onContainer: Color = when (family) {
         ModuleFamily.Treatment -> MaterialTheme.colorScheme.onPrimaryContainer
         ModuleFamily.Feeling -> MaterialTheme.colorScheme.onTertiaryContainer
         ModuleFamily.Evolution -> EggColors.onEvolutionContainer
+        ModuleFamily.Other -> EggColors.onOtherContainer
     }
     ListRow(
         title = title,
         subtitle = subtitle,
+        // Greys the label, the subtitle and the icon tile in one place, so a
+        // disabled row reads as unavailable rather than as merely switched off.
+        modifier = if (enabled) Modifier else Modifier.alpha(0.5f),
         leading = {
             IconTile(size = 44.dp, shape = EggShapes.IconTile, container = container) {
                 Icon(icon, contentDescription = null, tint = onContainer)
@@ -255,10 +280,11 @@ private fun ModuleRow(
         },
         trailing = {
             // The row title is the switch's accessible name: without it
-            // TalkBack would announce eight identical "on/off" controls.
+            // TalkBack would announce a column of identical "on/off" controls.
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
+                enabled = enabled,
                 modifier = Modifier.semantics { contentDescription = title },
             )
         },

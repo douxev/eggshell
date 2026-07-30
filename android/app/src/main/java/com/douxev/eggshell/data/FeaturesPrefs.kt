@@ -24,8 +24,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * but a user who only tracks moods / hormones / voice can hide it.
  *
  * Defaults:
- *   - Médics / Journal / Courbes / Poids: on (core features).
- *   - Photos / Voix: off (always opt-in).
+ *   - Médics / Journal / Courbes / Poids / Notes: on.
+ *   - Photos / Voix / Menstruations: off (always opt-in).
  */
 @Singleton
 class FeaturesPrefs @Inject constructor(
@@ -53,9 +53,17 @@ class FeaturesPrefs @Inject constructor(
     private val _voiceTab = MutableStateFlow(prefs.getBoolean(KEY_VOICE, false))
     val voiceTab: StateFlow<Boolean> = _voiceTab.asStateFlow()
 
-    // Off by default, like photos and voice: a new module should appear
-    // because someone chose it, not because an update decided for them.
-    private val _notes = MutableStateFlow(prefs.getBoolean(KEY_NOTES, false))
+    /**
+     * On by default — for updated installs as well as fresh ones.
+     *
+     * The key only exists once someone has moved the switch themselves, so a
+     * single default covers both cases: an install that predates the module has
+     * no `show_notes` entry and reads `true` like a fresh one, while anyone who
+     * turned it off keeps it off. Unlike photos and voice, an empty notebook
+     * says nothing about its owner — there is nothing to opt into until the
+     * user writes something.
+     */
+    private val _notes = MutableStateFlow(prefs.getBoolean(KEY_NOTES, true))
     val notes: StateFlow<Boolean> = _notes.asStateFlow()
 
     /** Bleeding / cycle tracking. Opt-in and off by default: bleeding is a

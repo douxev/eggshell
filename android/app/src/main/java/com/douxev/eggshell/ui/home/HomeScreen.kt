@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Bloodtype
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
@@ -577,14 +579,17 @@ private fun MoodCard(
 @Composable
 private fun FamilyLegend() {
     val scheme = MaterialTheme.colorScheme
-    Row(
+    // FlowRow, not Row: four labels no longer fit one line at a large system
+    // font scale, and a Row would clip the last one silently.
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         LegendDot(scheme.primaryContainer, stringResource(R.string.family_treatment))
         LegendDot(scheme.tertiaryContainer, stringResource(R.string.family_feeling))
         LegendDot(EggColors.evolutionContainer, stringResource(R.string.family_evolution))
+        LegendDot(EggColors.otherContainer, stringResource(R.string.family_other))
     }
 }
 
@@ -610,13 +615,16 @@ private fun LegendDot(color: Color, label: String) {
 // ------------------------------------------------------------ launcher grid
 
 private data class LauncherTile(
-    val module: ModuleBadgePrefs.Module,
+    /** `null` for a tile that announces a module rather than opening one. */
+    val module: ModuleBadgePrefs.Module?,
     val labelRes: Int,
     val icon: ImageVector,
     val family: Family,
+    /** Announced but not shipped: drawn greyed, and takes no input at all. */
+    val comingSoon: Boolean = false,
 )
 
-private enum class Family { Treatment, Feeling, Evolution }
+private enum class Family { Treatment, Feeling, Evolution, Other }
 
 @Composable
 private fun LauncherGrid(
@@ -633,7 +641,10 @@ private fun LauncherGrid(
         if (m.weight) add(LauncherTile(ModuleBadgePrefs.Module.Weight, R.string.module_weight, Icons.Filled.Straighten, Family.Evolution))
         if (m.photos) add(LauncherTile(ModuleBadgePrefs.Module.Photos, R.string.module_photos, Icons.Filled.PhotoCamera, Family.Evolution))
         if (m.voice) add(LauncherTile(ModuleBadgePrefs.Module.Voice, R.string.module_voice, Icons.Filled.GraphicEq, Family.Evolution))
-        if (m.notes) add(LauncherTile(ModuleBadgePrefs.Module.Notes, R.string.module_notes, Icons.Filled.Description, Family.Evolution))
+        if (m.notes) add(LauncherTile(ModuleBadgePrefs.Module.Notes, R.string.module_notes, Icons.Filled.Description, Family.Other))
+        // Always last, and never conditional on a flag: it has nothing to
+        // toggle yet. Removed from here the moment the module itself lands.
+        add(LauncherTile(null, R.string.module_dreams, Icons.Filled.Bedtime, Family.Other, comingSoon = true))
     }
     // A fixed 4-column grid inside an already-scrolling column: laid out by
     // hand rather than with LazyVerticalGrid, which cannot nest in a scroll.
@@ -646,8 +657,8 @@ private fun LauncherGrid(
                 row.forEach { tile ->
                     LauncherCell(
                         tile = tile,
-                        badge = state.badges[tile.module],
-                        onClick = { onOpen(tile.module) },
+                        badge = tile.module?.let { state.badges[it] },
+                        onClick = { tile.module?.let(onOpen) },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -671,24 +682,33 @@ private fun LauncherCell(
         Family.Treatment -> scheme.primaryContainer
         Family.Feeling -> scheme.tertiaryContainer
         Family.Evolution -> EggColors.evolutionContainer
+        Family.Other -> EggColors.otherContainer
     }
     val content = when (tile.family) {
         Family.Treatment -> scheme.onPrimaryContainer
         Family.Feeling -> scheme.onTertiaryContainer
         Family.Evolution -> EggColors.onEvolutionContainer
+        Family.Other -> EggColors.onOtherContainer
     }
-    val accessible = when (badge) {
-        is HomeViewModel.Badge.Counter ->
+    val accessible = when {
+        tile.comingSoon -> stringResource(R.string.home_module_soon_cd, label)
+        badge is HomeViewModel.Badge.Counter ->
             stringResource(R.string.home_badge_pending_cd, label, badge.count)
-        HomeViewModel.Badge.News -> stringResource(R.string.home_badge_news_cd, label)
-        null -> label
+        badge is HomeViewModel.Badge.News -> stringResource(R.string.home_badge_news_cd, label)
+        else -> label
     }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(7.dp),
         modifier = modifier
-            .clickable(onClick = onClick)
+            // A teaser is dimmed *and* inert. Greying it while leaving the
+            // click would promise a screen that does not exist yet, and a
+            // ripple that leads nowhere reads as a bug rather than as an
+            // announcement.
+            .then(
+                if (tile.comingSoon) Modifier.alpha(0.45f) else Modifier.clickable(onClick = onClick)
+            )
             .semantics(mergeDescendants = true) { contentDescription = accessible },
     ) {
         Box(contentAlignment = Alignment.Center) {

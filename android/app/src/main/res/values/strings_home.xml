@@ -41,6 +41,7 @@
     <string name="family_treatment">Traitement</string>
     <string name="family_feeling">Ressenti</string>
     <string name="family_evolution">Évolution</string>
+    <string name="family_other">Autres</string>
 
     <!-- Lanceur : les libellés tiennent sur une seule ligne -->
     <string name="module_meds">Médics</string>
@@ -64,4 +65,7 @@
     <string name="quicklog_subtitle">Un geste, depuis n’importe quel écran.</string>
     <string name="quicklog_footer">Enregistré sur l’appareil, chiffré.</string>
     <string name="module_notes">Notes</string>
+    <string name="module_dreams">Carnet de rêves</string>
+    <!-- Lu à la place du libellé sur une tuile annoncée mais pas encore livrée. -->
+    <string name="home_module_soon_cd">%1$s, bientôt disponible</string>
 </resources>

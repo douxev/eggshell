@@ -131,4 +131,6 @@
 
     <string name="set_module_notes">Notes</string>
     <string name="set_module_notes_sub">Des notes en markdown, avec images et dossiers</string>
+    <string name="set_module_dreams">Carnet de rêves</string>
+    <string name="set_module_dreams_sub">Bientôt — dans la prochaine mise à jour</string>
 </resources>

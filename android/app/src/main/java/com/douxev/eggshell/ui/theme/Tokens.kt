@@ -157,6 +157,17 @@ object EggColors {
     val onEvolutionContainer: Color
         @Composable @ReadOnlyComposable get() = LocalEggExtendedColors.current.onSuccessContainer
 
+    /**
+     * Neutral — the « Autres » family. The three named families each carry a
+     * hue that means something about the data inside them; this one is a
+     * drawer, so it deliberately carries none rather than inventing a fourth
+     * accent the palette would then have to justify.
+     */
+    val otherContainer: Color
+        @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHighest
+    val onOtherContainer: Color
+        @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
+
     /** Grid lines, in every chart of the app and of the PDF (§5.1). */
     val chartGrid: Color
         @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.outlineVariant

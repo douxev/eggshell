@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.EnhancedEncryption
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Fingerprint
@@ -840,6 +841,7 @@ private fun ModulesStep(
     val voice by vm.voiceOn.collectAsState()
     val bleeding by vm.bleedingOn.collectAsState()
     val appointments by vm.appointmentsOn.collectAsState()
+    val notes by vm.notesOn.collectAsState()
 
     StepTitle(
         title = stringResource(R.string.access_onboarding_track_title),
@@ -856,6 +858,7 @@ private fun ModulesStep(
         ToggleRow(Icons.Filled.Mic, R.string.feature_voice_title, R.string.feature_voice_sub, voice, vm::setVoice)
         ToggleRow(Icons.Filled.WaterDrop, R.string.feature_bleeding_title, R.string.feature_bleeding_sub, bleeding, vm::setBleeding)
         ToggleRow(Icons.Filled.Event, R.string.feature_appointments_title, R.string.feature_appointments_sub, appointments, vm::setAppointments)
+        ToggleRow(Icons.Filled.Description, R.string.feature_notes_title, R.string.feature_notes_sub, notes, vm::setNotes)
     }
 
     if (meds) {

@@ -65,7 +65,9 @@ class HomeViewModel @Inject constructor(
         val weight: Boolean = true,
         val photos: Boolean = false,
         val voice: Boolean = false,
-        val notes: Boolean = false,
+        // Matches the FeaturesPrefs default, so the tile is not absent for the
+        // frame before the flags flow emits.
+        val notes: Boolean = true,
     )
 
     /** A launcher badge. Counters win over dots, and at most two are shown. */

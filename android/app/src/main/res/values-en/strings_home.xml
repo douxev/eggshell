@@ -32,6 +32,7 @@
     <string name="family_treatment">Treatment</string>
     <string name="family_feeling">Feelings</string>
     <string name="family_evolution">Progress</string>
+    <string name="family_other">Other</string>
 
     <string name="module_meds">Meds</string>
     <string name="module_appointments">Visits</string>
@@ -51,4 +52,6 @@
     <string name="quicklog_subtitle">One gesture, from any screen.</string>
     <string name="quicklog_footer">Saved on your device, encrypted.</string>
     <string name="module_notes">Notes</string>
+    <string name="module_dreams">Dream journal</string>
+    <string name="home_module_soon_cd">%1$s, coming soon</string>
 </resources>

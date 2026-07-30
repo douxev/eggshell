@@ -510,7 +510,11 @@
     <string name="appointment_error">Une erreur s\'est produite.</string>
     <string name="appointment_reminder_title">Rappel de rendez-vous</string>
     <string name="appointment_reminder_body">Tu as un rendez-vous à venir.</string>
-    <string name="feature_appointments_title">Rendez-vous / Notes</string>
+    <!-- Plus « / Notes » : le module Notes existe pour de vrai maintenant, et
+         deux lignes appelées Notes dans la même liste ne veulent rien dire. -->
+    <string name="feature_appointments_title">Rendez-vous</string>
     <string name="feature_appointments_sub">Note tes RDV médicaux, les professionnel·les et les tâches à faire.</string>
+    <string name="feature_notes_title">Notes</string>
+    <string name="feature_notes_sub">Un carnet en markdown, avec images et dossiers.</string>
     <string name="widget_lab_title">Bilan à prévoir</string>
 </resources>
