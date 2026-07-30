@@ -14,7 +14,7 @@ enum WhatsNewCatalog {
     /// a version-14 entry was already in the list, so the 2.0.0 notes could
     /// never surface on their own — anyone who had seen the sheet at 13 was
     /// already past the gate.
-    static let latestVersion: Int = 18
+    static let latestVersion: Int = 14
 
     struct Release: Identifiable {
         var id: Int { version }
@@ -25,21 +25,11 @@ enum WhatsNewCatalog {
 
     /// Releases, newest first.
     ///
-    /// Deliberately shorter than the android list for the same version. Most of
-    /// what 2.1.0 added — the notes module, the recovery key, the launcher
-    /// families — is android UI over shared core primitives this app does not
-    /// wrap yet, and announcing it here would promise screens that do not
-    /// exist. What is listed is what iOS genuinely gained, which came from the
-    /// core alone.
+    /// No 2.1.0 entry: iOS is not shipping that version. Android 2.1.0 is the
+    /// notes module, the recovery key and the Autres family, and none of them
+    /// exist here — the release notes would describe screens the user cannot
+    /// open. The next entry goes in when the features do.
     static let releases: [Release] = [
-        Release(
-            version: 18,
-            title: "Quoi de neuf",
-            highlights: [
-                "Sauvegardes complètes — tes photos et tes mémos vocaux voyagent maintenant dans l'export chiffré, pas seulement la base. Tes anciennes sauvegardes restent restaurables.",
-                "Coffre plus prudent — une sauvegarde écrite par une version plus récente est refusée au lieu d'être lue à moitié, et une mauvaise phrase secrète est enfin signalée comme telle plutôt qu'en erreur de base de données.",
-            ]
-        ),
         Release(
             version: 14,
             title: "Quoi de neuf",

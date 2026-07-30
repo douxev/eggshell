@@ -12,7 +12,11 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "2.1.0"          # keep in sync with android versionName
+    # Deliberately behind android 2.1.0: that release is the notes module, the
+    # recovery key and the Autres family, none of which exist here yet. Shipping
+    # the number without the features would make the version meaningless as a
+    # statement about what the app can do. Moves to 2.1.0 when the gap closes.
+    MARKETING_VERSION: "2.0.3"
     CURRENT_PROJECT_VERSION: "1"        # build number; CI overrides per upload
     DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}
     # Swift 5 language mode: keeps the large, locally-uncompilable port free of

@@ -7,6 +7,10 @@
 
 ## 0. Delta depuis la 2.0.3 (mis à jour le 2026-07-30)
 
+> iOS ne sort PAS de 2.1.0. Le bump et l’entrée de nouveautés ont été annulés
+> le 2026-07-30 : on comble d’abord les écarts listés ici. `MARKETING_VERSION`
+> reste à 2.0.3.
+
 > **Le corps de ce document, daté du 2026-06-06, n'est plus fiable.** En
 > vérifiant quatre de ses affirmations le 2026-07-30, les quatre étaient
 > périmées (voir « Affirmations de juin devenues fausses » ci-dessous). Les
@@ -32,8 +36,8 @@ Le format de sauvegarde est passé en v3 : le bundle chiffré emporte maintenant
 les fichiers, pas seulement la base. Le cœur les lit dans les dossiers frères de
 `vault.db` (`photos/`, `voice/`, `settings/`, `note_images/`), et `AppPaths` les
 pose déjà exactement là. Un dossier absent est lu comme vide, donc les deux que
-seul Android écrit ne coûtent rien à iOS. **Les exports iOS sont complets dès la
-2.1.0**, sans modification côté app — et la restauration existant réellement
+seul Android écrit ne coûtent rien à iOS. **Les exports iOS seront complets dès
+la prochaine build**, sans modification côté app — et la restauration existant
 (voir le tableau ci-dessus), l'aller-retour complet fonctionne des deux côtés :
 `import_encrypted` réécrit les fichiers dans les dossiers frères du `targetDbPath`
 et repointe les chemins absolus. Le rang 11 du backlog est donc à retirer.
