@@ -26,15 +26,24 @@ struct RecoverySetupView: View {
 
     @State private var secret = ""
     @State private var confirmation = ""
+    @State private var currentPassphrase = ""
+    /// The mode decides which credential minting a second wrap costs: a Face ID
+    /// prompt, or the passphrase the user already has.
+    @State private var mode: SecurityMode?
     @State private var working = false
     @State private var error: String?
+
+    private var needsPassphrase: Bool { mode?.needsPassphrase ?? false }
 
     private static let recommended = 12
     private static let minimum = 8
 
     private var tooShort: Bool { secret.count < Self.minimum }
     private var mismatch: Bool { !confirmation.isEmpty && confirmation != secret }
-    private var canSave: Bool { !tooShort && secret == confirmation && !working }
+    private var canSave: Bool {
+        !tooShort && secret == confirmation && !working
+            && (!needsPassphrase || !currentPassphrase.isEmpty)
+    }
 
     var body: some View {
         ScrollView {
@@ -52,6 +61,7 @@ struct RecoverySetupView: View {
         .background(palette.surface.ignoresSafeArea())
         .navigationTitle(dismissible ? "Clé de récupération" : "")
         .interactiveDismissDisabled(!dismissible)
+        .task { mode = await app.manager.currentMode }
     }
 
     private var header: some View {
@@ -67,19 +77,17 @@ struct RecoverySetupView: View {
         .padding(.bottom, Spacing.xs)
     }
 
+    /// The reason depends on the mode. The gate only ever appears in biometric
+    /// mode, but this screen is also reachable from Réglages in every other one,
+    /// and telling a passphrase user that « seul Face ID ouvre ce coffre » would
+    /// be plainly false on their own device.
     private var explanation: some View {
         EggCard(variant: .low) {
-            Text("Aujourd'hui, seul Face ID ou Touch ID ouvre ce coffre.")
+            Text(headline)
                 .font(.eggBody)
                 .foregroundStyle(palette.onSurface)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("""
-                 Si tu ajoutes une empreinte ou un visage dans les réglages de \
-                 ton téléphone, iOS considère que la clé de l'app n'est plus \
-                 fiable et la détruit. Tes données restent chiffrées sur \
-                 l'appareil, mais plus rien ne peut les déchiffrer. Il n'y a ni \
-                 réinitialisation, ni support, ni récupération possible.
-                 """)
+            Text(risk)
                 .font(EggFont.bodyS)
                 .foregroundStyle(palette.onSurfaceVariant)
                 .fixedSize(horizontal: false, vertical: true)
@@ -91,6 +99,43 @@ struct RecoverySetupView: View {
                 .font(EggFont.bodyS)
                 .foregroundStyle(palette.onSurfaceVariant)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var headline: String {
+        switch mode {
+        case .keystoreBiometric:
+            return "Aujourd'hui, seul Face ID ou Touch ID ouvre ce coffre."
+        case .keystorePassphrase, .paranoid:
+            return "Aujourd'hui, seule ta phrase secrète ouvre ce coffre."
+        default:
+            return "Aujourd'hui, une seule chose ouvre ce coffre."
+        }
+    }
+
+    private var risk: String {
+        switch mode {
+        case .keystoreBiometric:
+            return """
+                   Si tu ajoutes une empreinte ou un visage dans les réglages de \
+                   ton téléphone, iOS considère que la clé de l'app n'est plus \
+                   fiable et la détruit. Tes données restent chiffrées sur \
+                   l'appareil, mais plus rien ne peut les déchiffrer. Il n'y a ni \
+                   réinitialisation, ni support, ni récupération possible.
+                   """
+        case .keystorePassphrase, .paranoid:
+            return """
+                   Si tu l'oublies, tes données restent chiffrées sur l'appareil \
+                   mais plus rien ne peut les déchiffrer. Il n'y a ni \
+                   réinitialisation, ni support, ni récupération possible.
+                   """
+        default:
+            return """
+                   Si la clé que ton téléphone garde pour l'app devient \
+                   inutilisable, tes données restent chiffrées sur l'appareil \
+                   mais plus rien ne peut les déchiffrer. Il n'y a ni \
+                   réinitialisation, ni support, ni récupération possible.
+                   """
         }
     }
 
@@ -125,6 +170,27 @@ struct RecoverySetupView: View {
                 .font(EggFont.bodyS)
                 .foregroundStyle(palette.onSurfaceVariant)
                 .fixedSize(horizontal: false, vertical: true)
+
+            // Creating a second way in has to cost proving you can already get
+            // in. In biometric and keystore-only modes that is a system prompt;
+            // in passphrase and paranoid modes the master key is only reachable
+            // through the passphrase, so it has to be typed. Without this field
+            // `setRecoverySecret` throws `missingPassphrase` and the screen just
+            // says it failed, with nothing the user can do about it.
+            if needsPassphrase {
+                CardRule()
+                Text("Ta phrase secrète actuelle, pour confirmer que c'est bien toi.")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
+                SecureField("Phrase secrète actuelle", text: $currentPassphrase)
+                    .textContentType(.password)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(Spacing.m)
+                    .background(RoundedRectangle(cornerRadius: Radius.field, style: .continuous)
+                        .fill(palette.surfaceContainerLow))
+            }
         }
     }
 
@@ -171,12 +237,18 @@ struct RecoverySetupView: View {
         let context = LAContext()
         context.localizedReason = "Confirmer pour créer la clé de récupération"
         do {
-            try await app.manager.setRecoverySecret(secret, biometricContext: context)
+            try await app.manager.setRecoverySecret(
+                secret,
+                passphrase: needsPassphrase ? currentPassphrase : nil,
+                biometricContext: context)
             secret = ""
             confirmation = ""
+            currentPassphrase = ""
             if let onDone { onDone() } else { app.recoverySetupFinished() }
         } catch {
-            self.error = "On n'a pas réussi à enregistrer cette clé. Réessaie."
+            self.error = needsPassphrase
+                ? "On n'a pas réussi à enregistrer cette clé. Vérifie ta phrase secrète actuelle."
+                : "On n'a pas réussi à enregistrer cette clé. Réessaie."
         }
     }
 }

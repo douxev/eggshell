@@ -210,11 +210,8 @@ final class UnlockViewModel: ObservableObject {
         }
     }
 
-    /// Open the vault with the recovery secret, then rebuild the biometric key.
-    ///
-    /// The re-arm matters as much as the unlock: without it someone whose
-    /// Keychain key died would be asked for this secret at every launch
-    /// forever, because nothing else ever rebuilds that key.
+    /// Open the vault with the recovery secret. The manager rebuilds the
+    /// biometric key on the way through, from the key it just derived.
     func submitRecovery() async {
         let secret = recoverySecret
         guard !secret.isEmpty else { return }
@@ -222,7 +219,6 @@ final class UnlockViewModel: ObservableObject {
         error = nil
         do {
             let session = try await manager.unlockWithRecovery(secret)
-            await manager.rearmBiometricKey(afterRecovery: secret)
             limiter.recordSuccess()
             refreshFailures()
             recoverySecret = ""

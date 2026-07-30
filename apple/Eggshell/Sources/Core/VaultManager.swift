@@ -253,7 +253,13 @@ actor VaultManager {
     ///
     /// This is the path that saves someone whose Keychain key was destroyed by
     /// a new biometric enrolment: it never touches the Keychain at all.
-    func unlockWithRecovery(_ secret: String) throws -> VaultService {
+    /// Derives the key ONCE and re-arms on the way through.
+    ///
+    /// The re-arm used to be a second call taking the secret again, which meant
+    /// running 128 MiB Argon2id twice — several seconds of it — on the one path
+    /// somebody walks in a panic. It happens here, with the key already in hand.
+    func unlockWithRecovery(_ secret: String,
+                            biometricContext: LAContext? = nil) throws -> VaultService {
         guard prefs.isProvisioned else { throw VaultError.notProvisioned }
         guard let wrapped = prefs.recoveryWrapped, let salt = prefs.recoverySalt else {
             throw VaultError.missingWrappedKey
@@ -264,24 +270,25 @@ actor VaultManager {
             tCost: prefs.recoveryTCost, pCost: prefs.recoveryPCost)
         try vaultVerifyKey(dbPath: dbPath, key: key)
         let vault = try Vault(dbPath: dbPath, key: key)
+
+        // Best-effort, and deliberately after the vault is open: nothing below
+        // may turn a successful unlock into a failure.
+        if currentMode == .keystoreBiometric {
+            rearmBiometricKey(with: key, biometricContext: biometricContext)
+        }
         return VaultService(vault: vault, isDecoy: false)
     }
 
-    /// Rebuild the biometric wrap after a recovery unlock.
+    /// Rebuild the biometric wrap around a key we already hold.
     ///
     /// Without this, someone whose Keychain key died would be asked for the
     /// recovery secret at *every* unlock forever, because nothing else ever
-    /// rebuilds that key. Best-effort by design: the vault is already open, and
-    /// nothing here may turn that into a failure.
-    func rearmBiometricKey(afterRecovery secret: String,
-                           biometricContext: LAContext? = nil) {
-        guard currentMode == .keystoreBiometric else { return }
-        guard let wrapped = prefs.recoveryWrapped, let salt = prefs.recoverySalt else { return }
-        guard let key = try? VaultKey.unwrapWithPassphrase(
-            wrapped: wrapped, passphrase: secret.trimmingCharacters(in: .whitespacesAndNewlines),
-            salt: salt, mCostKib: prefs.recoveryMCostKib,
-            tCost: prefs.recoveryTCost, pCost: prefs.recoveryPCost) else { return }
-
+    /// rebuilds that key. The old entry has to go first: an invalidated key
+    /// still occupies its slot, so `ensureWrappingKey` would find it and keep
+    /// the dead one. `prefs.wrappedKey` is only overwritten on success, so a
+    /// failure here leaves exactly the state we arrived in — unopenable by
+    /// biometry, still openable by the recovery secret.
+    private func rearmBiometricKey(with key: VaultKey, biometricContext: LAContext?) {
         Keystore.wipe()
         try? Keystore.ensureWrappingKey(biometric: true)
         if let rewrapped = try? Keystore.wrap(key.exportRaw(), biometric: true,

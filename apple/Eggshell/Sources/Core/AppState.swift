@@ -40,12 +40,13 @@ final class AppState: ObservableObject {
 
     func unlocked(session: VaultService) {
         self.session = session
-        route = .home
         Task {
-            // The gate is raised *after* the vault is open, deliberately: the
-            // screen mints a second wrap of the master key, which needs the
-            // vault openable in the first place.
-            if await manager.needsRecoverySetup { route = .recoverySetup }
+            // Decided before the route is set, not after: routing to .home and
+            // correcting it a hop later mounts the whole shell, loads it, and
+            // tears it down again behind the gate. The gate itself can only
+            // exist once the vault is open — it mints a second wrap of the
+            // master key.
+            route = await manager.needsRecoverySetup ? .recoverySetup : .home
             await refreshNotifications(); await refreshAppointmentReminders(); await drainPendingDoses()
         }
     }
