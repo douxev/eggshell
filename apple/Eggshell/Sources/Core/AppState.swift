@@ -46,7 +46,11 @@ final class AppState: ObservableObject {
             // tears it down again behind the gate. The gate itself can only
             // exist once the vault is open — it mints a second wrap of the
             // master key.
-            route = await manager.needsRecoverySetup ? .recoverySetup : .home
+            // Bound to its own `let` rather than written inline: `await` in
+            // front of a ternary is legal but reads as though it covered only
+            // the condition, and this line decides whether a gate appears.
+            let needsGate = await manager.needsRecoverySetup
+            route = needsGate ? .recoverySetup : .home
             await refreshNotifications(); await refreshAppointmentReminders(); await drainPendingDoses()
         }
     }
