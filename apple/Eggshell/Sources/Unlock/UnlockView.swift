@@ -27,6 +27,8 @@ final class UnlockViewModel: ObservableObject {
         case passphrase
         case working
         case throttled(Int)   // seconds remaining
+        /// The recovery secret, entered instead of the primary factor.
+        case recovery
     }
 
     /// Starts on `.pin` under a decoy so the very first frame is already a
