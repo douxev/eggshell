@@ -49,6 +49,11 @@ struct Palette: Sendable {
     /// towards the neutral of the same lightness (handoff §3.2).
     var evolutionContainer: Color { successContainer.mix(with: surfaceContainerHighest, by: 0.45) }
     var onEvolutionContainer: Color { onSuccessContainer }
+    /// Neutral — the « Autres » family. The three named families each carry a
+    /// hue that means something about the data inside them; this one is a
+    /// drawer, so it carries none rather than inventing a fourth accent.
+    var otherContainer: Color { surfaceContainerHighest }
+    var onOtherContainer: Color { onSurfaceVariant }
 
     /// The new tokens default to the value the screens were already
     /// approximating, so a palette that has not been revisited renders exactly

@@ -57,7 +57,7 @@ struct SettingsHubView: View {
         ListGroup {
             ListRowView(
                 title: "Modules",
-                subtitle: "\(features.enabledCount) activés sur 8 · ce que l'app suit pour toi",
+                subtitle: "\(features.enabledCount) activés sur \(FeaturesStore.togglableCount) · ce que l'app suit pour toi",
                 systemImage: "square.grid.2x2",
                 iconContainer: palette.primaryContainer,
                 iconTint: palette.onPrimaryContainer,
@@ -244,10 +244,16 @@ struct SettingsHubView: View {
 }
 
 extension FeaturesStore {
-    /// « N activés sur 8 » — the door's subtitle has to be counted, not typed.
+    /// The denominator of « N activés sur M ». Counted from the same list as
+    /// `enabledCount`, never typed: the two drifted apart the last time a
+    /// module was added. « Carnet de rêves » is excluded because it cannot be
+    /// switched — counting it would claim one more module than the app has.
+    static var togglableCount: Int { 9 }
+
+    /// « N activés sur M » — the door's subtitle has to be counted, not typed.
     /// Lives here rather than in `Core/Stores.swift` so the store stays a store.
     var enabledCount: Int {
-        [medications, journal, hormones, weight, photos, voice, bleeding, appointments]
+        [medications, journal, hormones, weight, photos, voice, bleeding, appointments, notes]
             .filter { $0 }
             .count
     }

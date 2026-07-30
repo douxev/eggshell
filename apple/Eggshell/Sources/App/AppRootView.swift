@@ -9,6 +9,7 @@ struct AppRootView: View {
         case .launching:  LaunchView()
         case .onboarding: OnboardingView()
         case .unlock:     UnlockView()
+        case .recoverySetup: RecoverySetupView()
         case .home:       AppShell()
         case .decoy:      DecoyNotesView()
         }

@@ -34,6 +34,7 @@ final class UnlockViewModel: ObservableObject {
     @Published var step: Step
     @Published var pin = ""
     @Published var passphrase = ""
+    @Published var recoverySecret = ""
     @Published var error: String?
     /// Drives the neutral "Notes" re-skin of the lock screen. When a decoy PIN
     /// is configured the lock screen must not betray the real app (no lavender
@@ -47,6 +48,14 @@ final class UnlockViewModel: ObservableObject {
     /// Raised once, just before the attempt that would erase everything (§5.4:
     /// a destructive step is announced *before* it becomes possible).
     @Published var wipeWarning = false
+
+    /// Whether the screen may offer the recovery secret at all.
+    ///
+    /// Under a decoy this stays false until the access PIN has been accepted:
+    /// « Utiliser ma clé de récupération » on what is supposed to be a notes
+    /// app is a tell, and the whole point of the re-skin is that there is
+    /// nothing to notice. Once the PIN is in, the cover is already dropped.
+    @Published private(set) var recoveryReachable = false
 
     /// Display-only mirror of the threshold enforced by `PinRateLimiter`.
     /// Nothing here decides anything: it lets the screen say "il te reste N
@@ -90,6 +99,7 @@ final class UnlockViewModel: ObservableObject {
         // the skin *off*, which is never a leak.
         hasDecoy = await manager.hasDecoy
         decoyConfigured = hasDecoy
+        recoveryReachable = await manager.hasRecoverySecret && !hasDecoy
         refreshFailures()
         if let ms = throttleRemainingMs(), ms > 0 {
             step = .throttled(Int((ms + 999) / 1000))
@@ -147,6 +157,10 @@ final class UnlockViewModel: ObservableObject {
     // MARK: Mode auth
 
     private func beginModeAuth() async {
+        // Past the decoy gate (or never behind one): the recovery route may now
+        // be shown without telling anyone anything they did not already know.
+        recoveryReachable = await manager.hasRecoverySecret
+
         switch mode {
         case .keystoreOnly:
             await unlock()
@@ -193,6 +207,32 @@ final class UnlockViewModel: ObservableObject {
             // rather than dropping the user straight back onto the keyboard.
             if case .throttled = step { return }
             step = (mode.needsPassphrase) ? .passphrase : (mode.needsBiometric ? .biometric : .passphrase)
+        }
+    }
+
+    /// Open the vault with the recovery secret, then rebuild the biometric key.
+    ///
+    /// The re-arm matters as much as the unlock: without it someone whose
+    /// Keychain key died would be asked for this secret at every launch
+    /// forever, because nothing else ever rebuilds that key.
+    func submitRecovery() async {
+        let secret = recoverySecret
+        guard !secret.isEmpty else { return }
+        step = .working
+        error = nil
+        do {
+            let session = try await manager.unlockWithRecovery(secret)
+            await manager.rearmBiometricKey(afterRecovery: secret)
+            limiter.recordSuccess()
+            refreshFailures()
+            recoverySecret = ""
+            app?.unlocked(session: session)
+        } catch {
+            handleFailure()
+            self.error = "Cette clé de récupération ne correspond pas."
+            self.recoverySecret = ""
+            if case .throttled = step { return }
+            step = .recovery
         }
     }
 
@@ -304,6 +344,7 @@ struct UnlockView: View {
                 if locked { lockoutCard.padding(.top, Spacing.l) }
                 Spacer(minLength: Spacing.l)
                 bottom
+                recoveryEscape
             }
             .padding(.horizontal, 26)
             .padding(.bottom, 30)
@@ -411,7 +452,55 @@ struct UnlockView: View {
 
         case .passphrase:
             passphraseInput(enabled: true)
+
+        case .recovery:
+            recoveryInput
         }
+    }
+
+    /// The way back in when the primary factor is gone. Offered as a quiet
+    /// text button rather than a filled one: it is the exception, and a screen
+    /// that presents two equal buttons makes people hesitate every single day
+    /// over a path they should need once.
+    @ViewBuilder
+    private var recoveryEscape: some View {
+        if vm.recoveryReachable, vm.step == .biometric || vm.step == .passphrase {
+            Button("Utiliser ma clé de récupération") {
+                vm.error = nil
+                vm.step = .recovery
+            }
+            .font(EggFont.bodyS)
+            .foregroundStyle(skin.accent)
+            .padding(.top, Spacing.s)
+        }
+    }
+
+    private var recoveryInput: some View {
+        VStack(spacing: Spacing.s) {
+            SecureField("Clé de récupération", text: $vm.recoverySecret)
+                .textContentType(.password)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .padding(Spacing.m)
+                .background(RoundedRectangle(cornerRadius: Radius.field, style: .continuous)
+                    .fill(skin.keyContainer))
+                .foregroundStyle(skin.onSurface)
+
+            filledButton("Ouvrir le coffre",
+                         systemImage: "key.horizontal.fill",
+                         enabled: !vm.recoverySecret.isEmpty) {
+                Task { await vm.submitRecovery() }
+            }
+
+            Button("Revenir") {
+                vm.error = nil
+                vm.recoverySecret = ""
+                vm.step = vm.mode.needsPassphrase ? .passphrase : .biometric
+            }
+            .font(EggFont.bodyS)
+            .foregroundStyle(skin.onSurfaceVariant)
+        }
+        .padding(.horizontal, Metrics.screenMargin)
     }
 
     private func keypad(enabled: Bool) -> some View {

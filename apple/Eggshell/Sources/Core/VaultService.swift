@@ -154,6 +154,50 @@ actor VaultService {
     }
     func deleteAppointment(_ id: Int64) throws { try vault.deleteAppointment(id: id) }
 
+    // MARK: Notes
+    //
+    // Folders nest, notes do not: a note lives in exactly one folder, or at the
+    // root when folderId is nil. Ordering inside a folder is manual and
+    // persisted, so a move is a rewrite of integers rather than tree surgery.
+    // Image *rows* live here; the ciphertext on disk is NotesStore's job.
+    @discardableResult
+    func addNote(_ n: NewNote) throws -> Note { try vault.addNote(note: n) }
+    func listNotes(folderId: Int64?) throws -> [Note] { try vault.listNotes(folderId: folderId) }
+    func getNote(_ id: Int64) throws -> Note? { try vault.getNote(id: id) }
+    @discardableResult
+    func updateNote(_ id: Int64, title: String, body: String,
+                    updatedMs: Int64 = Time.nowMs()) throws -> Note {
+        try vault.updateNote(id: id, title: title, body: body, updatedMs: updatedMs)
+    }
+    func deleteNote(_ id: Int64) throws { try vault.deleteNote(id: id) }
+    func reorderNotes(_ idsInOrder: [Int64]) throws { try vault.reorderNotes(idsInOrder: idsInOrder) }
+    func moveNote(_ id: Int64, toFolder folderId: Int64?) throws {
+        try vault.moveNoteToFolder(id: id, folderId: folderId)
+    }
+
+    @discardableResult
+    func addNoteFolder(_ f: NewNoteFolder) throws -> NoteFolder { try vault.addNoteFolder(folder: f) }
+    func listNoteFolders(parentId: Int64?) throws -> [NoteFolder] {
+        try vault.listNoteFolders(parentId: parentId)
+    }
+    func renameNoteFolder(_ id: Int64, name: String) throws {
+        try vault.renameNoteFolder(id: id, name: name)
+    }
+    /// How many notes a folder deletion would take with it, subfolders included.
+    func noteFolderContentsCount(_ id: Int64) throws -> Int64 {
+        try vault.noteFolderContentsCount(id: id)
+    }
+    func noteImagePathsUnderFolder(_ id: Int64) throws -> [String] {
+        try vault.noteImagePathsUnderFolder(id: id)
+    }
+    func deleteNoteFolder(_ id: Int64) throws { try vault.deleteNoteFolder(id: id) }
+
+    @discardableResult
+    func addNoteImage(_ img: NewNoteImage) throws -> NoteImage { try vault.addNoteImage(img: img) }
+    func noteImages(noteId: Int64) throws -> [NoteImage] { try vault.noteImages(noteId: noteId) }
+    func allNoteImagePaths() throws -> [String] { try vault.allNoteImagePaths() }
+    func deleteNoteImage(_ id: Int64) throws { try vault.deleteNoteImage(id: id) }
+
     // MARK: Hormones
     func addHormoneMeasurement(_ m: NewHormoneMeasurement) throws -> HormoneMeasurement {
         try vault.addHormoneMeasurement(m: m)

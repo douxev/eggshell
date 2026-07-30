@@ -123,6 +123,8 @@ struct AdvancedSettingsView: View {
     // Restore
     @State private var showImporter = false
     @State private var pendingBundleURL: URL?
+    @State private var hasRecovery = false
+    @State private var showRecoverySheet = false
     @State private var restoreBundlePass = ""
     @State private var restoreMode: SecurityMode = .keystoreOnly
     @State private var restoreLocalPass = ""
@@ -153,6 +155,7 @@ struct AdvancedSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 lockModeSection
+                recoverySection
                 pinSection
                 maskingSection
                 screenshotSection
@@ -251,6 +254,35 @@ struct AdvancedSettingsView: View {
     }
 
     // MARK: - Code d'accès et PIN de leurre
+
+    /// The second way in. Reachable from settings for everyone, not only for
+    /// the biometric users the gate corners: a passphrase can be forgotten too,
+    /// and someone who switches to biometric mode later has already been asked
+    /// to set one by then.
+    private var recoverySection: some View {
+        EggCard(variant: .low, spacing: Spacing.m) {
+            MicroLabel("CLÉ DE RÉCUPÉRATION")
+            Text(hasRecovery
+                 ? "Une clé est enregistrée. Tu peux la remplacer ; l'ancienne cesse alors de fonctionner."
+                 : "Une seconde façon d'ouvrir ton coffre, indépendante du matériel du téléphone. Sans elle, ajouter une empreinte ou un visage peut rendre tes données définitivement illisibles.")
+                .font(EggFont.bodyS)
+                .foregroundStyle(palette.onSurfaceVariant)
+                .fixedSize(horizontal: false, vertical: true)
+
+            filled(hasRecovery ? "Remplacer la clé" : "Définir une clé", enabled: true) {
+                showRecoverySheet = true
+            }
+        }
+        .task { hasRecovery = await app.manager.hasRecoverySecret }
+        .sheet(isPresented: $showRecoverySheet) {
+            NavigationStack {
+                RecoverySetupView(dismissible: true) {
+                    showRecoverySheet = false
+                    Task { hasRecovery = await app.manager.hasRecoverySecret }
+                }
+            }
+        }
+    }
 
     private var pinSection: some View {
         EggCard(variant: .low, spacing: Spacing.m) {

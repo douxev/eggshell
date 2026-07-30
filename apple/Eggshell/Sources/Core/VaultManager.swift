@@ -47,6 +47,19 @@ actor VaultManager {
     var isProvisioned: Bool { prefs.isProvisioned }
     var currentMode: SecurityMode? { prefs.modeRaw.flatMap(SecurityMode.init(rawValue:)) }
     var hasDecoy: Bool { prefs.hasDecoyPin }
+    var hasRecoverySecret: Bool { prefs.hasRecovery }
+
+    /// Whether the app should insist on a recovery secret before letting the
+    /// user get on with it.
+    ///
+    /// Biometric mode only, and only while none is set. That mode is the one
+    /// where the vault can become unopenable through no fault of the user:
+    /// enrolling a new fingerprint or face invalidates the Keychain key, and
+    /// without a second wrap the data is simply gone. The other modes always
+    /// retain something the user knows.
+    var needsRecoverySetup: Bool {
+        currentMode == .keystoreBiometric && !prefs.hasRecovery
+    }
 
     // MARK: Create (onboarding)
 
@@ -116,6 +129,12 @@ actor VaultManager {
         persistKdf(mat)
         try wrapAndPersist(key: key, mode: newMode, passphrase: newPassphrase, mat: mat, biometricContext: biometricContext)
         prefs.modeRaw = newMode.rawValue
+        // The recovery wrap holds the same master key, so it survives a mode
+        // change on paper. It is dropped anyway: it was minted under the old
+        // mode's promise, and leaving it in place would let a mode the user
+        // just tightened stay openable by the secret they set under a looser
+        // one. `needsRecoverySetup` will ask for a new one where it matters.
+        prefs.clearRecovery()
     }
 
     // MARK: Wrapping helpers
@@ -187,6 +206,94 @@ actor VaultManager {
                 mCostKib: prefs.kdfMCostKib, tCost: prefs.kdfTCost, pCost: prefs.kdfPCost)
         }
     }
+
+    // MARK: Recovery secret
+
+    /// Wrap the master key a second time, under a secret the user holds.
+    ///
+    /// Needs the raw master key, which is deliberately not kept in memory after
+    /// unlock — so this re-runs the mode's normal path, i.e. one more Face ID
+    /// prompt. That is not an implementation detail: minting a second way into
+    /// the vault should require proving you are the person who can already open
+    /// it.
+    func setRecoverySecret(_ secret: String, passphrase: String? = nil,
+                           biometricContext: LAContext? = nil) throws {
+        guard let mode = currentMode else { throw VaultError.unknownMode }
+        let trimmed = secret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw VaultError.missingPassphrase }
+
+        let key = try resolveKey(mode: mode, passphrase: passphrase,
+                                 biometricContext: biometricContext)
+
+        // Deliberately costlier Argon2id than the rest of the app.
+        //
+        // This is the one wrap with no Keychain layer in front of it — which is
+        // exactly what lets it survive a destroyed Keychain key, and also what
+        // makes it brute-forceable straight out of a preferences dump. It is
+        // used twice in a vault's life (here, and in an emergency), so seconds
+        // are affordable where the unlock path's sub-second budget is not.
+        //
+        // 128 MiB rather than the 256 the arithmetic would like: many of the
+        // people this app is for are not on flagship phones, and an allocation
+        // that fails is worse than a cheaper KDF. Length is the real lever
+        // anyway — each extra character is worth far more than this doubling.
+        let mat = freshKdfMaterial()
+        let wrapped = try key.wrapWithPassphrase(
+            passphrase: trimmed, salt: mat.salt,
+            mCostKib: Self.recoveryMCostKib, tCost: Self.recoveryTCost, pCost: mat.pCost)
+
+        prefs.recoveryWrapped = wrapped
+        prefs.recoverySalt = mat.salt
+        prefs.recoveryMCostKib = Self.recoveryMCostKib
+        prefs.recoveryTCost = Self.recoveryTCost
+        prefs.recoveryPCost = mat.pCost
+    }
+
+    /// Open the vault with the recovery secret instead of the primary factor.
+    ///
+    /// This is the path that saves someone whose Keychain key was destroyed by
+    /// a new biometric enrolment: it never touches the Keychain at all.
+    func unlockWithRecovery(_ secret: String) throws -> VaultService {
+        guard prefs.isProvisioned else { throw VaultError.notProvisioned }
+        guard let wrapped = prefs.recoveryWrapped, let salt = prefs.recoverySalt else {
+            throw VaultError.missingWrappedKey
+        }
+        let key = try VaultKey.unwrapWithPassphrase(
+            wrapped: wrapped, passphrase: secret.trimmingCharacters(in: .whitespacesAndNewlines),
+            salt: salt, mCostKib: prefs.recoveryMCostKib,
+            tCost: prefs.recoveryTCost, pCost: prefs.recoveryPCost)
+        try vaultVerifyKey(dbPath: dbPath, key: key)
+        let vault = try Vault(dbPath: dbPath, key: key)
+        return VaultService(vault: vault, isDecoy: false)
+    }
+
+    /// Rebuild the biometric wrap after a recovery unlock.
+    ///
+    /// Without this, someone whose Keychain key died would be asked for the
+    /// recovery secret at *every* unlock forever, because nothing else ever
+    /// rebuilds that key. Best-effort by design: the vault is already open, and
+    /// nothing here may turn that into a failure.
+    func rearmBiometricKey(afterRecovery secret: String,
+                           biometricContext: LAContext? = nil) {
+        guard currentMode == .keystoreBiometric else { return }
+        guard let wrapped = prefs.recoveryWrapped, let salt = prefs.recoverySalt else { return }
+        guard let key = try? VaultKey.unwrapWithPassphrase(
+            wrapped: wrapped, passphrase: secret.trimmingCharacters(in: .whitespacesAndNewlines),
+            salt: salt, mCostKib: prefs.recoveryMCostKib,
+            tCost: prefs.recoveryTCost, pCost: prefs.recoveryPCost) else { return }
+
+        Keystore.wipe()
+        try? Keystore.ensureWrappingKey(biometric: true)
+        if let rewrapped = try? Keystore.wrap(key.exportRaw(), biometric: true,
+                                              context: biometricContext) {
+            prefs.wrappedKey = rewrapped
+        }
+    }
+
+    func clearRecoverySecret() { prefs.clearRecovery() }
+
+    private static let recoveryMCostKib: UInt32 = 128 * 1024
+    private static let recoveryTCost: UInt32 = 4
 
     // MARK: Wipe
 

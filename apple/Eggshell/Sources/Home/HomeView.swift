@@ -192,6 +192,7 @@ struct HomeView: View {
         case .weight:       return .weight
         case .photos:       return .photos
         case .voice:        return .voice
+        case .notes:        return .notes
         }
     }
 
@@ -472,11 +473,13 @@ private struct FamilyLegend: View {
     @Environment(\.palette) private var palette
 
     var body: some View {
-        HStack(spacing: 14) {
+        // Wraps rather than clipping: four labels no longer fit one line at a
+        // large Dynamic Type size, and the last one would vanish silently.
+        ChipFlowLayout(spacing: 14, lineSpacing: 6) {
             dot(palette.primaryContainer, "Traitement")
             dot(palette.tertiaryContainer, "Ressenti")
             dot(palette.evolutionContainer, "Évolution")
-            Spacer(minLength: 0)
+            dot(palette.otherContainer, "Autres")
         }
         .accessibilityElement(children: .combine)
     }
@@ -496,15 +499,34 @@ private struct FamilyLegend: View {
 
 /// A tile's family, which is also its colour pair.
 private enum LauncherFamily {
-    case treatment, feeling, evolution
+    case treatment, feeling, evolution, other
 }
 
 private struct LauncherSpec: Identifiable {
-    let module: LauncherModule
+    /// `nil` for a tile that announces a module rather than opening one.
+    let module: LauncherModule?
+    let id: String
     let label: String
     let systemImage: String
     let family: LauncherFamily
-    var id: LauncherModule { module }
+    /// Announced but not shipped: drawn greyed, and takes no input at all.
+    var comingSoon: Bool { module == nil }
+
+    init(module: LauncherModule, label: String, systemImage: String, family: LauncherFamily) {
+        self.module = module
+        self.id = module.rawValue
+        self.label = label
+        self.systemImage = systemImage
+        self.family = family
+    }
+
+    init(teaser id: String, label: String, systemImage: String, family: LauncherFamily) {
+        self.module = nil
+        self.id = id
+        self.label = label
+        self.systemImage = systemImage
+        self.family = family
+    }
 }
 
 private struct LauncherGrid: View {
@@ -518,7 +540,9 @@ private struct LauncherGrid: View {
     var body: some View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
             ForEach(tiles) { tile in
-                LauncherCell(spec: tile, badge: badges[tile.module]) { onOpen(tile.module) }
+                LauncherCell(spec: tile, badge: tile.module.flatMap { badges[$0] }) {
+                    if let module = tile.module { onOpen(module) }
+                }
             }
         }
     }
@@ -559,6 +583,14 @@ private struct LauncherGrid: View {
             all.append(LauncherSpec(module: .voice, label: "Voix",
                                     systemImage: "waveform", family: .evolution))
         }
+        if features.notes {
+            all.append(LauncherSpec(module: .notes, label: "Notes",
+                                    systemImage: "doc.text", family: .other))
+        }
+        // Always last, and never gated on a flag: it has nothing to toggle yet.
+        // Delete this line the moment the module itself lands.
+        all.append(LauncherSpec(teaser: "dreams", label: "Rêves",
+                                systemImage: "moon.stars.fill", family: .other))
         return all
     }
 }
@@ -570,22 +602,34 @@ private struct LauncherCell: View {
     let onTap: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(spacing: 7) {
-                tile
-                Text(spec.label)
-                    .font(EggFont.micro)
-                    .tracking(0.5)
-                    .foregroundStyle(palette.onSurfaceVariant)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
+        if spec.comingSoon {
+            // Dimmed *and* inert — no Button at all. Greying a tile while
+            // leaving it tappable promises a screen that does not exist, and a
+            // highlight that leads nowhere reads as a bug, not an announcement.
+            content
+                .opacity(0.45)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(accessibleName)
+        } else {
+            Button(action: onTap) { content }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(accessibleName)
+                .accessibilityAddTraits(.isButton)
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibleName)
-        .accessibilityAddTraits(.isButton)
+    }
+
+    private var content: some View {
+        VStack(spacing: 7) {
+            tile
+            Text(spec.label)
+                .font(EggFont.micro)
+                .tracking(0.5)
+                .foregroundStyle(palette.onSurfaceVariant)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
     }
 
     /// iOS drops the knock-out ring native badges never use: the counter stays
@@ -598,7 +642,7 @@ private struct LauncherCell: View {
                 .overlay {
                     Image(systemName: spec.systemImage)
                         .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(content)
+                        .foregroundStyle(iconColor)
                 }
             switch badge {
             case .counter(let count):
@@ -623,6 +667,7 @@ private struct LauncherCell: View {
     }
 
     private var accessibleName: String {
+        if spec.comingSoon { return "\(spec.label), bientôt disponible" }
         switch badge {
         case .counter(let count):
             return "\(spec.label), \(count) en attente"
@@ -638,14 +683,16 @@ private struct LauncherCell: View {
         case .treatment: return palette.primaryContainer
         case .feeling:   return palette.tertiaryContainer
         case .evolution: return palette.evolutionContainer
+        case .other:     return palette.otherContainer
         }
     }
 
-    private var content: Color {
+    private var iconColor: Color {
         switch spec.family {
         case .treatment: return palette.onPrimaryContainer
         case .feeling:   return palette.onTertiaryContainer
         case .evolution: return palette.onEvolutionContainer
+        case .other:     return palette.onOtherContainer
         }
     }
 }

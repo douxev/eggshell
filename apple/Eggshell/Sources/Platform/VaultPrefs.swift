@@ -20,6 +20,11 @@ struct VaultPrefs {
         static let accessHash = "access_hash"
         static let decoySalt = "decoy_salt"
         static let decoyHash = "decoy_hash"
+        static let recoveryWrapped = "recovery_wrapped"
+        static let recoverySalt = "recovery_salt"
+        static let recoveryM = "recovery_m_cost_kib"
+        static let recoveryT = "recovery_t_cost"
+        static let recoveryP = "recovery_p_cost"
     }
 
     // Whether a vault has been provisioned at all.
@@ -72,9 +77,48 @@ struct VaultPrefs {
     }
     var hasDecoyPin: Bool { decoyHash != nil && accessHash != nil }
 
+    // MARK: Recovery wrap
+    //
+    // A second, independent wrapping of the same master key under a secret the
+    // user holds. Its own KDF material, deliberately costlier than the app's —
+    // see VaultManager.setRecoverySecret for why. Kept apart from `kdf*` so
+    // changing the security mode, which re-rolls those, cannot silently
+    // invalidate the one way back in.
+
+    var recoveryWrapped: Data? {
+        get { d.data(forKey: K.recoveryWrapped) }
+        nonmutating set { d.set(newValue, forKey: K.recoveryWrapped) }
+    }
+    var recoverySalt: Data? {
+        get { d.data(forKey: K.recoverySalt) }
+        nonmutating set { d.set(newValue, forKey: K.recoverySalt) }
+    }
+    var recoveryMCostKib: UInt32 {
+        get { UInt32(d.integer(forKey: K.recoveryM)) }
+        nonmutating set { d.set(Int(newValue), forKey: K.recoveryM) }
+    }
+    var recoveryTCost: UInt32 {
+        get { UInt32(d.integer(forKey: K.recoveryT)) }
+        nonmutating set { d.set(Int(newValue), forKey: K.recoveryT) }
+    }
+    var recoveryPCost: UInt32 {
+        get { UInt32(d.integer(forKey: K.recoveryP)) }
+        nonmutating set { d.set(Int(newValue), forKey: K.recoveryP) }
+    }
+    var hasRecovery: Bool { recoveryWrapped != nil && recoverySalt != nil }
+
+    /// Forget the recovery wrap. Called when the mode changes: the wrap is of
+    /// the master key, and a mode change that re-keys would leave it opening
+    /// nothing while still claiming to be a way in.
+    func clearRecovery() {
+        [K.recoveryWrapped, K.recoverySalt, K.recoveryM, K.recoveryT, K.recoveryP]
+            .forEach { d.removeObject(forKey: $0) }
+    }
+
     func wipe() {
         [K.mode, K.kdfSalt, K.kdfM, K.kdfT, K.kdfP, K.wrappedKey,
-         K.accessSalt, K.accessHash, K.decoySalt, K.decoyHash]
+         K.accessSalt, K.accessHash, K.decoySalt, K.decoyHash,
+         K.recoveryWrapped, K.recoverySalt, K.recoveryM, K.recoveryT, K.recoveryP]
             .forEach { d.removeObject(forKey: $0) }
     }
 }

@@ -18,6 +18,15 @@ enum AppPaths {
 
     static var photosDir: URL { ensureDir("photos") }
     static var voiceDir: URL { ensureDir("voice") }
+    /// Note attachments get their own directory rather than sharing photos/:
+    /// the photo orphan sweep deletes every .bin under photos/ with no
+    /// photo_records row, and note images would be gone at the first unlock.
+    /// Giving them photo rows instead would put private attachments into the
+    /// progress gallery and the doctor PDF — silent leakage for silent loss.
+    ///
+    /// The name matters beyond tidiness: the core's v3 backup reads and
+    /// restores the vault.db siblings by these exact names.
+    static var noteImagesDir: URL { ensureDir("note_images") }
     static var cacheDir: URL {
         let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("eggshell", isDirectory: true)

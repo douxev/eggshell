@@ -6,6 +6,9 @@ enum AppRoute: Equatable {
     case launching
     case onboarding
     case unlock
+    /// Biometric mode with no recovery secret set. Sits between unlock and home
+    /// and cannot be walked past — see RecoverySetupView.
+    case recoverySetup
     case home
     case decoy     // fake notes app (plausible deniability)
 }
@@ -38,8 +41,17 @@ final class AppState: ObservableObject {
     func unlocked(session: VaultService) {
         self.session = session
         route = .home
-        Task { await refreshNotifications(); await refreshAppointmentReminders(); await drainPendingDoses() }
+        Task {
+            // The gate is raised *after* the vault is open, deliberately: the
+            // screen mints a second wrap of the master key, which needs the
+            // vault openable in the first place.
+            if await manager.needsRecoverySetup { route = .recoverySetup }
+            await refreshNotifications(); await refreshAppointmentReminders(); await drainPendingDoses()
+        }
     }
+
+    /// Leave the recovery gate, once a secret has actually been persisted.
+    func recoverySetupFinished() { route = .home }
 
     /// Commit reminder actions ("Pris"/"Passer") taken while the vault was
     /// locked. No-op without an open session.

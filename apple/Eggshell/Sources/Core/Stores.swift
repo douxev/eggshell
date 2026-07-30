@@ -19,6 +19,11 @@ final class FeaturesStore: ObservableObject {
     /// nowhere else, so leaving it off would strand a fresh install with no path
     /// to the PDF export. Mirrors android feature_appointments.
     @Published var appointments: Bool { didSet { d.set(appointments, forKey: "appointments") } }
+    /// Notes — on by default, on updated installs as well as fresh ones. The
+    /// key only exists once someone has moved the switch themselves, so one
+    /// default covers both. Unlike photos and voice, an empty notebook says
+    /// nothing about its owner. Mirrors android feature `show_notes`.
+    @Published var notes: Bool { didSet { d.set(notes, forKey: "notes") } }
 
     private static func read(_ d: UserDefaults, _ k: String, _ def: Bool) -> Bool {
         d.object(forKey: k) == nil ? def : d.bool(forKey: k)
@@ -35,6 +40,7 @@ final class FeaturesStore: ObservableObject {
         voice       = Self.read(d, "voice", false)
         bleeding    = Self.read(d, "bleeding", false)
         appointments = Self.read(d, "appointments", true)
+        notes        = Self.read(d, "notes", true)
     }
 }
 

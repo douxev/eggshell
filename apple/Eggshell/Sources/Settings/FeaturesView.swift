@@ -20,7 +20,7 @@ struct FeaturesView: View {
                     .foregroundStyle(palette.onSurfaceVariant)
                     .fixedSize(horizontal: false, vertical: true)
 
-                MicroLabel("\(features.enabledCount) ACTIVÉS SUR 8")
+                MicroLabel("\(features.enabledCount) ACTIVÉS SUR \(FeaturesStore.togglableCount)")
 
                 ListGroup {
                     ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
@@ -52,6 +52,10 @@ struct FeaturesView: View {
         let subtitle: String
         let systemImage: String
         let binding: Binding<Bool>
+        /// Announced, not shipped. Drawn switched on because that is what it
+        /// will be when it lands, and disabled because an enabled switch would
+        /// persist a choice against a module that does not exist.
+        var enabled: Bool = true
     }
 
     /// Catalogue order, the same one the launcher grid uses (§6.1).
@@ -97,10 +101,30 @@ struct FeaturesView: View {
                 subtitle: "Tes extraits audio datés, pour entendre l'évolution.",
                 systemImage: "waveform",
                 binding: $features.voice),
+            // -- Famille Autres --
+            ModuleRow(
+                title: "Notes",
+                subtitle: "Un carnet en markdown, avec images et dossiers.",
+                systemImage: "doc.text",
+                binding: $features.notes),
+            ModuleRow(
+                title: "Carnet de rêves",
+                subtitle: "Bientôt — dans la prochaine mise à jour.",
+                systemImage: "moon.stars.fill",
+                binding: .constant(true),
+                enabled: false),
         ]
     }
 
     private func moduleToggle(_ row: ModuleRow) -> some View {
+        toggleBody(row)
+            .disabled(!row.enabled)
+            // Greys the label, the subtitle and the icon tile together, so a
+            // disabled row reads as unavailable rather than merely switched off.
+            .opacity(row.enabled ? 1 : 0.5)
+    }
+
+    private func toggleBody(_ row: ModuleRow) -> some View {
         Toggle(isOn: row.binding) {
             HStack(spacing: Spacing.m) {
                 IconTile(size: 44) {

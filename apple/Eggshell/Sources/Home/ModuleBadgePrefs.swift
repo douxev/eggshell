@@ -1,8 +1,12 @@
 import Foundation
 
-/// The eight tiles of the launcher, in reading order (§6.1.6, §7.2).
+/// The openable tiles of the launcher, in reading order (§6.1.6, §7.2).
+///
+/// « Carnet de rêves » is deliberately absent: it is announced on the grid but
+/// cannot be opened, and giving it a case here would persist a badge key for
+/// something that has no content to be unseen.
 enum LauncherModule: String, CaseIterable, Hashable {
-    case meds, appointments, journal, bleeding, labs, weight, photos, voice
+    case meds, appointments, journal, bleeding, labs, weight, photos, voice, notes
 }
 
 /// When each launcher module was last opened.

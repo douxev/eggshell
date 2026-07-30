@@ -58,6 +58,13 @@ enum Route: Hashable {
     case photos
     case voice
 
+    // Autres
+    case notes
+    /// A nested folder level. The name travels with the id so the pushed screen
+    /// can title itself without a second round-trip to the vault.
+    case notesFolder(id: Int64, name: String)
+    case noteEditor(id: Int64)
+
     // Réglages — three doors (§2.4) plus the pages they link out to.
     case settingsHub
     case settingsModules
@@ -114,6 +121,11 @@ func routeDestination(_ route: Route) -> some View {
 
     case .photos:                    PhotosView()
     case .voice:                     VoiceView()
+
+    case .notes:                     NotesView()
+    case .notesFolder(let id, let name):
+                                     NotesView(folderId: id, folderName: name)
+    case .noteEditor(let id):        NoteEditorView(noteId: id)
 
     case .settingsHub:               SettingsHubView()
     case .settingsModules:           FeaturesView()
