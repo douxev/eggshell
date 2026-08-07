@@ -86,9 +86,18 @@ fun HomeNavHost(
             ?: kotlinx.coroutines.flow.MutableStateFlow(null)
         ).collectAsState()
     androidx.compose.runtime.LaunchedEffect(pendingLink) {
-        when (pendingLink) {
+        when (val link = pendingLink) {
             com.douxev.eggshell.AppRootViewModel.DeepLink.JournalAdd -> {
                 nav.navigate(Routes.JOURNAL_ADD)
+                deepLinkProvider?.consumeDeepLink()
+            }
+            is com.douxev.eggshell.AppRootViewModel.DeepLink.Module -> {
+                // Home stays underneath, so the module's back arrow returns to
+                // the launcher grid rather than closing the app — a shortcut
+                // drops the user mid-app, and backing out of it should leave
+                // them somewhere they can carry on from.
+                nav.navigate(Routes.forModule(link.module))
+                if (link.add) Routes.addForModule(link.module)?.let { nav.navigate(it) }
                 deepLinkProvider?.consumeDeepLink()
             }
             null -> Unit
@@ -475,4 +484,43 @@ object Routes {
     fun metricEditor(domain: String) = "metrics/editor/$domain"
     fun appointmentEdit(id: Long) = "appointments/edit/$id"
     fun measures(tab: String) = "measures?tab=$tab"
+
+    /**
+     * The screen a module's shortcut and widget open.
+     *
+     * Navigation lives here and not in the module catalogue on purpose: the
+     * catalogue is read by the widget providers and the shortcut publisher,
+     * neither of which should have to know what a NavHost route looks like.
+     */
+    fun forModule(module: com.douxev.eggshell.modules.AppModule): String =
+        when (module) {
+            com.douxev.eggshell.modules.AppModule.Meds -> MED_LIST
+            com.douxev.eggshell.modules.AppModule.Journal -> FEELING
+            com.douxev.eggshell.modules.AppModule.Labs -> measures(MeasuresTab.HORMONES)
+            com.douxev.eggshell.modules.AppModule.Weight -> measures(MeasuresTab.WEIGHT)
+            com.douxev.eggshell.modules.AppModule.Bleeding -> BLEEDING
+            com.douxev.eggshell.modules.AppModule.Appointments -> APPOINTMENTS
+            com.douxev.eggshell.modules.AppModule.Photos -> PHOTOS
+            com.douxev.eggshell.modules.AppModule.Voice -> VOICE
+            com.douxev.eggshell.modules.AppModule.Notes -> "notes"
+        }
+
+    /**
+     * Where a module's « + » lands, or null when the module has no capture
+     * screen of its own — Photos and Voix record from inside their screen, and
+     * Poids opens a dialog on top of its own, so pushing a route for them would
+     * mean inventing a destination that does not exist.
+     */
+    fun addForModule(module: com.douxev.eggshell.modules.AppModule): String? =
+        when (module) {
+            com.douxev.eggshell.modules.AppModule.Meds -> MED_ADD
+            com.douxev.eggshell.modules.AppModule.Journal -> JOURNAL_ADD
+            com.douxev.eggshell.modules.AppModule.Labs -> HORMONES_ADD
+            com.douxev.eggshell.modules.AppModule.Bleeding -> BLEEDING_ADD
+            com.douxev.eggshell.modules.AppModule.Appointments -> APPOINTMENTS_ADD
+            com.douxev.eggshell.modules.AppModule.Notes -> "notes/edit?id=-1"
+            com.douxev.eggshell.modules.AppModule.Weight,
+            com.douxev.eggshell.modules.AppModule.Photos,
+            com.douxev.eggshell.modules.AppModule.Voice -> null
+        }
 }

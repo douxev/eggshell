@@ -219,6 +219,23 @@ class MainActivity : AppCompatActivity() {
      */
     private fun consumeDeepLink(intent: Intent?) {
         intent ?: return
+
+        // A module shortcut or a module widget. The id is resolved against the
+        // catalogue and anything unrecognised is dropped, so a third party
+        // cannot name a screen we did not publish. See ModuleDeepLink for why
+        // this is safe on an exported activity: the link is replayed only after
+        // a real unlock, so it can reach no data the user has not opened.
+        com.douxev.eggshell.modules.ModuleDeepLink.moduleOf(intent)?.let { module ->
+            rootViewModel.requestDeepLink(
+                AppRootViewModel.DeepLink.Module(
+                    module = module,
+                    add = com.douxev.eggshell.modules.ModuleDeepLink.wantsAdd(intent),
+                )
+            )
+            intent.removeExtra(com.douxev.eggshell.modules.ModuleDeepLink.EXTRA_MODULE)
+            return
+        }
+
         // Require the widget's own action — exactly the same action
         // EggshellWidgetProvider sets on its PendingIntent. Any other
         // launch path (icon tap, launcher recents, third-party intent)
@@ -274,12 +291,23 @@ class AppRootViewModel @Inject constructor(
     private val photos: PhotosRepository,
     private val voice: VoiceRepository,
     private val notesRepo: com.douxev.eggshell.data.NotesRepository,
+    private val moduleShortcuts: com.douxev.eggshell.modules.ModuleShortcuts,
+    private val decoy: com.douxev.eggshell.security.DecoyVerifier,
 ) : ViewModel() {
 
     enum class Route { Onboarding, Unlock, RecoverySetup, Home }
 
-    /** Where the widget (or future deep links) ask the app to land. */
-    enum class DeepLink { JournalAdd }
+    /** Where a widget or a launcher shortcut asks the app to land. */
+    sealed interface DeepLink {
+        /** The original reminder widget's « Noter » pill. */
+        data object JournalAdd : DeepLink
+
+        /** A module shortcut or module widget; [add] opens its capture screen. */
+        data class Module(
+            val module: com.douxev.eggshell.modules.AppModule,
+            val add: Boolean,
+        ) : DeepLink
+    }
 
     private val _route = MutableStateFlow(initialRoute())
     val route: StateFlow<Route> = _route.asStateFlow()
@@ -364,6 +392,14 @@ class AppRootViewModel @Inject constructor(
                 runCatching { photos.cleanupOrphans() }
                 runCatching { voice.cleanupOrphans() }
                 runCatching { notesRepo.cleanupOrphans() }
+                // Republish the launcher shortcuts against the modules the user
+                // actually has on. This is reached only by a *real* unlock —
+                // the decoy PIN never opens a session, so it never routes to
+                // Home — which makes it the one place that cannot accidentally
+                // restore shortcuts for someone who typed the decoy code. It
+                // also catches the end of onboarding, where both the module
+                // selection and the icon choice were just made.
+                runCatching { moduleShortcuts.refresh(decoyActive = decoy.hasDecoyPin) }
             }
         }
     }

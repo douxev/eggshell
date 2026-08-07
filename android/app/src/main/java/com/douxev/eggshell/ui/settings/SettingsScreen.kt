@@ -88,6 +88,7 @@ class SettingsViewModel @Inject constructor(
     private val backup: BackupRepository,
     private val vault: VaultRepository,
     private val securityPrefs: SecurityPrefs,
+    private val moduleShortcuts: com.douxev.eggshell.modules.ModuleShortcuts,
 ) : ViewModel() {
 
     private val _currentVariant = MutableStateFlow(aliasManager.currentVariant())
@@ -105,6 +106,11 @@ class SettingsViewModel @Inject constructor(
     fun setVariant(v: AppAliasManager.Variant) {
         aliasManager.setVariant(v)
         _currentVariant.value = v
+        // Putting the mask on has to withdraw the module shortcuts in the same
+        // breath, and taking it off restores them: a long-press menu naming
+        // « Médics · Analyses » under a calculator icon undoes the disguise the
+        // user just chose.
+        runCatching { moduleShortcuts.refresh(decoyActive = decoy.hasDecoyPin) }
     }
 
     fun savePinPair(accessPin: String, decoyPin: String) {

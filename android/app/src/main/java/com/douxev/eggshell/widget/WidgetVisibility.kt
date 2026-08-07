@@ -28,24 +28,46 @@ class WidgetVisibility @Inject constructor(
 ) {
     fun setEnabled(enabled: Boolean) {
         val pm = context.packageManager
-        val component = ComponentName(context, EggshellWidgetProvider::class.java)
+        val reminderWidget = ComponentName(context, EggshellWidgetProvider::class.java)
         val state = if (enabled) {
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED
         } else {
             PackageManager.COMPONENT_ENABLED_STATE_DISABLED
         }
-        pm.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP)
 
-        // If we're disabling, also wipe any currently-installed widgets so
-        // they don't keep displaying stale data until the launcher notices.
+        // The reminder widget and all nine module widgets move together. A
+        // module widget carries no vault data, but its *existence in the
+        // picker* names a module — which is the disclosure the decoy is there
+        // to prevent, and one reachable without ever meeting the PIN prompt.
+        val modules = moduleWidgets(context)
+        (listOf(reminderWidget) + modules.map { it.first }).forEach { component ->
+            runCatching {
+                pm.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP)
+            }
+        }
+
+        // Disabling a component does not repaint the widgets already sitting on
+        // someone's home screen — those keep their last RemoteViews until
+        // something replaces them. Push one final render so a placed card
+        // blanks itself now rather than whenever the launcher next asks.
+        //
+        // Direct AppWidgetManager calls rather than a broadcast, for the reason
+        // EggshellWidgetProvider.broadcastRefresh documents: a broadcast action
+        // would have to be exported, letting any installed app trigger a render.
         if (!enabled) {
             val mgr = AppWidgetManager.getInstance(context)
-            val ids = runCatching { mgr.getAppWidgetIds(component) }.getOrDefault(IntArray(0))
-            if (ids.isNotEmpty()) {
-                // We can't actually remove the user's widget instance, but we
-                // can re-broadcast UPDATE so the receiver gets called; it'll
-                // soon receive an enabled=false state and stop responding.
-                EggshellWidgetProvider.broadcastRefresh(context)
+            runCatching {
+                if (mgr.getAppWidgetIds(reminderWidget).isNotEmpty()) {
+                    EggshellWidgetProvider.broadcastRefresh(context)
+                }
+            }
+            modules.forEach { (component, provider) ->
+                runCatching {
+                    val ids = mgr.getAppWidgetIds(component)
+                    if (ids.isNotEmpty()) {
+                        provider.onUpdate(context.applicationContext, mgr, ids)
+                    }
+                }
             }
         }
     }

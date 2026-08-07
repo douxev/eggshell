@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A module widget: icon, module name, and one or two doors into it.
+
+    Deliberately holds no data view. Every module's content is in the encrypted
+    vault, which is shut whenever the launcher renders this; see
+    ModuleWidgetProvider for why building a plaintext mirror to fill a widget
+    would cost more than the widget is worth.
+
+    Kept to plain LinearLayout/TextView/ImageView — RemoteViews supports a
+    limited widget set, and this inflates identically across launchers.
+
+    The root carries no click handler on purpose: several launchers collapse
+    child taps into the parent's PendingIntent when the parent has one, which
+    would make the "+" pill silently fire the "open module" intent instead.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/module_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <!-- wrap_content, not a weight: giving this row a vertical weight while its
+         text column already carries a horizontal one nests weights, which
+         forces a second measure pass on every render. The card is three views
+         tall, so letting the content sit at its natural height and the pill
+         follow it reads the same and measures once. -->
+    <LinearLayout
+        android:id="@+id/module_widget_body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/module_widget_icon"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_module_meds"/>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/module_widget_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_on_bg"
+                android:textSize="16sp"
+                android:textStyle="bold"/>
+
+            <TextView
+                android:id="@+id/module_widget_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/widget_muted"
+                android:textSize="12sp"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 48dp minimum height: anything smaller sits under the Material touch
+         target and produces legitimate "couldn't tap that" reports. -->
+    <TextView
+        android:id="@+id/module_widget_action_add"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/widget_action_bg"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:minWidth="88dp"
+        android:minHeight="48dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:textColor="@color/widget_on_accent"
+        android:textSize="13sp"
+        android:textStyle="bold"/>
+</LinearLayout>

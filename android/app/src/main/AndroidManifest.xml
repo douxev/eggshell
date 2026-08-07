@@ -155,6 +155,125 @@
                 android:resource="@xml/widget_info"/>
         </receiver>
 
+
+        <!-- Per-module widgets. Each is a door into one module: name, icon and
+             a way in, and no vault data at all (see ModuleWidgetProvider).
+
+             All nine are disabled as a set by WidgetVisibility while a decoy
+             PIN is configured, which pulls them out of the launcher's widget
+             picker. Leaving them listed would let anyone holding the phone read
+             off the app's module structure from the picker alone — the same
+             disclosure the decoy exists to prevent, reached without ever
+             touching the PIN prompt. -->
+
+        <receiver
+            android:name=".widget.MedsWidgetProvider"
+            android:exported="true"
+            android:label="@string/module_widget_label_meds">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_meds"/>
+        </receiver>
+
+        <receiver
+            android:name=".widget.JournalWidgetProvider"
+            android:exported="true"
+            android:label="@string/module_widget_label_journal">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_journal"/>
+        </receiver>
+
+        <receiver
+            android:name=".widget.LabsWidgetProvider"
+            android:exported="true"
+            android:label="@string/module_widget_label_labs">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_labs"/>
+        </receiver>
+
+        <receiver
+            android:name=".widget.AppointmentsWidgetProvider"
+            android:exported="true"
+            android:label="@string/module_widget_label_appointments">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_appointments"/>
+        </receiver>
+
+        <receiver
+            android:name=".widget.NotesWidgetProvider"
+            android:exported="true"
+            android:label="@string/module_widget_label_notes">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_notes"/>
+        </receiver>
+
+        <receiver
+            android:name=".widget.WeightWidgetProvider"
+            android:exported="true"
+            android:label="@string/module_widget_label_weight">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_weight"/>
+        </receiver>
+
+        <receiver
+            android:name=".widget.BleedingWidgetProvider"
+            android:exported="true"
+            android:label="@string/module_widget_label_bleeding">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_bleeding"/>
+        </receiver>
+
+        <receiver
+            android:name=".widget.PhotosWidgetProvider"
+            android:exported="true"
+            android:label="@string/module_widget_label_photos">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_photos"/>
+        </receiver>
+
+        <receiver
+            android:name=".widget.VoiceWidgetProvider"
+            android:exported="true"
+            android:label="@string/module_widget_label_voice">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_voice"/>
+        </receiver>
+
     </application>
 
 </manifest>

@@ -54,4 +54,20 @@
     <string name="module_notes">Notes</string>
     <string name="module_dreams">Dream journal</string>
     <string name="home_module_soon_cd">%1$s, coming soon</string>
+
+    <!-- Per-module shortcuts and widgets. Withdrawn from the launcher as soon
+         as a decoy PIN is configured: the module list must not be readable
+         without unlocking. -->
+    <string name="module_widget_subtitle">Open module</string>
+    <string name="module_widget_add">Add</string>
+    <string name="module_widget_description">Direct access to a module.</string>
+    <string name="module_widget_label_meds">Medications</string>
+    <string name="module_widget_label_journal">Journal</string>
+    <string name="module_widget_label_labs">Labs</string>
+    <string name="module_widget_label_appointments">Appointments</string>
+    <string name="module_widget_label_notes">Notes</string>
+    <string name="module_widget_label_weight">Weight</string>
+    <string name="module_widget_label_bleeding">Periods</string>
+    <string name="module_widget_label_photos">Photos</string>
+    <string name="module_widget_label_voice">Voice</string>
 </resources>

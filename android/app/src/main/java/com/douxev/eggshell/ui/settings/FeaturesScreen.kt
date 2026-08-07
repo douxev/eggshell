@@ -53,6 +53,8 @@ import kotlinx.coroutines.flow.StateFlow
 @HiltViewModel
 class FeaturesViewModel @Inject constructor(
     private val prefs: FeaturesPrefs,
+    private val shortcuts: com.douxev.eggshell.modules.ModuleShortcuts,
+    private val decoy: com.douxev.eggshell.security.DecoyVerifier,
 ) : ViewModel() {
     val medications: StateFlow<Boolean> = prefs.medications
     val journal: StateFlow<Boolean> = prefs.journal
@@ -64,15 +66,27 @@ class FeaturesViewModel @Inject constructor(
     val bleeding: StateFlow<Boolean> = prefs.bleeding
     val appointments: StateFlow<Boolean> = prefs.appointments
 
-    fun setMedications(v: Boolean) = prefs.setMedications(v)
-    fun setJournal(v: Boolean) = prefs.setJournal(v)
-    fun setHormones(v: Boolean) = prefs.setHormones(v)
-    fun setWeightTracking(v: Boolean) = prefs.setWeightTracking(v)
-    fun setPhotoTab(v: Boolean) = prefs.setPhotoTab(v)
-    fun setVoiceTab(v: Boolean) = prefs.setVoiceTab(v)
-    fun setNotes(v: Boolean) = prefs.setNotes(v)
-    fun setBleeding(v: Boolean) = prefs.setBleeding(v)
-    fun setAppointments(v: Boolean) = prefs.setAppointments(v)
+    fun setMedications(v: Boolean) = prefs.setMedications(v).also { syncShortcuts() }
+    fun setJournal(v: Boolean) = prefs.setJournal(v).also { syncShortcuts() }
+    fun setHormones(v: Boolean) = prefs.setHormones(v).also { syncShortcuts() }
+    fun setWeightTracking(v: Boolean) = prefs.setWeightTracking(v).also { syncShortcuts() }
+    fun setPhotoTab(v: Boolean) = prefs.setPhotoTab(v).also { syncShortcuts() }
+    fun setVoiceTab(v: Boolean) = prefs.setVoiceTab(v).also { syncShortcuts() }
+    fun setNotes(v: Boolean) = prefs.setNotes(v).also { syncShortcuts() }
+    fun setBleeding(v: Boolean) = prefs.setBleeding(v).also { syncShortcuts() }
+    fun setAppointments(v: Boolean) = prefs.setAppointments(v).also { syncShortcuts() }
+
+    /**
+     * Republish the launcher shortcuts after any module switch.
+     *
+     * Hiding a module has to reach the launcher immediately, not at the next
+     * cold start: the whole point of turning one off is that it stops being
+     * visible, and a shortcut still naming it on the home screen is the most
+     * visible place it could possibly remain.
+     */
+    private fun syncShortcuts() {
+        runCatching { shortcuts.refresh(decoyActive = decoy.hasDecoyPin) }
+    }
 }
 
 /**

@@ -26,6 +26,7 @@ import uniffi.transition.freshKdfMaterial
 class DecoyVerifier @Inject constructor(
     private val prefs: VaultPrefs,
     private val widgetVisibility: WidgetVisibility,
+    private val shortcuts: com.douxev.eggshell.modules.ModuleShortcuts,
 ) {
     val hasAccessPin: Boolean get() = prefs.accessPin() != null
     val hasDecoyPin: Boolean get() = prefs.decoy() != null
@@ -37,8 +38,10 @@ class DecoyVerifier @Inject constructor(
         if (accessPin == null) {
             prefs.setAccessPin(null)
             prefs.setDecoy(null)
-            // No decoy any more → safe to expose the widget again.
+            // No decoy any more → safe to expose the widgets and the launcher
+            // shortcuts again.
             widgetVisibility.setEnabled(true)
+            shortcuts.refresh(decoyActive = false)
             return@withContext
         }
         require(accessPin != decoyPin) { "access and decoy PINs must differ" }
@@ -54,6 +57,11 @@ class DecoyVerifier @Inject constructor(
         // The widget would leak real reminder copy to whoever holds the
         // decoy PIN, so we hide it from the launcher picker entirely.
         widgetVisibility.setEnabled(false)
+        // Launcher shortcuts are worse still: a long-press on the icon lists
+        // them with no unlock at all, so « Médics · Analyses · Menstruations »
+        // under a notes-app icon would give the whole game away before the
+        // decoy PIN is ever typed. Withdraw them entirely.
+        shortcuts.clear()
     }
 
     suspend fun accessMatches(input: String): Boolean = withContext(Dispatchers.IO) {

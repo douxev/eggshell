@@ -68,4 +68,20 @@
     <string name="module_dreams">Carnet de rêves</string>
     <!-- Lu à la place du libellé sur une tuile annoncée mais pas encore livrée. -->
     <string name="home_module_soon_cd">%1$s, bientôt disponible</string>
+
+    <!-- Raccourcis et widgets par module. Retirés du lanceur dès qu\'un PIN
+         de leurre est configuré : la liste des modules ne doit pas être
+         lisible sans déverrouiller. -->
+    <string name="module_widget_subtitle">Ouvrir le module</string>
+    <string name="module_widget_add">Ajouter</string>
+    <string name="module_widget_description">Accès direct à un module.</string>
+    <string name="module_widget_label_meds">Médics</string>
+    <string name="module_widget_label_journal">Journal</string>
+    <string name="module_widget_label_labs">Analyses</string>
+    <string name="module_widget_label_appointments">RDV</string>
+    <string name="module_widget_label_notes">Notes</string>
+    <string name="module_widget_label_weight">Poids</string>
+    <string name="module_widget_label_bleeding">Menstruations</string>
+    <string name="module_widget_label_photos">Photos</string>
+    <string name="module_widget_label_voice">Voix</string>
 </resources>

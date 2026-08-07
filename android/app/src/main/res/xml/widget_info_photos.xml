@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Widget for the "Photos" module.
+
+    No android:configure and no android:previewLayout, for the same reasons the
+    original widget_info.xml documents: an empty configure attribute crashes the
+    launcher on first add, and a previewLayout the launcher can't rasterise can
+    crash the picker. The system default preview is the safe choice.
+
+    updatePeriodMillis=0 — this widget renders no data, so there is nothing to
+    poll for and no reason to spend the battery.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_module"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/module_widget_description"/>
