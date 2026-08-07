@@ -75,7 +75,7 @@ final class DreamsStore: ObservableObject {
     func delete(session: VaultService, id: Int64) async {
         // Read the paths before the row goes: the cascade drops the audio rows,
         // and after that nothing knows which files to wipe.
-        let paths = (try? await session.dreamAudio(id))?.map(\.filePath) ?? []
+        let paths = ((try? await session.dreamAudio(id)) ?? []).map { $0.filePath }
         try? await session.deleteDream(id)
         for p in paths { wipe(URL(fileURLWithPath: p)) }
     }
@@ -155,7 +155,7 @@ final class DreamsStore: ObservableObject {
             return nil
         }
         let final = audioDir.appendingPathComponent("\(UUID().uuidString).bin")
-        guard (try? cipher.write(to: final, options: .atomic)) != nil else {
+        guard (try? cipher.write(to: final, options: Data.WritingOptions.atomic)) != nil else {
             wipe(url)
             return nil
         }
@@ -185,7 +185,7 @@ final class DreamsStore: ObservableObject {
               let plain = try? await session.decryptBlob(cipher)
         else { return nil }
         let out = cacheDir.appendingPathComponent("play-\(UUID().uuidString).m4a")
-        guard (try? plain.write(to: out, options: .atomic)) != nil else { return nil }
+        guard (try? plain.write(to: out, options: Data.WritingOptions.atomic)) != nil else { return nil }
         return out
     }
 

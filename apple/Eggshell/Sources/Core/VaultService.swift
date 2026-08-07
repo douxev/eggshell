@@ -161,6 +161,77 @@ actor VaultService {
     // persisted, so a move is a rewrite of integers rather than tree surgery.
     // Image *rows* live here; the ciphertext on disk is NotesStore's job.
     @discardableResult
+    // MARK: - Dreams
+    //
+    // night_ms is computed by the app, not the core: only this side knows the
+    // device's timezone, and local midnight is not derivable without it.
+
+    func addDream(_ d: NewDream) throws -> Dream { try vault.addDream(dream: d) }
+    func getDream(_ id: Int64) throws -> Dream? { try vault.getDream(id: id) }
+    func listDreams(tagId: Int64?, limit: Int64, offset: Int64) throws -> [Dream] {
+        try vault.listDreams(tagId: tagId, limit: limit, offset: offset)
+    }
+    func listDreamsBetween(fromMs: Int64, toMs: Int64) throws -> [Dream] {
+        try vault.listDreamsBetween(fromMs: fromMs, toMs: toMs)
+    }
+    @discardableResult
+    func updateDream(
+        _ id: Int64, nightMs: Int64, title: String, body: String,
+        lucid: Bool, updatedMs: Int64
+    ) throws -> Dream {
+        try vault.updateDream(
+            id: id, nightMs: nightMs, title: title, body: body,
+            lucid: lucid, updatedMs: updatedMs)
+    }
+    func deleteDream(_ id: Int64) throws { try vault.deleteDream(id: id) }
+
+    func addDreamTag(_ label: String, color: Int64?, createdMs: Int64) throws -> DreamTag {
+        try vault.addDreamTag(label: label, color: color, createdMs: createdMs)
+    }
+    func listDreamTags() throws -> [DreamTag] { try vault.listDreamTags() }
+    func renameDreamTag(_ id: Int64, label: String) throws {
+        try vault.renameDreamTag(id: id, label: label)
+    }
+    func deleteDreamTag(_ id: Int64) throws { try vault.deleteDreamTag(id: id) }
+    func tagDream(_ dreamId: Int64, tagId: Int64) throws {
+        try vault.tagDream(dreamId: dreamId, tagId: tagId)
+    }
+    func untagDream(_ dreamId: Int64, tagId: Int64) throws {
+        try vault.untagDream(dreamId: dreamId, tagId: tagId)
+    }
+    func tagsForDream(_ dreamId: Int64) throws -> [DreamTag] {
+        try vault.tagsForDream(dreamId: dreamId)
+    }
+
+    func addDreamAudio(_ a: NewDreamAudio) throws -> DreamAudio {
+        try vault.addDreamAudio(audio: a)
+    }
+    func dreamAudio(_ dreamId: Int64) throws -> [DreamAudio] {
+        try vault.dreamAudio(dreamId: dreamId)
+    }
+    func setDreamTranscript(_ audioId: Int64, transcript: String?) throws {
+        try vault.setDreamTranscript(audioId: audioId, transcript: transcript)
+    }
+    func deleteDreamAudio(_ audioId: Int64) throws { try vault.deleteDreamAudio(audioId: audioId) }
+    func allDreamAudioPaths() throws -> [String] { try vault.allDreamAudioPaths() }
+
+    /// Links between doses, sleep and mood. `dayStartsMs` is every local
+    /// midnight in the range, in order — the core cannot compute local midnight,
+    /// and a DST day is not 86 400 000 ms long.
+    func insights(fromMs: Int64, toMs: Int64, dayStartsMs: [Int64]) throws -> [Insight] {
+        try vault.insights(fromMs: fromMs, toMs: toMs, dayStartsMs: dayStartsMs)
+    }
+
+    /// Raw blob helpers, for callers that manage their own file layout — the
+    /// dream recorder already has the plaintext in hand and writes the
+    /// ciphertext itself.
+    func encryptBlob(_ plaintext: Data) throws -> Data {
+        try vault.encryptBlob(plaintext: plaintext)
+    }
+    func decryptBlob(_ ciphertext: Data) throws -> Data {
+        try vault.decryptBlob(ciphertext: ciphertext)
+    }
+
     func addNote(_ n: NewNote) throws -> Note { try vault.addNote(note: n) }
     func listNotes(folderId: Int64?) throws -> [Note] { try vault.listNotes(folderId: folderId) }
     func getNote(_ id: Int64) throws -> Note? { try vault.getNote(id: id) }
