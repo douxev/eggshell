@@ -48,6 +48,9 @@ enum AppModule: String, CaseIterable {
     /// Order the shortcuts appear in, most-used first. iOS shows at most four.
     var rank: Int { Self.allCases.firstIndex(of: self) ?? 0 }
 
+    /// `FeaturesStore` is `@MainActor`, so reading its toggles has to be too.
+    /// Both callers already are — the shell and the publisher.
+    @MainActor
     func isEnabled(_ features: FeaturesStore) -> Bool {
         switch self {
         case .meds: return features.medications

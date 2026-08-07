@@ -507,6 +507,19 @@ struct MedicationDetailView: View {
     // MARK: - Schedules
 
 
+    // MARK: - History
+
+    /// The 6 / 18 padding is what lets each rule run edge to edge inside the
+    /// card, so the lines read as one block rather than as five cards.
+    private var historyCard: some View {
+        EggCard(variant: .low, paddingH: 18, paddingV: 6, spacing: 0) {
+            ForEach(Array(vm.history.enumerated()), id: \.element.id) { pair in
+                if pair.offset > 0 { CardRule(opacity: 0.14) }
+                historyRow(pair.element)
+            }
+        }
+    }
+
     private func historyRow(_ entry: MedicationDetailViewModel.HistoryEntry) -> some View {
         let style = MedTimingStyle.of(entry.timing, deltaMin: entry.deltaMin, palette: palette)
         var detail: [String] = []
