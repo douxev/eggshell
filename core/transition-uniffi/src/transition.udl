@@ -323,6 +323,45 @@ interface Vault {
     [Throws=TransitionError]
     void delete_bleeding_entry(i64 id);
 
+    // Dreams. night_ms is local midnight of the night the dream belongs to,
+    // computed by the native side — the core cannot know the device's zone.
+    [Throws=TransitionError]
+    Dream add_dream(NewDream dream);
+    [Throws=TransitionError]
+    Dream? get_dream(i64 id);
+    [Throws=TransitionError]
+    sequence<Dream> list_dreams(i64? tag_id, i64 limit, i64 offset);
+    [Throws=TransitionError]
+    sequence<Dream> list_dreams_between(i64 from_ms, i64 to_ms);
+    [Throws=TransitionError]
+    Dream update_dream(i64 id, i64 night_ms, string title, string body, boolean lucid, i64 updated_ms);
+    [Throws=TransitionError]
+    void delete_dream(i64 id);
+    [Throws=TransitionError]
+    DreamTag add_dream_tag(string label, i64? color, i64 created_ms);
+    [Throws=TransitionError]
+    sequence<DreamTag> list_dream_tags();
+    [Throws=TransitionError]
+    void rename_dream_tag(i64 id, string label);
+    [Throws=TransitionError]
+    void delete_dream_tag(i64 id);
+    [Throws=TransitionError]
+    void tag_dream(i64 dream_id, i64 tag_id);
+    [Throws=TransitionError]
+    void untag_dream(i64 dream_id, i64 tag_id);
+    [Throws=TransitionError]
+    sequence<DreamTag> tags_for_dream(i64 dream_id);
+    [Throws=TransitionError]
+    DreamAudio add_dream_audio(NewDreamAudio audio);
+    [Throws=TransitionError]
+    sequence<DreamAudio> dream_audio(i64 dream_id);
+    [Throws=TransitionError]
+    void set_dream_transcript(i64 audio_id, string? transcript);
+    [Throws=TransitionError]
+    void delete_dream_audio(i64 audio_id);
+    [Throws=TransitionError]
+    sequence<string> all_dream_audio_paths();
+
     // Notes
     [Throws=TransitionError]
     Note add_note(NewNote note);
@@ -560,6 +599,54 @@ dictionary NewBleedingEntry {
 };
 
 // -- Notes -------------------------------------------------------------------
+
+dictionary Dream {
+    i64 id;
+    // The night this dream belongs to, NOT when it was written.
+    i64 night_ms;
+    string title;
+    string body;
+    boolean lucid;
+    i64 created_ms;
+    i64 updated_ms;
+};
+
+dictionary NewDream {
+    i64 night_ms;
+    string title;
+    string body;
+    boolean lucid;
+    i64 created_ms;
+    i64 updated_ms;
+};
+
+dictionary DreamTag {
+    i64 id;
+    string label;
+    i64? color;
+    i64 created_ms;
+    // How many dreams carry this tag — recurrence is the point.
+    i64 dream_count;
+};
+
+dictionary DreamAudio {
+    i64 id;
+    i64 dream_id;
+    string file_path;
+    i64 duration_ms;
+    // On-device transcription only; null when none was produced.
+    string? transcript;
+    i64 position;
+    i64 created_ms;
+};
+
+dictionary NewDreamAudio {
+    i64 dream_id;
+    string file_path;
+    i64 duration_ms;
+    string? transcript;
+    i64 created_ms;
+};
 
 dictionary Note {
     i64 id;

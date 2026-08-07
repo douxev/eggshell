@@ -23,6 +23,9 @@ pub use transition_core::metrics::{
 };
 pub use transition_core::bleeding::{BleedingEntry, NewBleedingEntry};
 pub use transition_core::appointments::{Appointment, NewAppointment};
+pub use transition_core::dreams::{
+    Dream, DreamAudio, DreamTag, NewDream, NewDreamAudio,
+};
 pub use transition_core::notes::{
     NewNote, NewNoteFolder, NewNoteImage, Note, NoteFolder, NoteImage,
 };
@@ -482,6 +485,102 @@ impl Vault {
 
     pub fn delete_bleeding_entry(&self, id: i64) -> Result<(), TransitionError> {
         self.inner.delete_bleeding_entry(id)
+    }
+
+    // -- Dreams ------------------------------------------------------------
+
+    pub fn add_dream(&self, dream: NewDream) -> Result<Dream, TransitionError> {
+        self.inner.add_dream(dream)
+    }
+
+    pub fn get_dream(&self, id: i64) -> Result<Option<Dream>, TransitionError> {
+        self.inner.get_dream(id)
+    }
+
+    pub fn list_dreams(
+        &self,
+        tag_id: Option<i64>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Dream>, TransitionError> {
+        self.inner.list_dreams(tag_id, limit, offset)
+    }
+
+    pub fn list_dreams_between(&self, from_ms: i64, to_ms: i64) -> Result<Vec<Dream>, TransitionError> {
+        self.inner.list_dreams_between(from_ms, to_ms)
+    }
+
+    pub fn update_dream(
+        &self,
+        id: i64,
+        night_ms: i64,
+        title: String,
+        body: String,
+        lucid: bool,
+        updated_ms: i64,
+    ) -> Result<Dream, TransitionError> {
+        self.inner.update_dream(id, night_ms, title, body, lucid, updated_ms)
+    }
+
+    pub fn delete_dream(&self, id: i64) -> Result<(), TransitionError> {
+        self.inner.delete_dream(id)
+    }
+
+    pub fn add_dream_tag(
+        &self,
+        label: String,
+        color: Option<i64>,
+        created_ms: i64,
+    ) -> Result<DreamTag, TransitionError> {
+        self.inner.add_dream_tag(label, color, created_ms)
+    }
+
+    pub fn list_dream_tags(&self) -> Result<Vec<DreamTag>, TransitionError> {
+        self.inner.list_dream_tags()
+    }
+
+    pub fn rename_dream_tag(&self, id: i64, label: String) -> Result<(), TransitionError> {
+        self.inner.rename_dream_tag(id, label)
+    }
+
+    pub fn delete_dream_tag(&self, id: i64) -> Result<(), TransitionError> {
+        self.inner.delete_dream_tag(id)
+    }
+
+    pub fn tag_dream(&self, dream_id: i64, tag_id: i64) -> Result<(), TransitionError> {
+        self.inner.tag_dream(dream_id, tag_id)
+    }
+
+    pub fn untag_dream(&self, dream_id: i64, tag_id: i64) -> Result<(), TransitionError> {
+        self.inner.untag_dream(dream_id, tag_id)
+    }
+
+    pub fn tags_for_dream(&self, dream_id: i64) -> Result<Vec<DreamTag>, TransitionError> {
+        self.inner.tags_for_dream(dream_id)
+    }
+
+    pub fn add_dream_audio(&self, audio: NewDreamAudio) -> Result<DreamAudio, TransitionError> {
+        self.inner.add_dream_audio(audio)
+    }
+
+    pub fn dream_audio(&self, dream_id: i64) -> Result<Vec<DreamAudio>, TransitionError> {
+        self.inner.dream_audio(dream_id)
+    }
+
+    pub fn set_dream_transcript(
+        &self,
+        audio_id: i64,
+        transcript: Option<String>,
+    ) -> Result<(), TransitionError> {
+        self.inner.set_dream_transcript(audio_id, transcript)
+    }
+
+    pub fn delete_dream_audio(&self, audio_id: i64) -> Result<(), TransitionError> {
+        self.inner.delete_dream_audio(audio_id)
+    }
+
+    pub fn all_dream_audio_paths(&self) -> Result<Vec<String>, TransitionError> {
+        self.inner.all_dream_audio_paths()
     }
 
     pub fn add_note(&self, note: NewNote) -> Result<Note, TransitionError> {

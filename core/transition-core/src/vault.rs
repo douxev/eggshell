@@ -676,6 +676,112 @@ impl Vault {
         crate::bleeding::delete(&*self.db()?, id)
     }
 
+    // -- Dreams ------------------------------------------------------------
+    //
+    // `night_ms` is computed by the native side, which is the only layer that
+    // knows the device's timezone — the core must never guess local midnight.
+
+    pub fn add_dream(&self, d: crate::dreams::NewDream) -> Result<crate::dreams::Dream, TransitionError> {
+        crate::dreams::add(&*self.db()?, d)
+    }
+
+    pub fn get_dream(&self, id: i64) -> Result<Option<crate::dreams::Dream>, TransitionError> {
+        crate::dreams::get(&*self.db()?, id)
+    }
+
+    pub fn list_dreams(
+        &self,
+        tag_id: Option<i64>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<crate::dreams::Dream>, TransitionError> {
+        crate::dreams::list(&*self.db()?, tag_id, limit, offset)
+    }
+
+    pub fn list_dreams_between(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<Vec<crate::dreams::Dream>, TransitionError> {
+        crate::dreams::list_between(&*self.db()?, from_ms, to_ms)
+    }
+
+    pub fn update_dream(
+        &self,
+        id: i64,
+        night_ms: i64,
+        title: String,
+        body: String,
+        lucid: bool,
+        updated_ms: i64,
+    ) -> Result<crate::dreams::Dream, TransitionError> {
+        crate::dreams::update(&*self.db()?, id, night_ms, title, body, lucid, updated_ms)
+    }
+
+    pub fn delete_dream(&self, id: i64) -> Result<(), TransitionError> {
+        crate::dreams::delete(&*self.db()?, id)
+    }
+
+    pub fn add_dream_tag(
+        &self,
+        label: String,
+        color: Option<i64>,
+        created_ms: i64,
+    ) -> Result<crate::dreams::DreamTag, TransitionError> {
+        crate::dreams::add_tag(&*self.db()?, label, color, created_ms)
+    }
+
+    pub fn list_dream_tags(&self) -> Result<Vec<crate::dreams::DreamTag>, TransitionError> {
+        crate::dreams::list_tags(&*self.db()?)
+    }
+
+    pub fn rename_dream_tag(&self, id: i64, label: String) -> Result<(), TransitionError> {
+        crate::dreams::rename_tag(&*self.db()?, id, label)
+    }
+
+    pub fn delete_dream_tag(&self, id: i64) -> Result<(), TransitionError> {
+        crate::dreams::delete_tag(&*self.db()?, id)
+    }
+
+    pub fn tag_dream(&self, dream_id: i64, tag_id: i64) -> Result<(), TransitionError> {
+        crate::dreams::tag_dream(&*self.db()?, dream_id, tag_id)
+    }
+
+    pub fn untag_dream(&self, dream_id: i64, tag_id: i64) -> Result<(), TransitionError> {
+        crate::dreams::untag_dream(&*self.db()?, dream_id, tag_id)
+    }
+
+    pub fn tags_for_dream(&self, dream_id: i64) -> Result<Vec<crate::dreams::DreamTag>, TransitionError> {
+        crate::dreams::tags_for_dream(&*self.db()?, dream_id)
+    }
+
+    pub fn add_dream_audio(
+        &self,
+        a: crate::dreams::NewDreamAudio,
+    ) -> Result<crate::dreams::DreamAudio, TransitionError> {
+        crate::dreams::add_audio(&*self.db()?, a)
+    }
+
+    pub fn dream_audio(&self, dream_id: i64) -> Result<Vec<crate::dreams::DreamAudio>, TransitionError> {
+        crate::dreams::audio_for_dream(&*self.db()?, dream_id)
+    }
+
+    pub fn set_dream_transcript(
+        &self,
+        audio_id: i64,
+        transcript: Option<String>,
+    ) -> Result<(), TransitionError> {
+        crate::dreams::set_transcript(&*self.db()?, audio_id, transcript)
+    }
+
+    pub fn delete_dream_audio(&self, audio_id: i64) -> Result<(), TransitionError> {
+        crate::dreams::delete_audio(&*self.db()?, audio_id)
+    }
+
+    pub fn all_dream_audio_paths(&self) -> Result<Vec<String>, TransitionError> {
+        crate::dreams::all_audio_paths(&*self.db()?)
+    }
+
     // -- Notes -------------------------------------------------------------
 
     pub fn add_note(&self, n: crate::notes::NewNote) -> Result<crate::notes::Note, TransitionError> {
