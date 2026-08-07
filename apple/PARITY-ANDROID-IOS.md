@@ -63,6 +63,53 @@ enfin `WrongKey` au lieu d'une erreur de base de données brute.
 4. Le module Notes lui-même, en dernier — c'est le plus gros et le moins risqué à décaler.
 
 
+## 0bis. Delta 2.1.0 → 2.2.0 (mis à jour le 2026-08-07)
+
+> Le lot Android de la 2.2.0 a été porté le jour même. Quatre des cinq
+> fonctionnalités sont sur iOS ; la cinquième est bloquée hors du dépôt.
+
+| Fonctionnalité 2.2.0 | Android | iOS |
+|---|---|---|
+| Courbes d'analyses refaites (axes chiffrés, zoom, pan, point épinglé) | ✅ | ✅ `MeasureChartModel.swift` + `MeasureChart.swift` |
+| Valeurs à 5 chiffres significatifs | ✅ | ✅ `MeasureFormat.value` |
+| Rattrapage d'une prise manquée | ✅ | ✅ `CatchUpDoseSheet.swift` |
+| Écran unique de gestion des rappels | ✅ | ✅ `MedicationRemindersView.swift` |
+| Raccourcis par module | ✅ | ✅ `ModuleShortcuts.swift` (quick actions) |
+| **Widgets par module** | ✅ 9 providers | ❌ **bloqué** |
+
+### Pourquoi les widgets iOS sont bloqués
+
+Un widget WidgetKit exige une **cible d'extension** propre, donc :
+
+1. un bundle identifier séparé (`com.douxev.eggshell.widget`) enregistré chez
+   Apple,
+2. un profil de provisioning pour cette cible, distribué par `fastlane match`,
+3. un App Group si le widget doit lire quoi que ce soit de l'app.
+
+Rien de tout cela ne s'ajoute depuis le dépôt : les points 1 et 2 passent par le
+compte développeur. `project.yml` n'a qu'une cible (`Eggshell`, type
+`application`) — c'est le point de départ du jour où le compte est prêt.
+
+À noter : côté Android, les widgets de module n'affichent **aucune donnée du
+coffre** par construction (ils sont dessinés par le launcher longtemps après le
+verrouillage). Un widget iOS aurait la même contrainte, donc l'App Group du
+point 3 ne servirait qu'au strict minimum — ce qui rend la cible plus simple
+qu'elle n'en a l'air.
+
+### Écart de conception corrigé au passage
+
+Sur Android le bug bloquant était « un rappel désactivé ne peut pas être
+supprimé ». iOS n'avait pas ce bug — la fiche du traitement listait déjà les
+rappels en pause. Mais elle n'offrait la suppression que dans un `contextMenu`,
+c'est-à-dire un appui long que rien à l'écran n'annonce. Une action introuvable
+ne vaut pas mieux qu'une action absente, et le rappel qu'on veut supprimer est
+justement celui qu'on a mis en pause et oublié. La suppression est maintenant un
+bouton visible sur `MedicationRemindersView`.
+
+Le hub des rappels, lui, avait bien le même demi-bug qu'Android : il lisait
+`listActiveSchedules()` et masquait donc exactement les rappels qui demandent
+une action. Corrigé.
+
 ## 1. Vue d'ensemble
 
 L'app iOS d'Eggshell est un portage en cours qui couvre le « happy path » mais reste loin de la parité avec Android : globalement de l'ordre de 35-40 % de parité fonctionnelle pondérée. Le socle est solide là où il s'appuie directement sur le cœur Rust partagé (cryptographie du coffre, 4 modes de sécurité, KDF Argon2id, conversion d'unités hormonales, CRUD de base médicaments/journal/hormones/photos/voix) — ces zones sont à parité réelle. En revanche, dès qu'une fonctionnalité demande du code plateforme (planification système, OCR, détection de pitch, rendu PDF, widget, FLAG_SECURE) ou un domaine non encore enveloppé, iOS s'effondre : domaines entiers sont totalement absents (saignements/cycle, métriques personnalisables, corrélation, export PDF, widget, restauration de sauvegarde, déguisement d'icône). La cause racine la plus structurante n'est PAS le cœur Rust mais la couche d'enrobage VaultService.swift, qui n'expose qu'un sous-ensemble de l'API uniffi : j'ai vérifié dans transition.udl que le cœur fournit bel et bien update_medication, log/list_treatment_change, list_dose_events_between, delete_schedule, les metric definitions/values, les bleeding entries, update_journal_entry et import_encrypted — toutes absentes de VaultService. Le commentaire iOS prétendant que « le cœur n'a pas de primitive d'update » pour le journal est factuellement faux (update_journal_entry existe ligne 220 de l'UDL). Deux points méritent une attention sécurité immédiate : l'absence de strip EXIF à l'import photo (fuite GPS potentielle, critique pour une app de transition) et le toggle « bloquer les captures d'écran » qui est purement décoratif (jamais appliqué). Enfin, une divergence de données silencieuse et grave existe : le catalogue de types de médicaments iOS (hrt/blocker/supplement/other) ne correspond pas aux 7 identifiants cliniques Android, ce qui corrompt la lisibilité croisée des données dans la base partagée.
