@@ -65,7 +65,7 @@ struct MeasureChart: View {
                     Button("Tout voir") {
                         withAnimation(.easeOut(duration: 0.2)) { viewport = TimeViewport() }
                     }
-                    .font(EggFont.labelS)
+                    .font(EggFont.micro)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(palette.surfaceContainerHigh, in: Capsule())
@@ -136,10 +136,10 @@ struct MeasureChart: View {
         HStack(spacing: 8) {
             if let selected {
                 Text(MeasureFormat.fullDate(selected.atMs))
-                    .font(EggFont.labelS)
+                    .font(EggFont.micro)
                     .foregroundStyle(palette.onSurfaceVariant)
                 Text("\(MeasureFormat.value(selected.value)) \(unit)")
-                    .font(EggFont.labelL)
+                    .font(EggFont.titleS)
                     .fontWeight(.semibold)
                     .foregroundStyle(palette.onSurface)
             } else {
@@ -228,7 +228,7 @@ struct MeasureChart: View {
             context.stroke(line, with: .color(palette.chartGrid), lineWidth: 1)
 
             let text = Text(MeasureFormat.value(tick))
-                .font(EggFont.labelS)
+                .font(EggFont.micro)
                 .foregroundStyle(palette.onSurfaceVariant)
             context.draw(context.resolve(text), at: CGPoint(x: plotLeft - 6, y: y), anchor: .trailing)
         }
@@ -324,7 +324,7 @@ struct MeasureChart: View {
                 ? MeasureFormat.monthYear(ms)
                 : MeasureFormat.dayMonth(ms)
             let resolved = context.resolve(
-                Text(label).font(EggFont.labelS).foregroundStyle(palette.onSurfaceVariant))
+                Text(label).font(EggFont.micro).foregroundStyle(palette.onSurfaceVariant))
             let width = resolved.measure(in: CGSize(width: 200, height: 40)).width
             let left = min(max(x - width / 2, plotLeft), plotRight - width)
             // Drop a label that would collide with the previous one rather than
