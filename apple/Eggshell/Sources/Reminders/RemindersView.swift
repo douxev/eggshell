@@ -125,6 +125,11 @@ struct RemindersView: View {
                         title: "JOURNAL D'HUMEUR",
                         hint: "Un rappel pour noter ton humeur du jour.",
                         addLabel: "Ajouter un rappel journal")
+                    labSection(
+                        kind: LabReminderKind.dream,
+                        title: "RÊVES",
+                        hint: "Un rappel au réveil : le souvenir d’un rêve s’efface en quelques minutes, donc l’heure fait tout.",
+                        addLabel: "Ajouter un rappel de rêve")
                     aliasSection
                     prioritySection
                     appointmentsSection

@@ -59,8 +59,8 @@ android {
         // Reminder for the next release: Play enforces strictly monotonic
         // versionCode across all tracks. Bump versionCode every upload,
         // even for a same-day re-build, otherwise Play refuses the AAB.
-        versionCode = 20
-        versionName = "2.3.0"
+        versionCode = 21
+        versionName = "2.3.1"
 
         ndk {
             abiFilters += targetAbis

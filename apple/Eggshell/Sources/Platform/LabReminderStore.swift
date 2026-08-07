@@ -40,6 +40,7 @@ enum LabReminderKind {
         case photo:   return "camera"
         case voice:   return "waveform"
         case journal: return "square.and.pencil"
+        case dream:   return "moon.zzz"
         default:      return "bell"
         }
     }

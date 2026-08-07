@@ -29,6 +29,14 @@ final class CorrelationViewModel: ObservableObject {
     @Published var missedDoses: [Int64] = []
     @Published var treatmentChanges: [Int64] = []
     @Published var bleedingDays: [Int64] = []
+    /// Nights a dream was recorded, placed by night_ms and never by when the
+    /// entry was typed — a dream written this morning about last week belongs
+    /// last week, and a lane drawn from the writing time would sit next to the
+    /// wrong doses.
+    @Published var dreamNights: [Int64] = []
+    @Published var lucidNights: [Int64] = []
+    /// Ranked links between doses, sleep and mood. Strongest first.
+    @Published var insights: [Insight] = []
 
     /// Average mood on the days with a logged intake vs. the other days, and the
     /// same split for bleeding days. Nil until each side has enough entries to
@@ -84,6 +92,23 @@ final class CorrelationViewModel: ObservableObject {
                     .map { $0.atMs }
             }
 
+            let dreams = try await session.listDreamsBetween(fromMs: from, toMs: now)
+
+            // Local midnights are computed here and handed down: the core
+            // cannot know the timezone, and a DST day is not 86 400 000 ms
+            // long, so dividing the range arithmetically would drift an hour
+            // twice a year and file entries against the wrong day.
+            var dayStarts: [Int64] = []
+            var cursor = cal.startOfDay(for: Date(timeIntervalSince1970: Double(from) / 1000))
+            let end = Date(timeIntervalSince1970: Double(now) / 1000)
+            while cursor <= end {
+                dayStarts.append(Int64(cursor.timeIntervalSince1970 * 1000))
+                guard let next = cal.date(byAdding: .day, value: 1, to: cursor) else { break }
+                cursor = next
+            }
+            let found = (try? await session.insights(
+                fromMs: from, toMs: now, dayStartsMs: dayStarts)) ?? []
+
             let doseDays = Set((onTime + late).map { day($0, cal) })
             let bleedDays = Set(bleeds.map { day($0, cal) })
 
@@ -95,6 +120,12 @@ final class CorrelationViewModel: ObservableObject {
             missedDoses = missed
             treatmentChanges = changes
             bleedingDays = bleeds
+            dreamNights = dreams.map { $0.nightMs }
+            // Lucid rides its own lane rather than a flag on the first: it is
+            // rare, and a marker that only sometimes means something is one the
+            // eye learns to ignore.
+            lucidNights = dreams.filter { $0.lucid }.map { $0.nightMs }
+            insights = found
             doseSplit = split(entries, marked: doseDays, cal: cal)
             bleedingSplit = bleedingEnabled ? split(entries, marked: bleedDays, cal: cal) : nil
         } catch {
@@ -179,6 +210,7 @@ struct CorrelationSection: View {
                     systemImage: "chart.xyaxis.line")
             } else {
                 chartCard
+                InsightsCard(insights: vm.insights)
                 readingCard
             }
 
