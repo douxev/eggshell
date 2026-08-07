@@ -91,18 +91,18 @@
     <!-- 2.1.0. Réécrites à chaque version : seule LATEST est jamais affichée,
          donc garder les entrées d’une version passée ne ferait que des chaînes
          mortes que les traductions devraient suivre. -->
-    <string name="set_wn_1_title">Notes</string>
-    <string name="set_wn_1_sub">Un carnet en markdown : images, dossiers, réorganisation. L’export ZIP emporte les pièces jointes.</string>
-    <string name="set_wn_2_title">Clé de récupération</string>
-    <string name="set_wn_2_sub">Une seconde façon d’ouvrir le coffre. Ajouter une empreinte au téléphone ne peut plus t’enfermer dehors.</string>
-    <string name="set_wn_3_title">Sauvegardes complètes</string>
-    <string name="set_wn_3_sub">Les photos, les mémos vocaux et tes réglages voyagent avec le coffre. Tes anciennes sauvegardes restent restaurables.</string>
-    <string name="set_wn_4_title">Photos datées toutes seules</string>
-    <string name="set_wn_4_sub">La date de prise de vue est lue dans le fichier, et reste corrigeable à la main si elle est fausse.</string>
+    <string name="set_wn_1_title">Rattraper une prise manquée</string>
+    <string name="set_wn_1_sub">Touche une prise « manquée » : l’heure est déjà remplie d’après ton retard habituel, et reste modifiable avant de valider.</string>
+    <string name="set_wn_2_title">Courbes d’analyses repensées</string>
+    <string name="set_wn_2_sub">Les niveaux sont enfin chiffrés sur l’axe, les dates gradées, et tu peux pincer pour zoomer et faire glisser. Touche un point pour sa valeur exacte.</string>
+    <string name="set_wn_3_title">Rappels : un seul endroit</string>
+    <string name="set_wn_3_sub">Créer, modifier, mettre en pause et supprimer, depuis la fiche du traitement. Un rappel en pause peut enfin être supprimé.</string>
+    <string name="set_wn_4_title">Raccourcis et widgets par module</string>
+    <string name="set_wn_4_sub">Un appui long sur l’icône ouvre le module voulu, et chaque module a son widget. Tout disparaît si un PIN leurre ou une icône déguisée est actif.</string>
     <string name="set_wn_5_title">Carnet de rêves</string>
     <string name="set_wn_5_sub">Bientôt. Le module est déjà visible, grisé, dans Réglages → Modules.</string>
     <string name="set_wn_6_title">Corrections importantes</string>
-    <string name="set_wn_6_sub">Le déverrouillage par empreinte après une mise à jour, l’écran blanc au retour dans l’app, les rappels de bilan qui n’étaient pas restaurés, et plusieurs détails qui trahissaient le mode leurre.</string>
+    <string name="set_wn_6_sub">Un plantage possible au démarrage sur Android 8, les valeurs à rallonge sur les courbes, le clavier qui recouvrait les champs en bas des formulaires, et l’app qui ne changeait pas de langue sans redémarrer.</string>
 
     <!-- ============ Ressources ============ -->
     <string name="set_resources_intro">Des sites, des lignes d’écoute et des associations. Le lien s’ouvre dans ton navigateur — rien ne passe par eggshell.</string>

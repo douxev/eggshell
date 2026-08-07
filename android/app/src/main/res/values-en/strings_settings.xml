@@ -86,18 +86,18 @@
 
     <!-- ============ What’s new ============ -->
     <string name="set_wn_title">What’s new</string>
-    <string name="set_wn_1_title">Notes</string>
-    <string name="set_wn_1_sub">A markdown notebook: images, folders, reordering. The ZIP export carries the attachments with it.</string>
-    <string name="set_wn_2_title">Recovery key</string>
-    <string name="set_wn_2_sub">A second way into the vault. Adding a fingerprint to your phone can no longer lock you out.</string>
-    <string name="set_wn_3_title">Complete backups</string>
-    <string name="set_wn_3_sub">Photos, voice memos and your settings now travel with the vault. Your older backups still restore.</string>
-    <string name="set_wn_4_title">Photos date themselves</string>
-    <string name="set_wn_4_sub">The capture date is read from the file, and stays editable by hand when it is wrong.</string>
+    <string name="set_wn_1_title">Catch up a missed dose</string>
+    <string name="set_wn_1_sub">Tap a “missed” dose: the time is already filled in from how late you usually are, and stays editable before you confirm.</string>
+    <string name="set_wn_2_title">Rebuilt analyses curves</string>
+    <string name="set_wn_2_sub">Levels are finally written on the axis, dates are graduated, and you can pinch to zoom and drag to scroll. Tap a point for its exact value.</string>
+    <string name="set_wn_3_title">Reminders, in one place</string>
+    <string name="set_wn_3_sub">Create, edit, pause and delete, from the treatment itself. A paused reminder can finally be deleted.</string>
+    <string name="set_wn_4_title">Per-module shortcuts and widgets</string>
+    <string name="set_wn_4_sub">Long-press the icon to open a module, and every module has its own widget. Both vanish while a decoy PIN or a disguised icon is active.</string>
     <string name="set_wn_5_title">Dream journal</string>
     <string name="set_wn_5_sub">Coming soon. The module is already there, greyed out, under Settings → Modules.</string>
     <string name="set_wn_6_title">Important fixes</string>
-    <string name="set_wn_6_sub">Fingerprint unlock after an update, the white screen when coming back to the app, lab reminders that were not restored, and several details that gave the decoy away.</string>
+    <string name="set_wn_6_sub">A possible crash at startup on Android 8, run-on values on the curves, the keyboard covering fields at the bottom of forms, and the app not changing language without a restart.</string>
 
     <!-- ============ Resources ============ -->
     <string name="set_resources_intro">Websites, helplines and associations. The link opens in your browser — nothing goes through eggshell.</string>

@@ -16,10 +16,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -77,27 +77,27 @@ data class WhatsNewRelease(
  */
 object WhatsNewCatalog {
     val LATEST: WhatsNewRelease = WhatsNewRelease(
-        versionCode = 18,
-        versionName = "2.1.0",
+        versionCode = 19,
+        versionName = "2.2.0",
         titleRes = R.string.set_wn_title,
         highlights = listOf(
             WhatsNewHighlight(
-                icon = Icons.Filled.Description,
+                icon = Icons.Filled.CheckCircle,
                 titleRes = R.string.set_wn_1_title,
                 subRes = R.string.set_wn_1_sub,
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Key,
+                icon = Icons.Filled.ShowChart,
                 titleRes = R.string.set_wn_2_title,
                 subRes = R.string.set_wn_2_sub,
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.CloudDone,
+                icon = Icons.Filled.Notifications,
                 titleRes = R.string.set_wn_3_title,
                 subRes = R.string.set_wn_3_sub,
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.PhotoCamera,
+                icon = Icons.Filled.Widgets,
                 titleRes = R.string.set_wn_4_title,
                 subRes = R.string.set_wn_4_sub,
             ),
