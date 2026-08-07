@@ -77,7 +77,7 @@ final class DreamsStore: ObservableObject {
         // and after that nothing knows which files to wipe.
         let paths = ((try? await session.dreamAudio(id)) ?? []).map { $0.filePath }
         try? await session.deleteDream(id)
-        for p in paths { wipe(URL(fileURLWithPath: p)) }
+        for p in paths { wipe(resolve(p)) }
     }
 
     // MARK: - Tags
@@ -181,7 +181,7 @@ final class DreamsStore: ObservableObject {
 
     /// Decrypt to a temp file the caller is responsible for deleting.
     func decryptToTemp(session: VaultService, _ audio: DreamAudio) async -> URL? {
-        guard let cipher = try? Data(contentsOf: URL(fileURLWithPath: audio.filePath)),
+        guard let cipher = try? Data(contentsOf: resolve(audio.filePath)),
               let plain = try? await session.decryptBlob(cipher)
         else { return nil }
         let out = cacheDir.appendingPathComponent("play-\(UUID().uuidString).m4a")
@@ -236,7 +236,7 @@ final class DreamsStore: ObservableObject {
     func deleteAudio(session: VaultService, _ audio: DreamAudio) async {
         if playingAudioId == audio.id { stopPlayback() }
         try? await session.deleteDreamAudio(audio.id)
-        wipe(URL(fileURLWithPath: audio.filePath))
+        wipe(resolve(audio.filePath))
     }
 
     /// Wipe decrypted copies. Called from the app's background purge.
@@ -263,6 +263,23 @@ final class DreamsStore: ObservableObject {
 
     private func wipe(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Where a stored path actually is *now*.
+    ///
+    /// The rows keep absolute paths, and on iOS the container they were written
+    /// under is not forever: its UUID changes on a reinstall, a restore from
+    /// backup, or a migration to a new device. The row survives all three — it
+    /// is inside the vault — so the recording would still be listed, still be
+    /// on disk, and simply refuse to play.
+    ///
+    /// The file name is a UUID and the directory is ours, so re-rooting under
+    /// the current container is unambiguous. Falls back to the stored path so
+    /// nothing changes when the container has not moved.
+    private func resolve(_ stored: String) -> URL {
+        let here = audioDir.appendingPathComponent(URL(fileURLWithPath: stored).lastPathComponent)
+        if FileManager.default.fileExists(atPath: here.path) { return here }
+        return URL(fileURLWithPath: stored)
     }
 
     // MARK: - Nights

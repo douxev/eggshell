@@ -72,6 +72,17 @@ const BLOB_KIND_SETTINGS: u8 = 2;
 /// first unlock after they were written.
 const BLOB_KIND_NOTE_IMAGE: u8 = 3;
 
+/// Dream voice notes. A new kind rather than reusing `BLOB_KIND_VOICE`,
+/// because the voice module reaps any .bin under `voice/` that no `voice_clips`
+/// row claims — a restored dream recording filed there would be deleted at the
+/// next unlock, which is the exact failure the separate directory exists to
+/// prevent.
+///
+/// Numbers are appended, never reordered: this byte is written into every
+/// bundle, and an old app reading a new one skips unknown kinds rather than
+/// guessing.
+const BLOB_KIND_DREAM_AUDIO: u8 = 4;
+
 /// Directory names for the blob stores, relative to the vault DB's parent.
 /// Both platforms use this shape (Android `filesDir/{photos,voice}`, iOS
 /// `Application Support/eggshell/{photos,voice}`), which is what lets the core
@@ -80,6 +91,7 @@ const PHOTOS_DIR: &str = "photos";
 const VOICE_DIR: &str = "voice";
 const SETTINGS_DIR: &str = "settings";
 const NOTE_IMAGES_DIR: &str = "note_images";
+const DREAM_AUDIO_DIR: &str = "dream_audio";
 
 /// Deletes a path when it goes out of scope, however that happens.
 ///
@@ -1024,6 +1036,7 @@ impl Vault {
         let voice = read_blob_dir(&base.join(VOICE_DIR))?;
         let settings = read_blob_dir(&base.join(SETTINGS_DIR))?;
         let note_images = read_blob_dir(&base.join(NOTE_IMAGES_DIR))?;
+        let dream_audio = read_blob_dir(&base.join(DREAM_AUDIO_DIR))?;
 
         // 3. Frame the plaintext. v2 was [key || db] with "the rest is the DB"
         //    as load-bearing structure, which is why appending anything to it is
@@ -1033,19 +1046,23 @@ impl Vault {
             .chain(voice.iter())
             .chain(settings.iter())
             .chain(note_images.iter())
+            .chain(dream_audio.iter())
             .map(|(n, d)| 11 + n.len() + d.len())
             .sum();
         let mut plain = Vec::with_capacity(KEY_LEN + 8 + snapshot_bytes.len() + 4 + blob_bytes);
         plain.extend_from_slice(self.master_key.expose());
         plain.extend_from_slice(&(snapshot_bytes.len() as u64).to_le_bytes());
         plain.extend_from_slice(&snapshot_bytes);
-        let count = (photos.len() + voice.len() + settings.len() + note_images.len()) as u32;
+        let count =
+            (photos.len() + voice.len() + settings.len() + note_images.len() + dream_audio.len())
+                as u32;
         plain.extend_from_slice(&count.to_le_bytes());
         for (kind, list) in [
             (BLOB_KIND_PHOTO, &photos),
             (BLOB_KIND_VOICE, &voice),
             (BLOB_KIND_SETTINGS, &settings),
             (BLOB_KIND_NOTE_IMAGE, &note_images),
+            (BLOB_KIND_DREAM_AUDIO, &dream_audio),
         ] {
             for (name, data) in list.iter() {
                 plain.push(kind);
@@ -1217,6 +1234,7 @@ pub fn import_encrypted(
             BLOB_KIND_VOICE => VOICE_DIR,
             BLOB_KIND_SETTINGS => SETTINGS_DIR,
             BLOB_KIND_NOTE_IMAGE => NOTE_IMAGES_DIR,
+            BLOB_KIND_DREAM_AUDIO => DREAM_AUDIO_DIR,
             _ => continue,
         });
         std::fs::create_dir_all(&dir)
@@ -1316,6 +1334,7 @@ fn rewrite_blob_paths(db_path: &str, key: &VaultKey, base: &Path) -> Result<(), 
         ("photo_records", PHOTOS_DIR),
         ("voice_clips", VOICE_DIR),
         ("note_images", NOTE_IMAGES_DIR),
+        ("dream_audio", DREAM_AUDIO_DIR),
     ] {
         let target = base.join(dir);
         let target = target.to_string_lossy().to_string();
@@ -1633,6 +1652,100 @@ mod tests {
             std::fs::read(restore_base.join(VOICE_DIR).join("bbb.bin")).unwrap(),
             b"voice-ciphertext",
             "voice blob must be restored byte-for-byte",
+        );
+    }
+
+    /// A dream voice note must come back from a backup, as a file *and* as a
+    /// row that points at it on this device.
+    ///
+    /// The DB snapshot carries the `dream_audio` row either way, so without the
+    /// blob the restore is worse than losing the recording outright: the entry
+    /// still lists a voice note, with its duration, and playing it does
+    /// nothing. And the path in that row is absolute from the device that made
+    /// the backup — on iOS it embeds a container UUID — so it has to be
+    /// repointed here too.
+    #[test]
+    fn dream_audio_survives_a_backup_round_trip() {
+        let path = fresh_db_path();
+        let base = path.parent().unwrap().to_path_buf();
+        std::fs::create_dir_all(base.join(DREAM_AUDIO_DIR)).unwrap();
+        std::fs::write(base.join(DREAM_AUDIO_DIR).join("d1.bin"), b"dream-audio-ciphertext")
+            .unwrap();
+
+        let key = VaultKey::random();
+        let bundle = {
+            let vault = Vault::open(path.to_string_lossy().into_owned(), &key).unwrap();
+            let dream = vault
+                .add_dream(crate::dreams::NewDream {
+                    night_ms: 1,
+                    title: "Kept".into(),
+                    body: "je volais au-dessus de la maison".into(),
+                    lucid: true,
+                    created_ms: 1,
+                    updated_ms: 1,
+                })
+                .unwrap();
+            let tag = vault.add_dream_tag("vol".into(), None, 1).unwrap();
+            vault.tag_dream(dream.id, tag.id).unwrap();
+            vault
+                .add_dream_audio(crate::dreams::NewDreamAudio {
+                    dream_id: dream.id,
+                    // Deliberately a foreign device's absolute path.
+                    file_path:
+                        "/var/mobile/Containers/Data/Application/DEAD-BEEF/dream_audio/d1.bin"
+                            .into(),
+                    duration_ms: 4_000,
+                    transcript: None,
+                    created_ms: 1,
+                })
+                .unwrap();
+            vault.export_encrypted("pass".into()).unwrap()
+        };
+
+        let restore_path = fresh_db_path();
+        let restore_base = restore_path.parent().unwrap().to_path_buf();
+        let _ = std::fs::remove_dir_all(restore_base.join(DREAM_AUDIO_DIR));
+        let imported =
+            import_encrypted(bundle, "pass".into(), restore_path.to_string_lossy().into_owned())
+                .unwrap();
+
+        let vault = Vault::open(
+            restore_path.to_string_lossy().into_owned(),
+            &VaultKey::from_raw(imported.master_key).unwrap(),
+        )
+        .unwrap();
+        // The entry itself — its words, its night, its tag, its sliders — rides
+        // in the DB snapshot, which is a full copy of the vault rather than a
+        // hand-listed set of tables. Asserted rather than assumed: "the whole
+        // DB is in there" is exactly the kind of belief that silently stops
+        // being true when someone adds a table.
+        let dreams = vault.list_dreams(None, 10, 0).unwrap();
+        assert_eq!(dreams.len(), 1);
+        assert_eq!(dreams[0].title, "Kept");
+        assert_eq!(dreams[0].body, "je volais au-dessus de la maison");
+        assert_eq!(dreams[0].night_ms, 1);
+        assert!(dreams[0].lucid);
+        assert_eq!(
+            vault.tags_for_dream(dreams[0].id).unwrap().first().map(|t| t.label.clone()),
+            Some("vol".to_string()),
+        );
+
+        // The recording itself, byte for byte, in its own directory — not in
+        // voice/, where the voice module's orphan reaper would delete it at the
+        // next unlock.
+        assert_eq!(
+            std::fs::read(restore_base.join(DREAM_AUDIO_DIR).join("d1.bin")).unwrap(),
+            b"dream-audio-ciphertext",
+        );
+        assert!(!restore_base.join(VOICE_DIR).join("d1.bin").exists());
+
+        // And the row now points here rather than at the device that made the
+        // backup.
+        let audio = vault.dream_audio(dreams[0].id).unwrap();
+        assert_eq!(audio.len(), 1);
+        assert_eq!(
+            audio[0].file_path,
+            restore_base.join(DREAM_AUDIO_DIR).join("d1.bin").to_string_lossy(),
         );
     }
 

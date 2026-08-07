@@ -145,14 +145,31 @@ const DAY_MS: i64 = 86_400_000;
 /// gaps are normal and are not interpolated, because inventing a mood for a day
 /// nobody recorded one would be inventing the finding too.
 pub fn analyse(days: &HashMap<i64, DayRecord>) -> Vec<Insight> {
+    // Ordered boundaries, so a lag of one day is "the next entry in this list"
+    // rather than "+86 400 000 ms".
+    let mut ordered: Vec<i64> = days.keys().copied().collect();
+    ordered.sort_unstable();
+    analyse_ordered(days, &ordered)
+}
+
+/// The real entry point. `ordered` must be every local midnight in the window,
+/// ascending.
+///
+/// A lag steps through this list rather than adding `DAY_MS`, and that is not
+/// pedantry: a day containing a DST change is 23 or 25 hours long, so
+/// `midnight + 86 400 000` lands an hour either side of the next midnight and
+/// matches nothing. Twice a year every lagged comparison would silently drop
+/// its entire sample and the findings would vanish for a day — the kind of bug
+/// that gets reported as "it stopped working sometimes" and is never found.
+pub fn analyse_ordered(days: &HashMap<i64, DayRecord>, ordered: &[i64]) -> Vec<Insight> {
     let mut out = Vec::new();
 
     // Dose adherence on day N against the night that began on day N.
     for &metric in DREAM_METRICS {
-        out.extend(contrast(days, metric, "missed_dose", 0, DayRecord::missed_dose, |d| {
+        out.extend(contrast(days, ordered, metric, "missed_dose", 0, DayRecord::missed_dose, |d| {
             d.dream_metrics.get(metric).copied()
         }));
-        out.extend(contrast(days, metric, "late_dose", 0, DayRecord::late_dose, |d| {
+        out.extend(contrast(days, ordered, metric, "late_dose", 0, DayRecord::late_dose, |d| {
             d.dream_metrics.get(metric).copied()
         }));
     }
@@ -160,18 +177,18 @@ pub fn analyse(days: &HashMap<i64, DayRecord>) -> Vec<Insight> {
     // The night of day N against the mood of day N+1 — the sleep happened in
     // between, so the mood of day N cannot be downstream of it.
     for &metric in MOOD_METRICS {
-        out.extend(contrast(days, metric, "lucid_dream", 1, |d| d.lucid_dream, |d| {
+        out.extend(contrast(days, ordered, metric, "lucid_dream", 1, |d| d.lucid_dream, |d| {
             d.mood_metrics.get(metric).copied()
         }));
-        out.extend(contrast(days, metric, "any_dream", 1, |d| d.had_dream, |d| {
+        out.extend(contrast(days, ordered, metric, "any_dream", 1, |d| d.had_dream, |d| {
             d.mood_metrics.get(metric).copied()
         }));
         // And dose adherence against the same day's mood, at lag 0: a dose
         // missed this morning is felt today, not tomorrow.
-        out.extend(contrast(days, metric, "missed_dose", 0, DayRecord::missed_dose, |d| {
+        out.extend(contrast(days, ordered, metric, "missed_dose", 0, DayRecord::missed_dose, |d| {
             d.mood_metrics.get(metric).copied()
         }));
-        out.extend(contrast(days, metric, "clean_day", 0, DayRecord::clean_day, |d| {
+        out.extend(contrast(days, ordered, metric, "clean_day", 0, DayRecord::clean_day, |d| {
             d.mood_metrics.get(metric).copied()
         }));
     }
@@ -191,6 +208,7 @@ pub fn analyse(days: &HashMap<i64, DayRecord>) -> Vec<Insight> {
 /// with the measurement taken `lag_days` after the condition.
 fn contrast<C, V>(
     days: &HashMap<i64, DayRecord>,
+    ordered: &[i64],
     metric_key: &str,
     against_key: &str,
     lag_days: i64,
@@ -204,12 +222,18 @@ where
     let mut with: Vec<f64> = Vec::new();
     let mut without: Vec<f64> = Vec::new();
 
-    for (day, record) in days {
-        // The measurement lives on a different day than the condition, and that
-        // day has to actually exist — a lagged lookup into a gap must drop the
-        // pair rather than silently compare against the condition's own day.
-        let measured_on = day + lag_days * DAY_MS;
-        let Some(target) = days.get(&measured_on) else { continue };
+    for (index, day) in ordered.iter().enumerate() {
+        let Some(record) = days.get(day) else { continue };
+        // Step the ordered list rather than adding DAY_MS — see
+        // [`analyse_ordered`] for why the arithmetic version breaks on a DST
+        // day. The target still has to exist: a lagged lookup past the end of
+        // the window must drop the pair, not fall back to the condition's own
+        // day.
+        let target_index = index as i64 + lag_days;
+        if target_index < 0 || target_index as usize >= ordered.len() {
+            continue;
+        }
+        let Some(target) = days.get(&ordered[target_index as usize]) else { continue };
         let Some(v) = value(target) else { continue };
         if condition(record) {
             with.push(v)
@@ -441,6 +465,48 @@ mod tests {
             .expect("lucid nights are followed by the high-mood days");
         assert_eq!(mood.lag_days, 1);
         assert!(mood.delta > 0.0, "the day after a lucid night scored higher");
+    }
+
+    /// A day containing a DST change is 23 or 25 hours long, so `midnight +
+    /// 86 400 000` is not the next midnight. The lag has to walk the supplied
+    /// grid instead of doing arithmetic on it.
+    ///
+    /// Fails against the arithmetic version: every lagged lookup lands an hour
+    /// off a real day, matches nothing, and the finding disappears — for one
+    /// day, twice a year, with no error raised anywhere.
+    #[test]
+    fn lag_survives_a_short_day() {
+        // Europe/Paris in spring: the second day on this grid is 23 hours long.
+        const H: i64 = 3_600_000;
+        let grid: Vec<i64> = vec![
+            0, 24 * H, 47 * H, 71 * H, 95 * H, 119 * H, 143 * H, 167 * H, 191 * H, 215 * H,
+            239 * H, 263 * H,
+        ];
+        let mut days = HashMap::new();
+        for (n, start) in grid.iter().enumerate() {
+            // Lucid every other night. Mood is measured the morning after, so
+            // day n's mood answers to night n-1.
+            let after_lucid = n > 0 && (n - 1) % 2 == 0;
+            days.insert(
+                *start,
+                DayRecord {
+                    lucid_dream: n % 2 == 0,
+                    had_dream: true,
+                    mood_metrics: [("mood".to_string(), if after_lucid { 7.0 } else { 5.0 })]
+                        .into_iter()
+                        .collect(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let found = analyse_ordered(&days, &grid);
+        let mood = found
+            .iter()
+            .find(|i| i.metric_key == "mood" && i.against_key == "lucid_dream")
+            .expect("the lucid-night link must survive a 23-hour day");
+        assert!(mood.delta > 1.5, "delta was {}", mood.delta);
+        assert!(mood.sample_with >= MIN_GROUP as i64);
     }
 
     #[test]
