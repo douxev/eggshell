@@ -10,6 +10,7 @@ pub mod journal;
 pub mod medication;
 pub mod metrics;
 pub mod dreams;
+pub mod insights;
 pub mod notes;
 pub mod photos;
 pub mod settings;

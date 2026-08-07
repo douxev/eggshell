@@ -323,6 +323,12 @@ interface Vault {
     [Throws=TransitionError]
     void delete_bleeding_entry(i64 id);
 
+    // Links between doses, sleep and mood. day_starts_ms is every local
+    // midnight in the range, in order — the core cannot compute local midnight,
+    // and a DST day is not 86400000 ms long.
+    [Throws=TransitionError]
+    sequence<Insight> insights(i64 from_ms, i64 to_ms, sequence<i64> day_starts_ms);
+
     // Dreams. night_ms is local midnight of the night the dream belongs to,
     // computed by the native side — the core cannot know the device's zone.
     [Throws=TransitionError]
@@ -599,6 +605,33 @@ dictionary NewBleedingEntry {
 };
 
 // -- Notes -------------------------------------------------------------------
+
+enum Valence {
+    "HigherIsBetter",
+    "HigherIsWorse",
+    "Neutral",
+};
+
+enum Strength {
+    "Slight",
+    "Clear",
+    "Strong",
+};
+
+// One readable link. Co-occurrence in this user's own record — never a cause.
+dictionary Insight {
+    string metric_key;
+    string against_key;
+    // Difference in the metric's own units, signed.
+    double delta;
+    i64 sample_with;
+    i64 sample_without;
+    i64 lag_days;
+    Strength strength;
+    // Meaningless when valence is Neutral — render without a good/bad colour.
+    boolean favourable;
+    Valence valence;
+};
 
 dictionary Dream {
     i64 id;

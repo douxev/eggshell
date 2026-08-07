@@ -676,6 +676,34 @@ impl Vault {
         crate::bleeding::delete(&*self.db()?, id)
     }
 
+    // -- Insights ----------------------------------------------------------
+
+    /// Links between doses, sleep and mood over `[from_ms, to_ms]`.
+    ///
+    /// `day_starts_ms` is the local midnight of every day in the range, in
+    /// order, supplied by the native side — the core cannot compute local
+    /// midnight, and a DST-shifted day is not 86 400 000 ms long, so a range
+    /// divided arithmetically would drift an hour twice a year and start
+    /// filing entries against the wrong day.
+    pub fn insights(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+        day_starts_ms: Vec<i64>,
+    ) -> Result<Vec<crate::insights::Insight>, TransitionError> {
+        let db = self.db()?;
+        // Binary search the supplied boundaries rather than dividing: see above.
+        let day_of = |at: i64| -> i64 {
+            match day_starts_ms.binary_search(&at) {
+                Ok(i) => day_starts_ms[i],
+                Err(0) => day_starts_ms.first().copied().unwrap_or(at),
+                Err(i) => day_starts_ms[i - 1],
+            }
+        };
+        let days = crate::insights::day_records(&db, from_ms, to_ms, day_of)?;
+        Ok(crate::insights::analyse(&days))
+    }
+
     // -- Dreams ------------------------------------------------------------
     //
     // `night_ms` is computed by the native side, which is the only layer that

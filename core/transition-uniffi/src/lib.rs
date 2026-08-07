@@ -23,6 +23,7 @@ pub use transition_core::metrics::{
 };
 pub use transition_core::bleeding::{BleedingEntry, NewBleedingEntry};
 pub use transition_core::appointments::{Appointment, NewAppointment};
+pub use transition_core::insights::{Insight, Strength, Valence};
 pub use transition_core::dreams::{
     Dream, DreamAudio, DreamTag, NewDream, NewDreamAudio,
 };
@@ -485,6 +486,15 @@ impl Vault {
 
     pub fn delete_bleeding_entry(&self, id: i64) -> Result<(), TransitionError> {
         self.inner.delete_bleeding_entry(id)
+    }
+
+    pub fn insights(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+        day_starts_ms: Vec<i64>,
+    ) -> Result<Vec<Insight>, TransitionError> {
+        self.inner.insights(from_ms, to_ms, day_starts_ms)
     }
 
     // -- Dreams ------------------------------------------------------------

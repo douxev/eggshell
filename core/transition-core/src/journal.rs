@@ -56,6 +56,28 @@ pub fn add(db: &Database, e: NewJournalEntry) -> Result<JournalEntry, Transition
     })
 }
 
+/// Every entry whose instant falls in `[from_ms, to_ms]`, oldest first.
+///
+/// Separate from [`list`] because a window is not a page: the insights engine
+/// needs every entry in a range, and paging through with a guessed limit would
+/// silently analyse a prefix of the user's history.
+pub fn list_between(
+    db: &Database,
+    from_ms: i64,
+    to_ms: i64,
+) -> Result<Vec<JournalEntry>, TransitionError> {
+    let conn = db.conn();
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, at_ms, mood, dysphoria, euphoria, libido, energy, free_text, side_effects
+             FROM journal_entries WHERE at_ms >= ?1 AND at_ms <= ?2
+             ORDER BY at_ms ASC, id ASC",
+        )
+        .map_err(map_sql)?;
+    let rows = stmt.query_map(params![from_ms, to_ms], parse).map_err(map_sql)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(map_sql)
+}
+
 pub fn list(db: &Database, offset: i64, limit: i64) -> Result<Vec<JournalEntry>, TransitionError> {
     let conn = db.conn();
     let mut stmt = conn
