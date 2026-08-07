@@ -24,6 +24,11 @@ final class FeaturesStore: ObservableObject {
     /// default covers both. Unlike photos and voice, an empty notebook says
     /// nothing about its owner. Mirrors android feature `show_notes`.
     @Published var notes: Bool { didSet { d.set(notes, forKey: "notes") } }
+    /// Dream journal — on by default, for the same reason as Notes: an empty
+    /// dream journal says nothing about its owner, and the key only exists once
+    /// someone has moved the switch themselves, so one default covers a fresh
+    /// install and an updated one.
+    @Published var dreams: Bool { didSet { d.set(dreams, forKey: "dreams") } }
 
     /// A value that changes whenever any module toggle does.
     ///
@@ -34,7 +39,7 @@ final class FeaturesStore: ObservableObject {
     /// visible, and the app icon's long-press menu is the most visible place it
     /// could possibly remain.
     var enabledSignature: String {
-        [medications, journal, hormones, weight, photos, voice, bleeding, appointments, notes]
+        [medications, journal, hormones, weight, photos, voice, bleeding, appointments, notes, dreams]
             .map { $0 ? "1" : "0" }
             .joined()
     }
@@ -55,6 +60,7 @@ final class FeaturesStore: ObservableObject {
         bleeding    = Self.read(d, "bleeding", false)
         appointments = Self.read(d, "appointments", true)
         notes        = Self.read(d, "notes", true)
+        dreams       = Self.read(d, "dreams", true)
     }
 }
 

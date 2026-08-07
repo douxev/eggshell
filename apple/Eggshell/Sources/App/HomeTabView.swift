@@ -61,6 +61,7 @@ extension AppModule {
         case .photos: return .photos
         case .voice: return .voice
         case .notes: return .notes
+        case .dreams: return .dreams
         }
     }
 }

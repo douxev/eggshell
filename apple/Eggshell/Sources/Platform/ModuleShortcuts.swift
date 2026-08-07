@@ -11,6 +11,7 @@ enum AppModule: String, CaseIterable {
     case labs
     case appointments
     case notes
+    case dreams
     case weight
     case bleeding
     case photos
@@ -23,6 +24,7 @@ enum AppModule: String, CaseIterable {
         case .labs: return "Analyses"
         case .appointments: return "RDV"
         case .notes: return "Notes"
+        case .dreams: return "Rêves"
         case .weight: return "Poids"
         case .bleeding: return "Menstruations"
         case .photos: return "Photos"
@@ -38,6 +40,7 @@ enum AppModule: String, CaseIterable {
         case .labs: return "testtube.2"
         case .appointments: return "calendar"
         case .notes: return "doc.text.fill"
+        case .dreams: return "moon.zzz.fill"
         case .weight: return "ruler.fill"
         case .bleeding: return "drop.fill"
         case .photos: return "camera.fill"
@@ -58,6 +61,7 @@ enum AppModule: String, CaseIterable {
         case .labs: return features.hormones
         case .appointments: return features.appointments
         case .notes: return features.notes
+        case .dreams: return features.dreams
         // Weight is a sub-feature of Courbes: its own toggle governs it, but it
         // cannot outlive the module that hosts its screen.
         case .weight: return features.hormones && features.weight

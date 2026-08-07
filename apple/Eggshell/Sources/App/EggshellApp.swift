@@ -12,6 +12,7 @@ struct EggshellApp: App {
     @StateObject private var security = SecurityFlags()
     @StateObject private var whatsNew = WhatsNewStore()
     @StateObject private var labReminders = LabReminderStore()
+    @StateObject private var dreamsStore = DreamsStore()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -27,13 +28,20 @@ struct EggshellApp: App {
             .environmentObject(security)
             .environmentObject(whatsNew)
             .environmentObject(labReminders)
+            .environmentObject(dreamsStore)
             .task {
                 NotificationCoordinator.shared.configure()
                 await app.bootstrap()
             }
             .onChange(of: scenePhase) { _, phase in
                 // Lock when backgrounded (PARANOID/biometric re-auth on return).
-                if phase == .background { app.lock() }
+                if phase == .background {
+                    // Decrypted dream audio must not survive backgrounding —
+                    // and stopping playback first is what keeps a dream from
+                    // sounding out of a phone already put away.
+                    dreamsStore.purgeCache()
+                    app.lock()
+                }
             }
         }
     }

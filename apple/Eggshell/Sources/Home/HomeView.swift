@@ -193,6 +193,7 @@ struct HomeView: View {
         case .photos:       return .photos
         case .voice:        return .voice
         case .notes:        return .notes
+        case .dreams:       return .dreams
         }
     }
 
@@ -587,10 +588,10 @@ private struct LauncherGrid: View {
             all.append(LauncherSpec(module: .notes, label: "Notes",
                                     systemImage: "doc.text", family: .other))
         }
-        // Always last, and never gated on a flag: it has nothing to toggle yet.
-        // Delete this line the moment the module itself lands.
-        all.append(LauncherSpec(teaser: "dreams", label: "Rêves",
-                                systemImage: "moon.stars.fill", family: .other))
+        if features.dreams {
+            all.append(LauncherSpec(module: .dreams, label: "Rêves",
+                                    systemImage: "moon.stars.fill", family: .other))
+        }
         return all
     }
 }

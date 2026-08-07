@@ -20,6 +20,9 @@ enum LabReminderKind {
     static let photo = "photo"
     static let voice = "voice"
     static let journal = "journal"
+    /// Dream journal. Recall collapses within minutes of waking, so this is
+    /// the one reminder whose *time* is the whole feature.
+    static let dream = "dream"
 
     static func label(_ kind: String) -> String {
         switch kind {
@@ -27,6 +30,7 @@ enum LabReminderKind {
         case photo:   return "Photo de suivi"
         case voice:   return "Clip vocal"
         case journal: return "Journal du jour"
+        case dream:   return "Au réveil"
         default:      return "Rappel"
         }
     }

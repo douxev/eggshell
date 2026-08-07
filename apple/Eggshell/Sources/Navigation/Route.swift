@@ -62,6 +62,10 @@ enum Route: Hashable {
 
     // Autres
     case notes
+    // Carnet de rêves. nightMs pre-sets the night when the user tapped an
+    // empty cell in the calendar.
+    case dreams
+    case dreamEditor(id: Int64?, nightMs: Int64?)
     /// A nested folder level. The name travels with the id so the pushed screen
     /// can title itself without a second round-trip to the vault.
     case notesFolder(id: Int64, name: String)
@@ -127,6 +131,9 @@ func routeDestination(_ route: Route) -> some View {
     case .voice:                     VoiceView()
 
     case .notes:                     NotesView()
+    case .dreams:                    DreamsView()
+    case .dreamEditor(let id, let nightMs):
+                                     DreamEditorView(editingId: id, presetNightMs: nightMs)
     case .notesFolder(let id, let name):
                                      NotesView(folderId: id, folderName: name)
     case .noteEditor(let id):        NoteEditorView(noteId: id)

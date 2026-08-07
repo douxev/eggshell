@@ -109,10 +109,9 @@ struct FeaturesView: View {
                 binding: $features.notes),
             ModuleRow(
                 title: "Carnet de rêves",
-                subtitle: "Bientôt — dans la prochaine mise à jour.",
+                subtitle: "Tes rêves, avec tags, notes vocales et curseurs de sommeil.",
                 systemImage: "moon.stars.fill",
-                binding: .constant(true),
-                enabled: false),
+                binding: $features.dreams),
         ]
     }
 
