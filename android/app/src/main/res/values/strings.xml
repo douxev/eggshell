@@ -105,6 +105,12 @@
     <string name="med_dose_delete">Supprimer cette prise</string>
     <string name="med_dose_delete_title">Supprimer cette prise ?</string>
     <string name="med_dose_delete_message">Cette prise sera retirée de l\'historique. Cette action est définitive.</string>
+    <string name="med_catch_up_action">Noter cette prise</string>
+    <string name="med_catch_up_title">Noter cette prise ?</string>
+    <string name="med_catch_up_body_fmt">Cette prise était prévue le %1$s. Ajustez l\'heure si besoin avant de valider.</string>
+    <string name="med_catch_up_taken_at">Prise effectuée le</string>
+    <string name="med_catch_up_mean_delay_fmt">Heure proposée d\'après votre retard moyen (%1$d min).</string>
+    <string name="med_catch_up_confirm">Noter</string>
     <string name="med_archive">Archiver le traitement</string>
     <string name="med_delete">Supprimer le traitement</string>
     <string name="med_delete_title">Supprimer ce traitement ?</string>

@@ -92,6 +92,12 @@
     <string name="med_dose_delete">Delete this dose</string>
     <string name="med_dose_delete_title">Delete this dose?</string>
     <string name="med_dose_delete_message">This dose will be removed from the history. This can\'t be undone.</string>
+    <string name="med_catch_up_action">Record this dose</string>
+    <string name="med_catch_up_title">Record this dose?</string>
+    <string name="med_catch_up_body_fmt">This dose was due on %1$s. Adjust the time if needed before confirming.</string>
+    <string name="med_catch_up_taken_at">Taken on</string>
+    <string name="med_catch_up_mean_delay_fmt">Time suggested from your average delay (%1$d min).</string>
+    <string name="med_catch_up_confirm">Record</string>
     <string name="med_archive">Archive medication</string>
     <string name="med_delete">Delete medication</string>
     <string name="med_delete_title">Delete this medication?</string>

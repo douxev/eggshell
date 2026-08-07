@@ -80,6 +80,7 @@ import com.douxev.eggshell.punctuality.DoseTiming
 import com.douxev.eggshell.punctuality.exactLabel
 import com.douxev.eggshell.punctuality.timingOf
 import com.douxev.eggshell.reminders.MedAliasPrefs
+import com.douxev.eggshell.ui.common.DateTimePickerField
 import com.douxev.eggshell.ui.common.ScreenHeader
 import com.douxev.eggshell.ui.components.ActionBand
 import com.douxev.eggshell.ui.components.CardRule
@@ -132,7 +133,20 @@ class MedicationDetailViewModel @Inject constructor(
         val doseUnit: String?,
         val route: String?,
         val injectionSite: String?,
-    )
+        /**
+         * The occurrence this line stands for, when it is one nobody answered.
+         * Carried so a missed dose can be logged *against its own slot* rather
+         * than as a loose intake: writing `scheduledAtMs` back is what lets
+         * [PlannedDoses] pair the two exactly instead of guessing by proximity,
+         * and it is the difference between the history healing and the same
+         * occurrence still reading « manquée » next to a duplicate intake.
+         */
+        val plannedAtMs: Long? = null,
+        val scheduleId: Long? = null,
+    ) {
+        /** A missed occurrence can be answered after the fact; nothing else can. */
+        val isRecoverable: Boolean get() = doseId == null && plannedAtMs != null
+    }
 
     private val _medication = MutableStateFlow<Medication?>(null)
     val medication: StateFlow<Medication?> = _medication.asStateFlow()
@@ -144,6 +158,16 @@ class MedicationDetailViewModel @Inject constructor(
     val history: StateFlow<List<HistoryEntry>> = _history.asStateFlow()
     private val _loading = MutableStateFlow(true)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
+
+    /**
+     * How late this user usually is, in minutes — the figure the « Régularité »
+     * card already reports. It seeds the time proposed when a missed dose is
+     * caught up, because "I took it, just not when the app expected" is what a
+     * missed occurrence almost always turns out to mean, and someone who is
+     * habitually forty minutes late did not take this one on the hour either.
+     */
+    private val _meanDelayMin = MutableStateFlow(0)
+    val meanDelayMin: StateFlow<Int> = _meanDelayMin.asStateFlow()
 
     init { refresh() }
 
@@ -169,6 +193,16 @@ class MedicationDetailViewModel @Inject constructor(
             plannedDoses.window(fromMs = from, toMs = now, medicationId = medicationId)
         }.getOrNull()
 
+        // This treatment's own habit when it has one, the user's across every
+        // treatment when it does not. A schedule added last week may hold
+        // nothing but missed occurrences, and prefilling those at exactly the
+        // prescribed minute would quietly assert a punctuality the user has
+        // never once shown.
+        _meanDelayMin.value = window?.stats?.meanDelayMin?.takeIf { it != 0 }
+            ?: runCatching {
+                plannedDoses.window(fromMs = from, toMs = now).stats.meanDelayMin
+            }.getOrDefault(0)
+
         val out = ArrayList<HistoryEntry>()
         val paired = HashSet<Long>()
 
@@ -185,6 +219,8 @@ class MedicationDetailViewModel @Inject constructor(
                     doseUnit = null,
                     route = null,
                     injectionSite = null,
+                    plannedAtMs = occurrence.plannedAtMs,
+                    scheduleId = occurrence.scheduleId,
                 )
             } else {
                 paired += event.id
@@ -247,6 +283,45 @@ class MedicationDetailViewModel @Inject constructor(
     fun toggleSchedule(id: Long, active: Boolean) {
         viewModelScope.launch {
             runCatching { schedules.setActive(id, active) }
+            refresh()
+        }
+    }
+
+    /**
+     * Catch up a missed occurrence: log the intake the user did take, at
+     * [takenAtMs], against the slot that was expecting it.
+     *
+     * The dose, unit and route come from the medication's defaults — this is a
+     * one-tap correction, and a user who took something other than their usual
+     * dose has the full log screen for it.
+     *
+     * `scheduledAtMs` is written so the intake is bound to *this* occurrence.
+     * Without it the matcher falls back to nearest-in-time, which on a
+     * twice-daily treatment can let the caught-up dose answer the neighbouring
+     * slot instead and leave both lines wrong. The schedule is deliberately NOT
+     * advanced: this is back-fill of a slot already in the past, not the
+     * answering of the one currently due.
+     */
+    fun logMissedDose(entry: HistoryEntry, takenAtMs: Long) {
+        val plannedAtMs = entry.plannedAtMs ?: return
+        viewModelScope.launch {
+            val med = _medication.value
+            runCatching {
+                repo.logDose(
+                    uniffi.transition.NewDoseEvent(
+                        medicationId = medicationId,
+                        takenAtMs = takenAtMs,
+                        dose = med?.defaultDose,
+                        doseUnit = med?.defaultDoseUnit,
+                        route = med?.route,
+                        injectionSite = null,
+                        notes = null,
+                        status = "taken",
+                        scheduledAtMs = plannedAtMs,
+                        scheduleId = entry.scheduleId,
+                    )
+                )
+            }
             refresh()
         }
     }
@@ -315,11 +390,16 @@ fun MedicationDetailScreen(
     val alias by vm.alias.collectAsState()
     val history by vm.history.collectAsState()
     val loading by vm.loading.collectAsState()
+    val meanDelayMin by vm.meanDelayMin.collectAsState()
 
     var editingAlias by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var doseToDelete by remember { mutableStateOf<Long?>(null) }
+    // The missed occurrence the user tapped, awaiting confirmation.
+    var missedToLog by remember {
+        mutableStateOf<MedicationDetailViewModel.HistoryEntry?>(null)
+    }
 
     LaunchedEffect(Unit) { vm.refresh() }
 
@@ -458,6 +538,7 @@ fun MedicationDetailScreen(
                         entries = history,
                         onEdit = onEditDose,
                         onDelete = { doseToDelete = it },
+                        onCatchUp = { missedToLog = it },
                     )
                 }
             }
@@ -499,6 +580,18 @@ fun MedicationDetailScreen(
         )
     }
 
+    missedToLog?.let { entry ->
+        CatchUpDoseDialog(
+            entry = entry,
+            meanDelayMin = meanDelayMin,
+            onDismiss = { missedToLog = null },
+            onConfirm = { takenAtMs ->
+                vm.logMissedDose(entry, takenAtMs)
+                missedToLog = null
+            },
+        )
+    }
+
     doseToDelete?.let { id ->
         AlertDialog(
             onDismissRequest = { doseToDelete = null },
@@ -522,6 +615,76 @@ fun MedicationDetailScreen(
             },
         )
     }
+}
+
+/**
+ * Confirms catching up a missed dose, with the time open to correction before
+ * anything is written.
+ *
+ * The proposed instant is the prescribed one plus the user's usual delay, not
+ * "now": a dose missed on Tuesday was not taken on Friday afternoon when the
+ * user finally opened the app, and defaulting to the current time would write
+ * an offset of several days into the very punctuality figures this screen
+ * reports. Defaulting to the prescribed minute would be the opposite lie — a
+ * perfect record the user never had — so the habit already measured is the
+ * honest starting guess, and it stays a guess the user can move.
+ *
+ * The field refuses future instants: an intake that has not happened yet is not
+ * one to catch up.
+ */
+@Composable
+private fun CatchUpDoseDialog(
+    entry: MedicationDetailViewModel.HistoryEntry,
+    meanDelayMin: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (takenAtMs: Long) -> Unit,
+) {
+    val planned = entry.plannedAtMs ?: return
+    // Seeded once per occurrence: recomputing on recomposition would drag the
+    // field back to the proposal after every edit the user makes.
+    var takenAtMs by rememberSaveable(entry.key) {
+        mutableStateOf(
+            (planned + meanDelayMin * 60_000L).coerceAtMost(System.currentTimeMillis())
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.med_catch_up_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    stringResource(
+                        R.string.med_catch_up_body_fmt,
+                        rememberDateTimeText(planned),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                DateTimePickerField(
+                    label = stringResource(R.string.med_catch_up_taken_at),
+                    atMs = takenAtMs,
+                    onChange = { takenAtMs = it },
+                    allowFuture = false,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (meanDelayMin != 0) {
+                    Text(
+                        stringResource(R.string.med_catch_up_mean_delay_fmt, meanDelayMin),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(takenAtMs) }) {
+                Text(stringResource(R.string.med_catch_up_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
 }
 
 @Composable
@@ -749,6 +912,7 @@ private fun HistoryCard(
     entries: List<MedicationDetailViewModel.HistoryEntry>,
     onEdit: (Long) -> Unit,
     onDelete: (Long) -> Unit,
+    onCatchUp: (MedicationDetailViewModel.HistoryEntry) -> Unit,
 ) {
     EggCard(
         variant = CardVariant.Low,
@@ -756,7 +920,12 @@ private fun HistoryCard(
     ) {
         entries.forEachIndexed { index, entry ->
             if (index > 0) CardRule(alpha = 0.14f)
-            HistoryRow(entry = entry, onEdit = onEdit, onDelete = onDelete)
+            HistoryRow(
+                entry = entry,
+                onEdit = onEdit,
+                onDelete = onDelete,
+                onCatchUp = onCatchUp,
+            )
         }
     }
 }
@@ -767,6 +936,7 @@ private fun HistoryRow(
     entry: MedicationDetailViewModel.HistoryEntry,
     onEdit: (Long) -> Unit,
     onDelete: (Long) -> Unit,
+    onCatchUp: (MedicationDetailViewModel.HistoryEntry) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     val (glyph, glyphTint) = when (entry.timing) {
@@ -806,16 +976,15 @@ private fun HistoryRow(
         }
     }
     val deleteLabel = stringResource(R.string.med_dose_delete)
+    val catchUpLabel = stringResource(R.string.med_catch_up_action)
     val doseId = entry.doseId
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .let { base ->
-                if (doseId == null) {
-                    base
-                } else {
-                    base
+                when {
+                    doseId != null -> base
                         .semantics {
                             customActions = listOf(
                                 CustomAccessibilityAction(deleteLabel) { onDelete(doseId); true },
@@ -825,6 +994,13 @@ private fun HistoryRow(
                             onClick = { onEdit(doseId) },
                             onLongClick = { onDelete(doseId) },
                         )
+                    // A missed occurrence has no dose row to edit, but it does
+                    // have a slot to fill — tapping it is how the dose that was
+                    // actually taken gets recorded against it.
+                    entry.isRecoverable -> base.clickable(onClickLabel = catchUpLabel) {
+                        onCatchUp(entry)
+                    }
+                    else -> base
                 }
             }
             .padding(vertical = 13.dp),
