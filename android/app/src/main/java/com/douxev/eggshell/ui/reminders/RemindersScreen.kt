@@ -67,6 +67,7 @@ import com.douxev.eggshell.ui.components.CardVariant
 import com.douxev.eggshell.ui.components.EggCard
 import com.douxev.eggshell.ui.components.EmptyState
 import com.douxev.eggshell.ui.components.IconTile
+import com.douxev.eggshell.ui.components.StatusPill
 import com.douxev.eggshell.ui.components.SectionTitle
 import com.douxev.eggshell.ui.medication.MedicationCatalog
 import com.douxev.eggshell.ui.theme.EggDim
@@ -113,7 +114,11 @@ class RemindersViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
-            val schedules = runCatching { scheduleRepo.listAllActive() }.getOrDefault(emptyList())
+            // Paused reminders included, deliberately. Listing only the active
+            // ones is what made a disabled reminder undeletable: pausing it
+            // removed it from the only screen that offered a delete, and
+            // nothing anywhere would list it again.
+            val schedules = runCatching { scheduleRepo.listAll() }.getOrDefault(emptyList())
             val meds = runCatching { medsRepo.list(includeArchived = true) }.getOrDefault(emptyList())
             val medById = meds.associateBy { it.id }
             val medItems = schedules.mapNotNull { s ->
@@ -124,7 +129,10 @@ class RemindersViewModel @Inject constructor(
                         priority = scheduleRepo.isPriority(s.id),
                     )
                 }
-            }
+            }.sortedWith(
+                compareByDescending<MedReminder> { it.schedule.active }
+                    .thenBy { it.medication.name },
+            )
             val labList = labs.list()
             val labPriority = labList.associate { it.id to labs.isPriority(it.id) }
             val now = System.currentTimeMillis()
@@ -139,11 +147,6 @@ class RemindersViewModel @Inject constructor(
                 appointmentReminders = upcomingAppointments,
             )
         }
-    }
-
-    fun setMedPriority(scheduleId: Long, priority: Boolean) {
-        scheduleRepo.setPriority(scheduleId, priority)
-        refresh()
     }
 
     fun setLabPriority(labId: Long, priority: Boolean) {
@@ -176,12 +179,6 @@ class RemindersViewModel @Inject constructor(
         refresh()
     }
 
-    fun deleteMedSchedule(scheduleId: Long) {
-        viewModelScope.launch {
-            runCatching { scheduleRepo.deleteSchedule(scheduleId) }
-            refresh()
-        }
-    }
 }
 
 /**
@@ -195,7 +192,7 @@ class RemindersViewModel @Inject constructor(
 @Composable
 fun RemindersScreen(
     onBack: () -> Unit,
-    onEditMedSchedule: (medicationId: Long, scheduleId: Long) -> Unit = { _, _ -> },
+    onManageMedReminders: (medicationId: Long) -> Unit = {},
     vm: RemindersViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
@@ -205,9 +202,6 @@ fun RemindersScreen(
     // Null = no dialog open. Set to a LabDialogTarget to open the lab-reminder
     // dialog in either "create new" or "edit existing" mode.
     var dialogTarget by remember { mutableStateOf<LabDialogTarget?>(null) }
-    // Med reminder pending a delete confirmation (delete is irreversible and
-    // visually similar to the pause/resume that lives on the medication screen).
-    var confirmDelete by remember { mutableStateOf<RemindersViewModel.MedReminder?>(null) }
 
     Scaffold(containerColor = MaterialTheme.colorScheme.surface) { padding ->
         LazyColumn(
@@ -234,7 +228,12 @@ fun RemindersScreen(
                 }
             }
 
-            // -- Médics : created from a treatment, edited from here ---------
+            // -- Médics : every treatment reminder, managed in one place -----
+            //
+            // These rows are a directory, not a second set of controls. Pause,
+            // edit and delete all live on the treatment's own reminder screen,
+            // because two partial control surfaces over the same reminders is
+            // exactly the arrangement that let a paused one become undeletable.
             item { SectionHeader(stringResource(R.string.reminders_section_meds)) }
             item { Hint(stringResource(R.string.reminders_section_meds_hint)) }
             if (state.medReminders.isEmpty()) {
@@ -242,11 +241,9 @@ fun RemindersScreen(
             } else {
                 items(state.medReminders.size) { index ->
                     val item = state.medReminders[index]
-                    MedReminderCard(
+                    MedReminderRow(
                         item = item,
-                        onClick = { onEditMedSchedule(item.medication.id, item.schedule.id) },
-                        onTogglePriority = { vm.setMedPriority(item.schedule.id, it) },
-                        onDelete = { confirmDelete = item },
+                        onClick = { onManageMedReminders(item.medication.id) },
                     )
                 }
             }
@@ -363,27 +360,6 @@ fun RemindersScreen(
                     is LabDialogTarget.Edit -> vm.updateLabDaily(target.entry.id, label, h, m)
                 }
                 dialogTarget = null
-            },
-        )
-    }
-
-    confirmDelete?.let { target ->
-        AlertDialog(
-            onDismissRequest = { confirmDelete = null },
-            title = { Text(stringResource(R.string.reminders_delete_confirm_title)) },
-            text = {
-                Text(stringResource(R.string.reminders_delete_confirm_body, target.medication.name))
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.deleteMedSchedule(target.schedule.id)
-                    confirmDelete = null
-                }) { Text(stringResource(R.string.reminders_delete_confirm_action)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = null }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
             },
         )
     }
@@ -521,45 +497,71 @@ private fun Hint(text: String) {
     )
 }
 
+/**
+ * One treatment reminder as a directory entry: what it is, whether it is
+ * running, and a tap through to the screen that manages it.
+ *
+ * A paused reminder is listed with the rest and says so. That is the whole
+ * point of the section — the reminders that need attention are the ones that
+ * stopped firing, and the previous listing filtered exactly those out.
+ */
 @Composable
-private fun MedReminderCard(
+private fun MedReminderRow(
     item: RemindersViewModel.MedReminder,
     onClick: () -> Unit,
-    onTogglePriority: (Boolean) -> Unit,
-    onDelete: () -> Unit,
 ) {
     val routeIcon: ImageVector = when {
         MedicationCatalog.isInjection(item.medication.route) -> Icons.Filled.Vaccines
         else -> Icons.Filled.Medication
     }
-    val scheduleText = when (item.schedule.kind) {
-        "interval" -> {
-            val hours = (item.schedule.intervalMinutes?.toInt() ?: 0) / 60
-            stringResource(R.string.schedule_interval_fmt, hours)
-        }
-        "daily" -> stringResource(
-            R.string.schedule_daily_fmt,
-            item.schedule.dailyHour?.toInt() ?: 0,
-            item.schedule.dailyMinute?.toInt() ?: 0,
-        )
-        "days_interval" -> stringResource(
-            R.string.schedule_days_interval_fmt,
-            item.schedule.intervalDays?.toInt() ?: 0,
-            item.schedule.dailyHour?.toInt() ?: 0,
-            item.schedule.dailyMinute?.toInt() ?: 0,
-        )
-        else -> ""
-    }
+    val scheduleText = cadenceTextFor(item.schedule)
     val label = item.schedule.label?.takeIf { it.isNotBlank() }
-    ReminderCard(
-        leadingIcon = routeIcon,
-        title = item.medication.name,
-        subtitle = if (label != null) "$scheduleText · « $label »" else scheduleText,
-        priority = item.priority,
+    val subtitle = if (label != null) "$scheduleText · « $label »" else scheduleText
+
+    EggCard(
+        variant = CardVariant.Low,
+        padding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
         onClick = onClick,
-        onTogglePriority = onTogglePriority,
-        onDelete = onDelete,
-    )
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconTile(container = MaterialTheme.colorScheme.primaryContainer) {
+                Icon(
+                    routeIcon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .padding(start = 14.dp)
+                    .weight(1f),
+            ) {
+                Text(
+                    item.medication.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (!item.schedule.active) {
+                StatusPill(
+                    label = stringResource(R.string.reminders_paused_pill),
+                    container = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    content = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (item.priority) {
+                StatusPill(
+                    label = stringResource(R.string.reminders_priority_pill),
+                    container = MaterialTheme.colorScheme.secondaryContainer,
+                    content = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
+    }
 }
 
 @Composable

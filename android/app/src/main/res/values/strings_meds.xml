@@ -61,6 +61,10 @@
     <string name="meds_alias_row">Alias dans les notifications</string>
     <string name="meds_schedules">Schémas de prise</string>
     <string name="meds_schedule_toggle">Activer le rappel</string>
+    <string name="meds_reminders_manage">Gérer les rappels</string>
+    <string name="meds_reminders_none">Aucun rappel pour ce traitement.</string>
+    <string name="meds_reminders_count_fmt">%1$d rappel(s) actif(s).</string>
+    <string name="meds_reminders_count_paused_fmt">%1$d actif(s) · %2$d en pause.</string>
     <string name="meds_reminder_text">Texte du rappel</string>
     <string name="meds_quoted_fmt">« %1$s »</string>
     <string name="meds_unarchive">Sortir de l’archive</string>

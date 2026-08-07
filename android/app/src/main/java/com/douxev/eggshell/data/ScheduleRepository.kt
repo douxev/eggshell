@@ -48,6 +48,25 @@ class ScheduleRepository @Inject constructor(
         vault.requireSession().listActiveSchedules()
     }
 
+    /**
+     * Every schedule of every medication, paused ones included.
+     *
+     * The core only offers "all *active*" or "one medication, optionally with
+     * its inactive rows", so a paused reminder had no listing that could reach
+     * it — which is exactly why the reminder hub could not delete one. Walking
+     * the medications is the only way to ask the question, archived ones
+     * included: archiving a treatment does not cancel its alarms, so a reminder
+     * left armed under an archived medication is precisely the one a user needs
+     * to find and delete.
+     */
+    suspend fun listAll(): List<DoseSchedule> = withContext(Dispatchers.IO) {
+        val session = vault.requireSession()
+        session.listMedications(true).flatMap { med ->
+            runCatching { session.listSchedulesForMedication(med.id, true) }
+                .getOrDefault(emptyList())
+        }
+    }
+
     suspend fun listForMedication(medicationId: Long, includeInactive: Boolean = false): List<DoseSchedule> =
         withContext(Dispatchers.IO) {
             vault.requireSession().listSchedulesForMedication(medicationId, includeInactive)

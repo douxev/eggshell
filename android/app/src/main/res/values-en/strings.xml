@@ -275,6 +275,15 @@
     <string name="reminders_delete_confirm_title">Delete this reminder?</string>
     <string name="reminders_delete_confirm_body">The reminder for “%1$s” will be permanently deleted. Your dose history is kept. To pause it temporarily, use “Pause” from the medication screen instead.</string>
     <string name="reminders_delete_confirm_action">Delete</string>
+    <string name="reminders_paused">Reminder paused — it won\'t go off.</string>
+    <string name="reminders_paused_pill">Paused</string>
+    <string name="reminders_priority_pill">Priority</string>
+    <string name="reminders_active_hint">Silences the reminder without losing its timing or your history.</string>
+    <string name="reminders_med_title">Reminders</string>
+    <string name="reminders_med_title_fmt">Reminders · %1$s</string>
+    <string name="reminders_med_intro">Create, edit, pause or delete this medication\'s reminders. Pausing erases nothing: the reminder stays here, ready to be switched back on or removed.</string>
+    <string name="reminders_med_add">Add a reminder</string>
+    <string name="reminders_med_add_label">Add</string>
     <string name="reminders_add_lab">Add a lab reminder</string>
     <string name="reminders_lab_dialog_title">New lab reminder</string>
     <string name="reminders_lab_edit_dialog_title">Edit reminder</string>

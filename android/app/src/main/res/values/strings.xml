@@ -305,6 +305,15 @@
     <string name="reminders_delete_confirm_title">Supprimer ce rappel ?</string>
     <string name="reminders_delete_confirm_body">Le rappel pour « %1$s » sera supprimé définitivement. Ton historique de prises est conservé. Pour suspendre temporairement, utilise plutôt « Mettre en pause » depuis la fiche du traitement.</string>
     <string name="reminders_delete_confirm_action">Supprimer</string>
+    <string name="reminders_paused">Rappel en pause — il ne sonnera pas.</string>
+    <string name="reminders_paused_pill">En pause</string>
+    <string name="reminders_priority_pill">Prioritaire</string>
+    <string name="reminders_active_hint">Coupe le rappel sans effacer son horaire ni ton historique.</string>
+    <string name="reminders_med_title">Rappels</string>
+    <string name="reminders_med_title_fmt">Rappels · %1$s</string>
+    <string name="reminders_med_intro">Crée, modifie, mets en pause ou supprime les rappels de ce traitement. Une pause n\'efface rien : le rappel reste ici, prêt à être réactivé ou supprimé.</string>
+    <string name="reminders_med_add">Ajouter un rappel</string>
+    <string name="reminders_med_add_label">Ajouter</string>
     <string name="reminders_add_lab">Ajouter un rappel d\'analyse</string>
     <string name="reminders_lab_dialog_title">Nouveau rappel d\'analyse</string>
     <string name="reminders_lab_edit_dialog_title">Modifier le rappel</string>

@@ -61,6 +61,10 @@
     <string name="meds_alias_row">Alias in notifications</string>
     <string name="meds_schedules">Dose schedules</string>
     <string name="meds_schedule_toggle">Turn the reminder on</string>
+    <string name="meds_reminders_manage">Manage reminders</string>
+    <string name="meds_reminders_none">No reminder for this medication.</string>
+    <string name="meds_reminders_count_fmt">%1$d active reminder(s).</string>
+    <string name="meds_reminders_count_paused_fmt">%1$d active · %2$d paused.</string>
     <string name="meds_reminder_text">Reminder text</string>
     <string name="meds_quoted_fmt">“%1$s”</string>
     <string name="meds_unarchive">Take out of the archive</string>

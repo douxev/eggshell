@@ -172,10 +172,20 @@ fun HomeNavHost(
                 MedicationDetailScreen(
                     onLogDose = { nav.navigate(Routes.medLog(id)) },
                     onEditDose = { doseId -> nav.navigate(Routes.medDoseEdit(id, doseId)) },
-                    onAddSchedule = { nav.navigate(Routes.medSchedule(id)) },
-                    onEditSchedule = { sId -> nav.navigate(Routes.medScheduleEdit(id, sId)) },
+                    onManageReminders = { nav.navigate(Routes.medReminders(id)) },
                     onEditMedication = { nav.navigate(Routes.medEdit(id)) },
                     onBack = { nav.popBackStack() },
+                )
+            }
+            composable(
+                Routes.MED_REMINDERS,
+                arguments = listOf(navArgument("id") { type = NavType.LongType }),
+            ) {
+                val id = it.arguments!!.getLong("id")
+                com.douxev.eggshell.ui.reminders.MedicationRemindersScreen(
+                    onBack = { nav.popBackStack() },
+                    onAddReminder = { nav.navigate(Routes.medSchedule(id)) },
+                    onEditReminder = { sId -> nav.navigate(Routes.medScheduleEdit(id, sId)) },
                 )
             }
             composable(
@@ -369,9 +379,7 @@ fun HomeNavHost(
             composable(Routes.REMINDERS) {
                 RemindersScreen(
                     onBack = { nav.popBackStack() },
-                    onEditMedSchedule = { medId, scheduleId ->
-                        nav.navigate(Routes.medScheduleEdit(medId, scheduleId))
-                    },
+                    onManageMedReminders = { medId -> nav.navigate(Routes.medReminders(medId)) },
                 )
             }
             composable(Routes.HORMONE_UNITS) {
@@ -416,6 +424,8 @@ object Routes {
     const val MED_DETAIL = "med/detail/{id}"
     const val MED_LOG_DOSE = "med/log/{id}?doseId={doseId}"
     const val MED_ADD_SCHEDULE = "med/schedule/{id}?scheduleId={scheduleId}"
+    /** The single reminder-management screen for one treatment. */
+    const val MED_REMINDERS = "med/reminders/{id}"
 
     /** « Ressenti » — the journal screen with its Journal/Menstruations/Corrélations segments. */
     const val FEELING = "feeling"
@@ -458,6 +468,7 @@ object Routes {
     fun medLog(id: Long) = "med/log/$id"
     fun medDoseEdit(medId: Long, doseId: Long) = "med/log/$medId?doseId=$doseId"
     fun medSchedule(id: Long) = "med/schedule/$id"
+    fun medReminders(id: Long) = "med/reminders/$id"
     fun medScheduleEdit(medId: Long, scheduleId: Long) = "med/schedule/$medId?scheduleId=$scheduleId"
     fun journalEdit(id: Long) = "journal/edit/$id"
     fun bleedingEdit(id: Long) = "bleeding/edit/$id"

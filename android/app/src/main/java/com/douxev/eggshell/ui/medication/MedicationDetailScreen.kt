@@ -12,16 +12,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Unarchive
@@ -33,7 +32,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -280,12 +278,6 @@ class MedicationDetailViewModel @Inject constructor(
         viewModelScope.launch { runCatching { schedules.syncFromDb() } }
     }
 
-    fun toggleSchedule(id: Long, active: Boolean) {
-        viewModelScope.launch {
-            runCatching { schedules.setActive(id, active) }
-            refresh()
-        }
-    }
 
     /**
      * Catch up a missed occurrence: log the intake the user did take, at
@@ -379,8 +371,7 @@ class MedicationDetailViewModel @Inject constructor(
 fun MedicationDetailScreen(
     onLogDose: () -> Unit,
     onEditDose: (Long) -> Unit,
-    onAddSchedule: () -> Unit,
-    onEditSchedule: (Long) -> Unit,
+    onManageReminders: () -> Unit,
     onEditMedication: () -> Unit,
     onBack: () -> Unit,
     vm: MedicationDetailViewModel = hiltViewModel(),
@@ -496,31 +487,17 @@ fun MedicationDetailScreen(
                 }
             }
 
+            // One door to the reminders, not a pile of half-manageable cards.
+            // Creating, pausing, editing and deleting all live behind it —
+            // splitting them across screens is what let "delete" go missing for
+            // a paused reminder.
+            item { SectionTitle(text = stringResource(R.string.meds_schedules)) }
             item {
-                SectionTitle(
-                    text = stringResource(R.string.meds_schedules),
-                    action = stringResource(R.string.med_add),
-                    onAction = onAddSchedule,
+                RemindersEntryRow(
+                    activeCount = schedules.count { it.active },
+                    pausedCount = schedules.count { !it.active },
+                    onClick = onManageReminders,
                 )
-            }
-            if (schedules.isEmpty()) {
-                if (!loading) {
-                    item {
-                        EmptyState(
-                            message = stringResource(R.string.schedule_none),
-                            actionLabel = stringResource(R.string.schedule_add),
-                            onAction = onAddSchedule,
-                        )
-                    }
-                }
-            } else {
-                items(schedules, key = { it.id }) { schedule ->
-                    ScheduleCard(
-                        schedule = schedule,
-                        onClick = { onEditSchedule(schedule.id) },
-                        onToggle = { active -> vm.toggleSchedule(schedule.id, active) },
-                    )
-                }
             }
 
             item { SectionTitle(text = stringResource(R.string.med_history)) }
@@ -810,97 +787,66 @@ private fun IdentityCard(med: Medication, alias: String?, onEditAlias: () -> Uni
     }
 }
 
-/** One schedule: its cadence, its next occurrence, its switch, its wording. */
+/**
+ * The single door to this treatment's reminders.
+ *
+ * It replaces the stack of per-schedule cards that used to sit here. Those
+ * cards could pause and edit a reminder but not delete one, while the settings
+ * hub could delete but never listed a paused reminder — so a paused reminder
+ * was reachable from a screen that could not remove it and absent from the one
+ * that could. Collapsing the whole set of operations behind one row is what
+ * makes that state impossible rather than merely fixed.
+ */
 @Composable
-private fun ScheduleCard(
-    schedule: DoseSchedule,
-    onClick: () -> Unit,
-    onToggle: (Boolean) -> Unit,
-) {
+private fun RemindersEntryRow(activeCount: Int, pausedCount: Int, onClick: () -> Unit) {
     EggCard(
         variant = CardVariant.Low,
         padding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
         onClick = onClick,
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconTile(container = MaterialTheme.colorScheme.primaryContainer) {
+                Icon(
+                    Icons.Filled.Notifications,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    cadenceText(schedule),
+                    stringResource(R.string.meds_reminders_manage),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    stringResource(
-                        R.string.schedule_next_due_fmt,
-                        rememberDateTimeText(schedule.nextDueAtMs),
-                    ),
+                    when {
+                        activeCount == 0 && pausedCount == 0 ->
+                            stringResource(R.string.meds_reminders_none)
+                        // The paused count is stated rather than folded into a
+                        // total: it is the one a user comes here to act on.
+                        pausedCount > 0 -> stringResource(
+                            R.string.meds_reminders_count_paused_fmt,
+                            activeCount,
+                            pausedCount,
+                        )
+                        else -> stringResource(R.string.meds_reminders_count_fmt, activeCount)
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            val toggleLabel = stringResource(R.string.meds_schedule_toggle)
-            Switch(
-                checked = schedule.active,
-                onCheckedChange = onToggle,
-                modifier = Modifier.semantics { contentDescription = toggleLabel },
-            )
-        }
-
-        CardRule(modifier = Modifier.padding(top = 14.dp))
-        Row(
-            modifier = Modifier.padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
             Icon(
-                Icons.Filled.EditNote,
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                modifier = Modifier.size(17.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                stringResource(R.string.meds_reminder_text),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                stringResource(
-                    R.string.meds_quoted_fmt,
-                    schedule.label?.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.reminder_title),
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     }
-}
-
-/** « Chaque jour à 08:00 » and its two siblings — the three kinds the core has. */
-@Composable
-private fun cadenceText(schedule: DoseSchedule): String = when (schedule.kind) {
-    "interval" -> stringResource(
-        R.string.schedule_interval_fmt,
-        (schedule.intervalMinutes?.toInt() ?: 0) / 60,
-    )
-    "daily" -> stringResource(
-        R.string.schedule_daily_fmt,
-        schedule.dailyHour?.toInt() ?: 0,
-        schedule.dailyMinute?.toInt() ?: 0,
-    )
-    "days_interval" -> stringResource(
-        R.string.schedule_days_interval_fmt,
-        schedule.intervalDays?.toInt() ?: 0,
-        schedule.dailyHour?.toInt() ?: 0,
-        schedule.dailyMinute?.toInt() ?: 0,
-    )
-    else -> schedule.kind
 }
 
 /**
