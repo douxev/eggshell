@@ -84,4 +84,45 @@
     <string name="module_widget_label_bleeding">Menstruations</string>
     <string name="module_widget_label_photos">Photos</string>
     <string name="module_widget_label_voice">Voix</string>
+
+    <!-- ============ Carnet de rêves ============ -->
+    <string name="dreams_title">Carnet de rêves</string>
+    <string name="dreams_add">Noter un rêve</string>
+    <string name="dreams_add_label">Noter</string>
+    <string name="dreams_new_title">Nouveau rêve</string>
+    <string name="dreams_edit_title">Modifier le rêve</string>
+    <string name="dreams_untitled">Sans titre</string>
+    <string name="dreams_lucid">Lucide</string>
+    <string name="dreams_filter_all">Tous</string>
+    <string name="dreams_night_fmt">NUIT DU %1$s</string>
+    <string name="dreams_night_label">Nuit du</string>
+    <string name="dreams_night_hint">La nuit du rêve, pas le jour où tu l\'écris. Un réveil à 3 h compte pour la nuit qui commence la veille.</string>
+    <string name="dreams_empty">Aucun rêve noté. Le souvenir s\'efface en quelques minutes — le plus tôt est le mieux.</string>
+    <string name="dreams_empty_filtered">Aucun rêve avec ce tag.</string>
+    <string name="dreams_empty_action">Noter un rêve</string>
+    <string name="dreams_field_title">Titre (facultatif)</string>
+    <string name="dreams_field_body">Le rêve</string>
+    <string name="dreams_lucid_label">Rêve lucide</string>
+    <string name="dreams_lucid_hint">Tu savais que tu rêvais.</string>
+    <string name="dreams_section_voice">Notes vocales</string>
+    <string name="dreams_voice_hint">Plus rapide que d\'écrire au réveil. L\'audio est chiffré comme le reste du coffre.</string>
+    <string name="dreams_section_sleep">Sommeil</string>
+    <string name="dreams_section_tags">Tags</string>
+    <string name="dreams_tags_hint">Pour regrouper les rêves qui se ressemblent et repérer ce qui revient.</string>
+    <string name="dreams_tag_new">Nouveau tag</string>
+    <string name="dreams_tag_add">Ajouter</string>
+    <string name="dreams_record_start">Enregistrer</string>
+    <string name="dreams_record_stop">Arrêter</string>
+    <string name="dreams_transcribe">Transcrire</string>
+    <string name="dreams_transcribing">Transcription…</string>
+    <string name="dreams_auto_transcribe">Transcrire automatiquement</string>
+    <string name="dreams_auto_transcribe_hint">La transcription se fait sur ton téléphone. Rien n\'est envoyé à un serveur.</string>
+    <string name="dreams_transcribe_api_too_old">La transcription sur l\'appareil demande Android 12 ou plus. L\'audio reste enregistré et chiffré.</string>
+    <string name="dreams_transcribe_no_recognizer">Ce téléphone n\'a pas de moteur de transcription hors ligne. On n\'envoie rien à un serveur, donc l\'audio reste sans texte.</string>
+    <string name="dreams_transcribe_no_language">Le modèle de langue n\'est pas installé sur ce téléphone. Ajoute-le dans les réglages système de la reconnaissance vocale.</string>
+    <string name="dreams_audio_delete">Supprimer cette note vocale</string>
+    <string name="dreams_audio_count_cd">%1$d note(s) vocale(s)</string>
+    <string name="dreams_delete">Supprimer ce rêve</string>
+    <string name="dreams_delete_title">Supprimer ce rêve ?</string>
+    <string name="dreams_delete_message">Le rêve, ses tags et ses notes vocales seront définitivement supprimés.</string>
 </resources>

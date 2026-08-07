@@ -49,5 +49,7 @@ class MetricsRepository @Inject constructor(
     companion object {
         const val DOMAIN_JOURNAL = "journal"
         const val DOMAIN_BLEEDING = "bleeding"
+        /** Sleep sliders of the dream journal, seeded by migration 0016. */
+        const val DOMAIN_DREAMS = "dreams"
     }
 }

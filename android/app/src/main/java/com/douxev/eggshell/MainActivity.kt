@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     @Inject lateinit var voice: com.douxev.eggshell.data.VoiceRepository
     @Inject lateinit var pdfExports: com.douxev.eggshell.data.PdfReportExporter
     @Inject lateinit var notes: com.douxev.eggshell.data.NotesRepository
+    @Inject lateinit var dreams: com.douxev.eggshell.data.DreamsRepository
     @Inject lateinit var noteExports: com.douxev.eggshell.data.NoteExporter
 
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
@@ -68,6 +69,7 @@ class MainActivity : AppCompatActivity() {
             runCatching { photos.purgeAllCache() }
             runCatching { voice.purgeAllCache() }
             runCatching { notes.purgeAllCache() }
+            runCatching { dreams.purgeAllCache() }
             runCatching { noteExports.purgeExports() }
             runCatching { pdfExports.purgeExports() }
             runCatching {
@@ -294,6 +296,7 @@ class AppRootViewModel @Inject constructor(
     private val photos: PhotosRepository,
     private val voice: VoiceRepository,
     private val notesRepo: com.douxev.eggshell.data.NotesRepository,
+    private val dreamsRepo: com.douxev.eggshell.data.DreamsRepository,
     private val moduleShortcuts: com.douxev.eggshell.modules.ModuleShortcuts,
     private val decoy: com.douxev.eggshell.security.DecoyVerifier,
 ) : ViewModel() {
@@ -395,6 +398,7 @@ class AppRootViewModel @Inject constructor(
                 runCatching { photos.cleanupOrphans() }
                 runCatching { voice.cleanupOrphans() }
                 runCatching { notesRepo.cleanupOrphans() }
+                runCatching { dreamsRepo.cleanupOrphans() }
                 // Republish the launcher shortcuts against the modules the user
                 // actually has on. This is reached only by a *real* unlock —
                 // the decoy PIN never opens a session, so it never routes to

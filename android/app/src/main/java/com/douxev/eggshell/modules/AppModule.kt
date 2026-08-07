@@ -44,10 +44,11 @@ enum class AppModule(
         3,
     ),
     Notes(ModuleBadgePrefs.Module.Notes, R.string.module_notes, R.drawable.ic_module_notes, 4),
-    Weight(ModuleBadgePrefs.Module.Weight, R.string.module_weight, R.drawable.ic_module_weight, 5),
-    Bleeding(ModuleBadgePrefs.Module.Bleeding, R.string.module_bleeding, R.drawable.ic_module_bleeding, 6),
-    Photos(ModuleBadgePrefs.Module.Photos, R.string.module_photos, R.drawable.ic_module_photos, 7),
-    Voice(ModuleBadgePrefs.Module.Voice, R.string.module_voice, R.drawable.ic_module_voice, 8);
+    Dreams(ModuleBadgePrefs.Module.Dreams, R.string.module_dreams, R.drawable.ic_module_dreams, 5),
+    Weight(ModuleBadgePrefs.Module.Weight, R.string.module_weight, R.drawable.ic_module_weight, 6),
+    Bleeding(ModuleBadgePrefs.Module.Bleeding, R.string.module_bleeding, R.drawable.ic_module_bleeding, 7),
+    Photos(ModuleBadgePrefs.Module.Photos, R.string.module_photos, R.drawable.ic_module_photos, 8),
+    Voice(ModuleBadgePrefs.Module.Voice, R.string.module_voice, R.drawable.ic_module_voice, 9);
 
     val id: String get() = badge.key
 
@@ -72,6 +73,7 @@ fun FeaturesPrefs.enabledModules(): List<AppModule> = AppModule.entries.filter {
         AppModule.Labs -> hormones.value
         AppModule.Appointments -> appointments.value
         AppModule.Notes -> notes.value
+        AppModule.Dreams -> dreams.value
         // Weight is a sub-feature of Courbes: its own toggle governs it, but it
         // cannot outlive the module that hosts its screen.
         AppModule.Weight -> hormones.value && weightTracking.value

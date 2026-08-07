@@ -67,4 +67,6 @@
     <string name="feel_metric_hidden">Masqué</string>
     <string name="feel_metric_domain_journal">Ces curseurs apparaissent dans ton journal.</string>
     <string name="feel_metric_domain_bleeding">Ces curseurs apparaissent quand tu notes tes menstruations.</string>
+    <string name="feel_corr_axis_dreams_fmt">Rêves · %1$d</string>
+    <string name="feel_corr_axis_lucid">Rêves lucides</string>
 </resources>

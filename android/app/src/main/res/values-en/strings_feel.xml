@@ -67,4 +67,6 @@
     <string name="feel_metric_hidden">Hidden</string>
     <string name="feel_metric_domain_journal">These sliders show up in your journal.</string>
     <string name="feel_metric_domain_bleeding">These sliders show up when you log a period day.</string>
+    <string name="feel_corr_axis_dreams_fmt">Dreams · %1$d</string>
+    <string name="feel_corr_axis_lucid">Lucid dreams</string>
 </resources>

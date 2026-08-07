@@ -130,5 +130,5 @@
     <string name="set_module_notes">Notes</string>
     <string name="set_module_notes_sub">Markdown notes, with images and folders</string>
     <string name="set_module_dreams">Dream journal</string>
-    <string name="set_module_dreams_sub">Coming in the next update</string>
+    <string name="set_module_dreams_sub">Your dreams, with tags, voice notes and sleep sliders</string>
 </resources>

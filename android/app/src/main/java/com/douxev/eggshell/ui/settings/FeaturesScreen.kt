@@ -63,6 +63,7 @@ class FeaturesViewModel @Inject constructor(
     val photoTab: StateFlow<Boolean> = prefs.photoTab
     val voiceTab: StateFlow<Boolean> = prefs.voiceTab
     val notes: StateFlow<Boolean> = prefs.notes
+    val dreams: StateFlow<Boolean> = prefs.dreams
     val bleeding: StateFlow<Boolean> = prefs.bleeding
     val appointments: StateFlow<Boolean> = prefs.appointments
 
@@ -73,6 +74,7 @@ class FeaturesViewModel @Inject constructor(
     fun setPhotoTab(v: Boolean) = prefs.setPhotoTab(v).also { syncShortcuts() }
     fun setVoiceTab(v: Boolean) = prefs.setVoiceTab(v).also { syncShortcuts() }
     fun setNotes(v: Boolean) = prefs.setNotes(v).also { syncShortcuts() }
+    fun setDreams(v: Boolean) = prefs.setDreams(v).also { syncShortcuts() }
     fun setBleeding(v: Boolean) = prefs.setBleeding(v).also { syncShortcuts() }
     fun setAppointments(v: Boolean) = prefs.setAppointments(v).also { syncShortcuts() }
 
@@ -112,6 +114,7 @@ fun FeaturesScreen(
     val photo by vm.photoTab.collectAsState()
     val voice by vm.voiceTab.collectAsState()
     val notes by vm.notes.collectAsState()
+    val dreams by vm.dreams.collectAsState()
 
     Scaffold(containerColor = MaterialTheme.colorScheme.surface) { padding ->
         LazyColumn(
@@ -236,18 +239,13 @@ fun FeaturesScreen(
                 )
             }
             item {
-                // Announced, not shipped. Shown switched on because that is what
-                // it will be when it lands, and inert because there is nothing
-                // behind it yet — an enabled switch here would persist a choice
-                // against a module that does not exist.
                 ModuleRow(
                     icon = Icons.Filled.Bedtime,
                     family = ModuleFamily.Other,
                     title = stringResource(R.string.set_module_dreams),
                     subtitle = stringResource(R.string.set_module_dreams_sub),
-                    checked = true,
-                    onCheckedChange = {},
-                    enabled = false,
+                    checked = dreams,
+                    onCheckedChange = vm::setDreams,
                 )
             }
 

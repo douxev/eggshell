@@ -70,4 +70,45 @@
     <string name="module_widget_label_bleeding">Periods</string>
     <string name="module_widget_label_photos">Photos</string>
     <string name="module_widget_label_voice">Voice</string>
+
+    <!-- ============ Dream journal ============ -->
+    <string name="dreams_title">Dream journal</string>
+    <string name="dreams_add">Record a dream</string>
+    <string name="dreams_add_label">Add</string>
+    <string name="dreams_new_title">New dream</string>
+    <string name="dreams_edit_title">Edit dream</string>
+    <string name="dreams_untitled">Untitled</string>
+    <string name="dreams_lucid">Lucid</string>
+    <string name="dreams_filter_all">All</string>
+    <string name="dreams_night_fmt">NIGHT OF %1$s</string>
+    <string name="dreams_night_label">Night of</string>
+    <string name="dreams_night_hint">The night of the dream, not the day you write it down. Waking at 3 am counts as the night that started the evening before.</string>
+    <string name="dreams_empty">No dreams recorded yet. Recall fades within minutes — the sooner the better.</string>
+    <string name="dreams_empty_filtered">No dreams with this tag.</string>
+    <string name="dreams_empty_action">Record a dream</string>
+    <string name="dreams_field_title">Title (optional)</string>
+    <string name="dreams_field_body">The dream</string>
+    <string name="dreams_lucid_label">Lucid dream</string>
+    <string name="dreams_lucid_hint">You knew you were dreaming.</string>
+    <string name="dreams_section_voice">Voice notes</string>
+    <string name="dreams_voice_hint">Faster than typing on waking. The audio is encrypted like the rest of the vault.</string>
+    <string name="dreams_section_sleep">Sleep</string>
+    <string name="dreams_section_tags">Tags</string>
+    <string name="dreams_tags_hint">To group dreams that resemble each other and spot what keeps coming back.</string>
+    <string name="dreams_tag_new">New tag</string>
+    <string name="dreams_tag_add">Add</string>
+    <string name="dreams_record_start">Record</string>
+    <string name="dreams_record_stop">Stop</string>
+    <string name="dreams_transcribe">Transcribe</string>
+    <string name="dreams_transcribing">Transcribing…</string>
+    <string name="dreams_auto_transcribe">Transcribe automatically</string>
+    <string name="dreams_auto_transcribe_hint">Transcription runs on your phone. Nothing is sent to a server.</string>
+    <string name="dreams_transcribe_api_too_old">On-device transcription needs Android 12 or later. The audio is still recorded and encrypted.</string>
+    <string name="dreams_transcribe_no_recognizer">This phone has no offline transcription engine. We never send audio to a server, so the recording stays without text.</string>
+    <string name="dreams_transcribe_no_language">The language model is not installed on this phone. Add it in the system speech-recognition settings.</string>
+    <string name="dreams_audio_delete">Delete this voice note</string>
+    <string name="dreams_audio_count_cd">%1$d voice note(s)</string>
+    <string name="dreams_delete">Delete this dream</string>
+    <string name="dreams_delete_title">Delete this dream?</string>
+    <string name="dreams_delete_message">The dream, its tags and its voice notes will be permanently deleted.</string>
 </resources>

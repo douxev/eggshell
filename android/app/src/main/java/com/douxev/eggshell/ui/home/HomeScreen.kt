@@ -113,6 +113,7 @@ fun HomeScreen(
     onOpenPhotos: () -> Unit,
     onOpenVoice: () -> Unit,
     onOpenNotes: () -> Unit,
+    onOpenDreams: () -> Unit,
     onOpenFullJournal: () -> Unit,
     onAddMedication: () -> Unit,
     onMoodSaved: () -> Unit,
@@ -201,6 +202,7 @@ fun HomeScreen(
                     ModuleBadgePrefs.Module.Photos -> onOpenPhotos()
                     ModuleBadgePrefs.Module.Voice -> onOpenVoice()
                     ModuleBadgePrefs.Module.Notes -> onOpenNotes()
+                    ModuleBadgePrefs.Module.Dreams -> onOpenDreams()
                 }
             },
         )
@@ -642,9 +644,7 @@ private fun LauncherGrid(
         if (m.photos) add(LauncherTile(ModuleBadgePrefs.Module.Photos, R.string.module_photos, Icons.Filled.PhotoCamera, Family.Evolution))
         if (m.voice) add(LauncherTile(ModuleBadgePrefs.Module.Voice, R.string.module_voice, Icons.Filled.GraphicEq, Family.Evolution))
         if (m.notes) add(LauncherTile(ModuleBadgePrefs.Module.Notes, R.string.module_notes, Icons.Filled.Description, Family.Other))
-        // Always last, and never conditional on a flag: it has nothing to
-        // toggle yet. Removed from here the moment the module itself lands.
-        add(LauncherTile(null, R.string.module_dreams, Icons.Filled.Bedtime, Family.Other, comingSoon = true))
+        if (m.dreams) add(LauncherTile(ModuleBadgePrefs.Module.Dreams, R.string.module_dreams, Icons.Filled.Bedtime, Family.Other))
     }
     // A fixed 4-column grid inside an already-scrolling column: laid out by
     // hand rather than with LazyVerticalGrid, which cannot nest in a scroll.

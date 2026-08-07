@@ -116,6 +116,9 @@ class LabReminderPrefs(context: Context) {
         const val CATEGORY_PHOTO = "photo"
         const val CATEGORY_VOICE = "voice"
         const val CATEGORY_JOURNAL = "journal"
+        /** Dream journal. Recall collapses within minutes of waking, so this
+         *  is the one reminder whose *time* is the whole feature. */
+        const val CATEGORY_DREAM = "dream"
 
         private const val PREFS_NAME = "transition_lab_reminder_prefs"
         private const val KEY_IDS = "ids"

@@ -68,6 +68,7 @@ class HomeViewModel @Inject constructor(
         // Matches the FeaturesPrefs default, so the tile is not absent for the
         // frame before the flags flow emits.
         val notes: Boolean = true,
+        val dreams: Boolean = true,
     )
 
     /** A launcher badge. Counters win over dots, and at most two are shown. */
@@ -118,6 +119,7 @@ class HomeViewModel @Inject constructor(
         photos = features.photoTab.value,
         voice = features.voiceTab.value,
         notes = features.notes.value,
+        dreams = features.dreams.value,
     )
 
     fun refresh() {

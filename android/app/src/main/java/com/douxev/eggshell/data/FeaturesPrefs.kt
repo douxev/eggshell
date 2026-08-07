@@ -82,6 +82,10 @@ class FeaturesPrefs @Inject constructor(
     private val _appointments = MutableStateFlow(prefs.getBoolean(KEY_APPOINTMENTS, true))
     val appointments: StateFlow<Boolean> = _appointments.asStateFlow()
 
+    /** Dream journal — see [setDreams] for why it defaults on. */
+    private val _dreams = MutableStateFlow(prefs.getBoolean(KEY_DREAMS, true))
+    val dreams: StateFlow<Boolean> = _dreams.asStateFlow()
+
     fun setMedications(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_MEDS, enabled).apply()
         _medications.value = enabled
@@ -122,6 +126,18 @@ class FeaturesPrefs @Inject constructor(
         _bleeding.value = enabled
     }
 
+    /**
+     * Dream journal. On by default, like Notes and for the same reason: the key
+     * only exists once someone has moved the switch themselves, so one default
+     * covers a fresh install and an updated one, and an empty dream journal
+     * says nothing about its owner. What is identifying is its content, and
+     * there is none until the user writes some.
+     */
+    fun setDreams(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_DREAMS, enabled).apply()
+        _dreams.value = enabled
+    }
+
     fun setAppointments(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_APPOINTMENTS, enabled).apply()
         _appointments.value = enabled
@@ -140,5 +156,6 @@ class FeaturesPrefs @Inject constructor(
         private const val KEY_NOTES = "show_notes"
         private const val KEY_BLEEDING = "feature_bleeding"
         private const val KEY_APPOINTMENTS = "feature_appointments"
+        private const val KEY_DREAMS = "feature_dreams"
     }
 }

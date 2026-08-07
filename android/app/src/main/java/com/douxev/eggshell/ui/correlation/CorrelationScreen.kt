@@ -67,6 +67,7 @@ class CorrelationViewModel @Inject constructor(
     private val medications: MedicationRepository,
     private val plannedDoses: PlannedDoses,
     private val bleeding: BleedingRepository,
+    private val dreams: com.douxev.eggshell.data.DreamsRepository,
     private val features: FeaturesPrefs,
 ) : ViewModel() {
 
@@ -81,6 +82,14 @@ class CorrelationViewModel @Inject constructor(
         val missedDoses: List<Long> = emptyList(),
         val treatmentChanges: List<Long> = emptyList(),
         val bleedingDays: List<Long> = emptyList(),
+        /**
+         * Nights a dream was recorded, placed by `night_ms` and never by when
+         * the entry was typed — a dream written this morning about last week
+         * belongs last week, and a lane drawn from the writing time would put
+         * every late-recalled dream next to the wrong doses.
+         */
+        val dreamNights: List<Long> = emptyList(),
+        val lucidNights: List<Long> = emptyList(),
         val loading: Boolean = true,
     ) {
         val isEmpty: Boolean
@@ -138,6 +147,9 @@ class CorrelationViewModel @Inject constructor(
                 .map { it.plannedAtMs }
             val changes = runCatching { medications.listTreatmentChanges(from, now) }
                 .getOrDefault(emptyList()).map { it.atMs }
+            val dreamEntries = if (features.dreams.value) {
+                runCatching { dreams.listBetween(from, now) }.getOrDefault(emptyList())
+            } else emptyList()
             val bleeds = if (features.bleeding.value) {
                 runCatching { bleeding.list(0, 1000) }.getOrDefault(emptyList())
                     .filter { it.atMs in from..now }.map { it.atMs }
@@ -152,6 +164,11 @@ class CorrelationViewModel @Inject constructor(
                 missedDoses = missed,
                 treatmentChanges = changes,
                 bleedingDays = bleeds,
+                dreamNights = dreamEntries.map { it.nightMs },
+                // Lucid nights ride their own lane rather than a flag on the
+                // first: they are rare, and a marker that only sometimes means
+                // something is one the eye learns to ignore.
+                lucidNights = dreamEntries.filter { it.lucid }.map { it.nightMs },
                 loading = false,
             )
         }
@@ -366,6 +383,27 @@ private fun CorrelationChart(state: CorrelationViewModel.State) {
                     label = stringResource(R.string.feel_corr_axis_bleeding),
                     color = scheme.error,
                     times = state.bleedingDays,
+                    fractionFor = fractionFor,
+                    tick = true,
+                )
+            }
+            if (state.dreamNights.isNotEmpty()) {
+                DoseLane(
+                    label = stringResource(
+                        R.string.feel_corr_axis_dreams_fmt,
+                        state.dreamNights.size,
+                    ),
+                    color = scheme.secondary,
+                    times = state.dreamNights,
+                    fractionFor = fractionFor,
+                    tick = true,
+                )
+            }
+            if (state.lucidNights.isNotEmpty()) {
+                DoseLane(
+                    label = stringResource(R.string.feel_corr_axis_lucid),
+                    color = scheme.tertiary,
+                    times = state.lucidNights,
                     fractionFor = fractionFor,
                     tick = true,
                 )

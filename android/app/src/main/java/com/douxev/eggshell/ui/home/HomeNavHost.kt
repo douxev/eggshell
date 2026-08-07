@@ -178,6 +178,7 @@ fun HomeNavHost(
                     onOpenPhotos = { nav.navigate(Routes.PHOTOS) },
                     onOpenVoice = { nav.navigate(Routes.VOICE) },
                     onOpenNotes = { nav.navigate("notes") },
+                    onOpenDreams = { nav.navigate(Routes.DREAMS) },
                     onOpenFullJournal = { nav.navigate(Routes.JOURNAL_ADD) },
                     onAddMedication = { nav.navigate(Routes.MED_ADD) },
                     onMoodSaved = { confirmSaved(offerViewJournal = true) },
@@ -358,6 +359,24 @@ fun HomeNavHost(
             composable(Routes.PHOTOS) { PhotosScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.VOICE) { VoiceScreen(onBack = { nav.popBackStack() }) }
 
+            // ---- Carnet de rêves -------------------------------------------
+            composable(Routes.DREAMS) {
+                com.douxev.eggshell.ui.dreams.DreamsScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenDream = { id -> nav.navigate(Routes.dreamEdit(id)) },
+                    onNewDream = { nav.navigate(Routes.dreamEdit(-1L)) },
+                )
+            }
+            composable(
+                Routes.DREAM_EDIT,
+                arguments = listOf(navArgument("id") { type = NavType.LongType; defaultValue = -1L }),
+            ) {
+                com.douxev.eggshell.ui.dreams.DreamEditorScreen(
+                    onDone = { nav.popBackStack() },
+                    onBack = { nav.popBackStack() },
+                )
+            }
+
             // ---- Notes ----------------------------------------------------
             composable(
                 Routes.NOTES,
@@ -494,6 +513,9 @@ object Routes {
     const val PHOTOS = "photos"
     const val VOICE = "voice"
 
+    const val DREAMS = "dreams"
+    const val DREAM_EDIT = "dreams/edit?id={id}"
+
     const val NOTES = "notes?folder={folder}&name={name}"
     const val NOTE_EDIT = "notes/edit?id={id}"
 
@@ -515,6 +537,7 @@ object Routes {
     fun journalEdit(id: Long) = "journal/edit/$id"
     fun bleedingEdit(id: Long) = "bleeding/edit/$id"
     fun metricEditor(domain: String) = "metrics/editor/$domain"
+    fun dreamEdit(id: Long) = "dreams/edit?id=$id"
     fun appointmentEdit(id: Long) = "appointments/edit/$id"
     fun measures(tab: String) = "measures?tab=$tab"
 
@@ -536,6 +559,7 @@ object Routes {
             com.douxev.eggshell.modules.AppModule.Photos -> PHOTOS
             com.douxev.eggshell.modules.AppModule.Voice -> VOICE
             com.douxev.eggshell.modules.AppModule.Notes -> "notes"
+            com.douxev.eggshell.modules.AppModule.Dreams -> DREAMS
         }
 
     /**
@@ -552,6 +576,7 @@ object Routes {
             com.douxev.eggshell.modules.AppModule.Bleeding -> BLEEDING_ADD
             com.douxev.eggshell.modules.AppModule.Appointments -> APPOINTMENTS_ADD
             com.douxev.eggshell.modules.AppModule.Notes -> "notes/edit?id=-1"
+            com.douxev.eggshell.modules.AppModule.Dreams -> dreamEdit(-1L)
             com.douxev.eggshell.modules.AppModule.Weight,
             com.douxev.eggshell.modules.AppModule.Photos,
             com.douxev.eggshell.modules.AppModule.Voice -> null
