@@ -2,6 +2,9 @@ import SwiftUI
 
 @main
 struct EggshellApp: App {
+    /// Only there to install ShortcutSceneDelegate — see ShortcutLaunch.swift
+    /// for why a scene delegate is the one place a quick action can land.
+    @UIApplicationDelegateAdaptor(EggshellAppDelegate.self) private var appDelegate
     @StateObject private var app = AppState()
     @StateObject private var features = FeaturesStore()
     @StateObject private var theme = ThemeStore()

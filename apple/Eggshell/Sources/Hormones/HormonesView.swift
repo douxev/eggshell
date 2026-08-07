@@ -477,11 +477,11 @@ struct HormonesView: View {
                     let changes = weight ? [] : vm.treatmentChanges
                     MeasureChart(
                         points: items.map { MeasurePoint(atMs: $0.raw.atMs, value: $0.displayValue) },
+                        unit: latest.displayUnit,
                         doseMarkers: doses,
                         treatmentChanges: changes,
                         accessibilityText: chartDescription(items, weight: weight))
                         .padding(.top, 12)
-                    axisLegend(items: items, doses: doses, changes: changes)
                 } else {
                     Text("Encore un relevé et la courbe se dessine.")
                         .font(EggFont.bodyS)
@@ -490,28 +490,6 @@ struct HormonesView: View {
                 }
             }
         }
-    }
-
-    /// The bottom line of the chart. It carries **both** the X-axis bounds and
-    /// the key to the two overlays: §5.1 puts the legend on the gradations, not
-    /// in a row of its own. Each key spells its series out, so nothing is told
-    /// by hue alone.
-    private func axisLegend(items: [DisplayMeasurement], doses: [Int64], changes: [Int64]) -> some View {
-        HStack(spacing: 10) {
-            MicroLabel(MeasureFormat.upper(MeasureFormat.monthYear(items[0].raw.atMs)))
-            HStack(spacing: 10) {
-                if !doses.isEmpty {
-                    MeasureAxisKey(label: "Prise notée", color: palette.tertiary, dashed: false)
-                }
-                if !changes.isEmpty {
-                    MeasureAxisKey(label: "Changement de dose", color: palette.secondary, dashed: true)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            MicroLabel(
-                MeasureFormat.upper(MeasureFormat.monthYear(items[items.count - 1].raw.atMs)))
-        }
-        .padding(.top, 4)
     }
 
     private func chartDescription(_ items: [DisplayMeasurement], weight: Bool) -> String {
@@ -583,7 +561,11 @@ struct HormonesView: View {
 // ===========================================================================
 
 /// One plotted reading, already converted to the display unit.
-struct MeasurePoint {
+///
+/// Equatable so the chart can tell "the user tapped the reading that is already
+/// pinned" from "they tapped a different one", which is what makes a second tap
+/// dismiss the readout.
+struct MeasurePoint: Equatable {
     let atMs: Int64
     let value: Double
 }
@@ -643,125 +625,6 @@ struct MeasureAxisKey: View {
 /// six-month gap looks like one. Dose markers ride the interpolated curve in
 /// `tertiary`; each treatment change is a dashed `secondary` vertical; the last
 /// point is filled, bigger, and haloed.
-struct MeasureChart: View {
-    @Environment(\.palette) private var palette
-
-    let points: [MeasurePoint]
-    var doseMarkers: [Int64] = []
-    var treatmentChanges: [Int64] = []
-    var height: CGFloat = 132
-    var accessibilityText: String = ""
-
-    var body: some View {
-        Canvas { context, size in
-            draw(in: context, size: size)
-        }
-        .frame(height: height)
-        .frame(maxWidth: .infinity)
-        .accessibilityElement()
-        .accessibilityLabel(accessibilityText)
-    }
-
-    private func draw(in context: GraphicsContext, size: CGSize) {
-        guard points.count >= 2 else { return }
-        let values = points.map(\.value)
-        let minValue = values.min() ?? 0
-        let maxValue = values.max() ?? 1
-        let span = (maxValue - minValue) > 0 ? (maxValue - minValue) : 1
-        let tMin = points[0].atMs
-        let tMax = points[points.count - 1].atMs
-        let tSpan = (tMax - tMin) > 0 ? (tMax - tMin) : 1
-
-        let padTop: CGFloat = 12
-        let padSide: CGFloat = 10
-        let baseline = size.height - 8
-        let plotWidth = max(1, size.width - 2 * padSide)
-
-        func xFor(_ t: Int64) -> CGFloat {
-            padSide + plotWidth * CGFloat(Double(t - tMin) / Double(tSpan))
-        }
-        func yFor(_ v: Double) -> CGFloat {
-            padTop + (baseline - padTop) * CGFloat(1 - (v - minValue) / span)
-        }
-
-        // Three gradations, evenly spread over the plot.
-        for i in 1...3 {
-            let y = padTop + (baseline - padTop) * CGFloat(i) / 4
-            var line = Path()
-            line.move(to: CGPoint(x: 0, y: y))
-            line.addLine(to: CGPoint(x: size.width, y: y))
-            context.stroke(line, with: .color(palette.chartGrid), lineWidth: 1)
-        }
-
-        var curve = Path()
-        var area = Path()
-        for (i, point) in points.enumerated() {
-            let x = xFor(point.atMs)
-            let y = yFor(point.value)
-            if i == 0 {
-                curve.move(to: CGPoint(x: x, y: y))
-                area.move(to: CGPoint(x: x, y: baseline))
-                area.addLine(to: CGPoint(x: x, y: y))
-            } else {
-                curve.addLine(to: CGPoint(x: x, y: y))
-                area.addLine(to: CGPoint(x: x, y: y))
-            }
-        }
-        area.addLine(to: CGPoint(x: xFor(tMax), y: baseline))
-        area.closeSubpath()
-
-        context.fill(
-            area,
-            with: .linearGradient(
-                Gradient(colors: [palette.primary.opacity(0.34), palette.primary.opacity(0)]),
-                startPoint: CGPoint(x: 0, y: padTop),
-                endPoint: CGPoint(x: 0, y: baseline)))
-        context.stroke(
-            curve,
-            with: .color(palette.primary),
-            style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
-
-        // Treatment changes: a dashed vertical the eye can line up with the
-        // bend of the curve.
-        let dashed = StrokeStyle(lineWidth: 1.5, dash: [4, 4])
-        for at in treatmentChanges where at >= tMin && at <= tMax {
-            var line = Path()
-            line.move(to: CGPoint(x: xFor(at), y: max(0, padTop - 4)))
-            line.addLine(to: CGPoint(x: xFor(at), y: baseline))
-            context.stroke(line, with: .color(palette.secondary.opacity(0.8)), style: dashed)
-        }
-
-        // Linear interpolation of the curve's value at time t, so a marker
-        // lands exactly on the segment it belongs to.
-        func curveValue(at t: Int64) -> Double {
-            var i = points.lastIndex(where: { $0.atMs <= t }) ?? 0
-            if i < 0 { i = 0 }
-            if i >= points.count - 1 { return points[points.count - 1].value }
-            let p0 = points[i]
-            let p1 = points[i + 1]
-            if p1.atMs == p0.atMs { return p0.value }
-            let f = Double(t - p0.atMs) / Double(p1.atMs - p0.atMs)
-            return p0.value + (p1.value - p0.value) * f
-        }
-        for at in doseMarkers where at >= tMin && at <= tMax {
-            let center = CGPoint(x: xFor(at), y: yFor(curveValue(at: at)))
-            context.fill(circle(center: center, radius: 3.4), with: .color(palette.tertiary))
-        }
-
-        // The end point is filled and slightly bigger, with a halo.
-        let end = CGPoint(x: xFor(tMax), y: yFor(values[values.count - 1]))
-        context.fill(circle(center: end, radius: 9), with: .color(palette.primary.opacity(0.22)))
-        context.fill(circle(center: end, radius: 5), with: .color(palette.primary))
-    }
-
-    private func circle(center: CGPoint, radius: CGFloat) -> Path {
-        Path(ellipseIn: CGRect(
-            x: center.x - radius,
-            y: center.y - radius,
-            width: radius * 2,
-            height: radius * 2))
-    }
-}
 
 // ===========================================================================
 // Shared value + unit + date sheet, used both for the weight quick-add and for
@@ -861,7 +724,7 @@ private struct MeasurementSheet: View {
             .onAppear {
                 guard !started else { return }
                 started = true
-                if let value = initialValue { text = MeasureFormat.value(value) }
+                if let value = initialValue { text = MeasureFormat.plain(value) }
                 unit = unitOptions.contains(initialUnit) ? initialUnit : (unitOptions.first ?? initialUnit)
                 date = initialDate
             }

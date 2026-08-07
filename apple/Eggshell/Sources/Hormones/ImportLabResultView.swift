@@ -685,7 +685,7 @@ struct OcrAnalyteRow: View {
         let name = HormoneCatalog.kindLabel(entry.hormone)
         let reading = entry.doubtful
             ? "Lecture incertaine · « \(entry.raw) »"
-            : "\(MeasureFormat.value(entry.value)) \(entry.unit)"
+            : "\(MeasureFormat.plain(entry.value)) \(entry.unit)"
         Toggle(isOn: Binding(get: { entry.selected }, set: { _ in onToggle() })) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)

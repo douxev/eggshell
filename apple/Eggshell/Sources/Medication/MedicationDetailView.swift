@@ -27,6 +27,17 @@ final class MedicationDetailViewModel: ObservableObject {
         let doseUnit: String?
         let route: String?
         let injectionSite: String?
+        /// The occurrence this line stands for, when it is one nobody answered.
+        /// Carried so a missed dose can be logged *against its own slot*:
+        /// writing `scheduledAtMs` back is what lets PlannedDoses pair the two
+        /// exactly instead of guessing by proximity, and it is the difference
+        /// between the history healing and the same occurrence still reading
+        /// « manquée » next to a duplicate intake.
+        var plannedAtMs: Int64?
+        var scheduleId: Int64?
+
+        /// A missed occurrence can be answered after the fact; nothing else can.
+        var isRecoverable: Bool { doseId == nil && plannedAtMs != nil }
     }
 
     @Published var loading = true
@@ -36,6 +47,13 @@ final class MedicationDetailViewModel: ObservableObject {
     @Published var changes: [TreatmentChange] = []
     @Published var alias: String?
     @Published var error: String?
+
+    /// How late this user usually is, in minutes — the figure the « Régularité »
+    /// card already reports. It seeds the time proposed when a missed dose is
+    /// caught up, because "I took it, just not when the app expected" is what a
+    /// missed occurrence almost always turns out to mean, and someone who is
+    /// habitually forty minutes late did not take this one on the hour either.
+    @Published var meanDelayMin: Int = 0
 
     let medId: Int64
 
@@ -77,6 +95,20 @@ final class MedicationDetailViewModel: ObservableObject {
         let window = await PlannedDoses.window(
             session: session, fromMs: now - Self.windowMs, toMs: now, medicationId: medId)
 
+        // This treatment's own habit when it has one, the user's across every
+        // treatment when it does not. A schedule added last week may hold
+        // nothing but missed occurrences, and prefilling those at exactly the
+        // prescribed minute would quietly assert a punctuality the user has
+        // never once shown.
+        let ownMean = window.stats.meanDelayMin
+        if ownMean != 0 {
+            meanDelayMin = ownMean
+        } else {
+            let all = await PlannedDoses.window(
+                session: session, fromMs: now - Self.windowMs, toMs: now, medicationId: nil)
+            meanDelayMin = all.stats.meanDelayMin
+        }
+
         var out: [HistoryEntry] = []
         var paired = Set<Int64>()
 
@@ -91,7 +123,9 @@ final class MedicationDetailViewModel: ObservableObject {
                     dose: nil,
                     doseUnit: nil,
                     route: nil,
-                    injectionSite: nil))
+                    injectionSite: nil,
+                    plannedAtMs: occurrence.plannedAtMs,
+                    scheduleId: occurrence.scheduleId))
                 continue
             }
             paired.insert(event.id)
@@ -160,6 +194,41 @@ final class MedicationDetailViewModel: ObservableObject {
         }
     }
 
+    /// Catch up a missed occurrence: log the intake the user did take, at
+    /// `takenAtMs`, against the slot that was expecting it.
+    ///
+    /// The dose, unit and route come from the medication's defaults — this is a
+    /// one-tap correction, and someone who took something other than their
+    /// usual dose has the full log screen for it.
+    ///
+    /// `scheduledAtMs` is written so the intake binds to *this* occurrence.
+    /// Without it the matcher falls back to nearest-in-time, which on a
+    /// twice-daily treatment can let the caught-up dose answer the neighbouring
+    /// slot and leave both lines wrong. The schedule is deliberately NOT
+    /// advanced: this is back-fill of a slot already in the past, not the
+    /// answering of the one currently due.
+    func logMissedDose(
+        _ entry: HistoryEntry, takenAtMs: Int64, session: VaultService
+    ) async {
+        guard let plannedAtMs = entry.plannedAtMs else { return }
+        do {
+            _ = try await session.logDose(NewDoseEvent(
+                medicationId: medId,
+                takenAtMs: takenAtMs,
+                dose: med?.defaultDose,
+                doseUnit: med?.defaultDoseUnit,
+                route: med?.route,
+                injectionSite: nil,
+                notes: nil,
+                status: "taken",
+                scheduledAtMs: plannedAtMs,
+                scheduleId: entry.scheduleId))
+            await load(session)
+        } catch {
+            self.error = describe(error)
+        }
+    }
+
     func deleteDose(_ id: Int64, session: VaultService) async {
         do {
             try await session.deleteDose(id)
@@ -221,7 +290,8 @@ struct MedicationDetailView: View {
     @State private var aliasDraft = ""
     @State private var confirmDelete = false
     @State private var doseToDelete: Int64?
-    @State private var scheduleToDelete: Int64?
+    /// The missed occurrence the user tapped, awaiting confirmation.
+    @State private var missedToLog: MedicationDetailViewModel.HistoryEntry?
     /// Where this screen sits in the stack. `.task` does not re-fire when the
     /// dose form on top of it pops, so the depth says when to read again —
     /// otherwise a dose you just noted would be missing from the history.
@@ -250,24 +320,10 @@ struct MedicationDetailView: View {
                     if med.archived { archivedNotice }
                 }
 
-                SectionTitleView(
-                    "Schémas de prise",
-                    action: "Ajouter",
-                    onAction: { router.push(.addSchedule(medId: medId)) },
-                    prominent: true)
-
-                if vm.schedules.isEmpty {
-                    if !vm.loading {
-                        EmptyStateView(
-                            "Aucun rappel programmé pour ce traitement. Dis-moi quand tu le prends et je m'en souviens pour toi.",
-                            systemImage: "bell.slash",
-                            actionLabel: "Ajouter un rappel") {
-                                router.push(.addSchedule(medId: medId))
-                            }
-                    }
-                } else {
-                    ForEach(vm.schedules, id: \.id) { scheduleCard($0) }
-                }
+                // One door to the reminders, not a pile of cards whose only
+                // delete was a long-press nothing advertised.
+                SectionTitleView("Schémas de prise", prominent: true)
+                remindersEntryRow
 
                 SectionTitleView("Historique", prominent: true)
 
@@ -303,6 +359,17 @@ struct MedicationDetailView: View {
             }
         }
         .sheet(isPresented: $editingAlias) { aliasSheet }
+        .sheet(item: $missedToLog) { entry in
+            CatchUpDoseSheet(
+                plannedAtMs: entry.plannedAtMs ?? entry.atMs,
+                meanDelayMin: vm.meanDelayMin
+            ) { takenAtMs in
+                if let session = app.session {
+                    Task { await vm.logMissedDose(entry, takenAtMs: takenAtMs, session: session) }
+                }
+                missedToLog = nil
+            }
+        }
         .alert("Supprimer ce traitement ?", isPresented: $confirmDelete) {
             Button("Annuler", role: .cancel) {}
             Button("Supprimer définitivement", role: .destructive) { deleteMedication() }
@@ -322,20 +389,6 @@ struct MedicationDetailView: View {
             }
         } message: {
             Text("Cette prise sera retirée de l'historique. C'est définitif.")
-        }
-        .alert("Supprimer ce rappel ?", isPresented: Binding(
-            get: { scheduleToDelete != nil },
-            set: { if !$0 { scheduleToDelete = nil } }
-        )) {
-            Button("Annuler", role: .cancel) { scheduleToDelete = nil }
-            Button("Supprimer", role: .destructive) {
-                if let id = scheduleToDelete, let session = app.session {
-                    Task { await vm.deleteSchedule(id, session: session, app: app) }
-                }
-                scheduleToDelete = nil
-            }
-        } message: {
-            Text("Le rappel disparaît, ton historique de prises reste intact.")
         }
         .onAppear { if depth == nil { depth = router.path.count } }
         .onChange(of: router.path.count) { _, current in
@@ -453,80 +506,6 @@ struct MedicationDetailView: View {
 
     // MARK: - Schedules
 
-    private func scheduleCard(_ schedule: DoseSchedule) -> some View {
-        EggCard(variant: .low, paddingH: 18, paddingV: Spacing.l, spacing: 0) {
-            HStack(spacing: Metrics.blockGap) {
-                Button {
-                    router.push(.editSchedule(medId: medId, scheduleId: schedule.id))
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(MedFormat.cadence(schedule))
-                            .font(EggFont.titleS)
-                            .foregroundStyle(palette.onSurface)
-                            .multilineTextAlignment(.leading)
-                        Text("Prochain : " + MedFormat.dayAndTime(schedule.nextDueAtMs))
-                            .font(EggFont.bodyS)
-                            .foregroundStyle(palette.onSurfaceVariant)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                Toggle("Activer le rappel", isOn: Binding(
-                    get: { schedule.active },
-                    set: { _ in
-                        guard let session = app.session else { return }
-                        Task { await vm.toggleSchedule(schedule, session: session, app: app) }
-                    }))
-                    .labelsHidden()
-                    .tint(palette.primary)
-                    .accessibilityLabel("Activer le rappel")
-            }
-
-            CardRule().padding(.top, 14)
-
-            HStack(spacing: Spacing.s) {
-                Image(systemName: "text.bubble")
-                    .font(.system(size: 14))
-                    .foregroundStyle(palette.onSurfaceVariant)
-                Text("Texte du rappel")
-                    .font(EggFont.bodyS)
-                    .foregroundStyle(palette.onSurfaceVariant)
-                Spacer(minLength: Spacing.s)
-                Text("« " + (schedule.label.flatMap { $0.isEmpty ? nil : $0 } ?? "C'est l'heure") + " »")
-                    .font(EggFont.bodyS)
-                    .foregroundStyle(palette.onSurface)
-                    .multilineTextAlignment(.trailing)
-            }
-            .padding(.top, Spacing.m)
-        }
-        .contextMenu {
-            Button {
-                router.push(.editSchedule(medId: medId, scheduleId: schedule.id))
-            } label: {
-                Label("Modifier le rappel", systemImage: "pencil")
-            }
-            Button(role: .destructive) {
-                scheduleToDelete = schedule.id
-            } label: {
-                Label("Supprimer le rappel", systemImage: "trash")
-            }
-        }
-    }
-
-    // MARK: - History
-
-    /// The 6 / 18 padding is what lets each rule run edge to edge inside the
-    /// card, so the lines read as one block rather than as five cards.
-    private var historyCard: some View {
-        EggCard(variant: .low, paddingH: 18, paddingV: 6, spacing: 0) {
-            ForEach(Array(vm.history.enumerated()), id: \.element.id) { pair in
-                if pair.offset > 0 { CardRule(opacity: 0.14) }
-                historyRow(pair.element)
-            }
-        }
-    }
 
     private func historyRow(_ entry: MedicationDetailViewModel.HistoryEntry) -> some View {
         let style = MedTimingStyle.of(entry.timing, deltaMin: entry.deltaMin, palette: palette)
@@ -555,7 +534,14 @@ struct MedicationDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .onTapGesture {
-            if let id = entry.doseId { router.push(.editDose(medId: medId, doseId: id)) }
+            if let id = entry.doseId {
+                router.push(.editDose(medId: medId, doseId: id))
+            } else if entry.isRecoverable {
+                // A missed occurrence has no dose row to edit, but it does have
+                // a slot to fill — tapping it is how the dose that was actually
+                // taken gets recorded against it.
+                missedToLog = entry
+            }
         }
         .contextMenu {
             if let id = entry.doseId {
@@ -648,6 +634,52 @@ struct MedicationDetailView: View {
     }
 
     // MARK: - Actions
+
+    /// The single door to this treatment's reminders.
+    ///
+    /// It replaces the stack of per-schedule cards that used to sit here. Those
+    /// could pause and edit, but their delete was a `contextMenu` — a
+    /// long-press with nothing on screen to suggest it existed. Collapsing the
+    /// whole set of operations behind one row is what puts every one of them
+    /// somewhere a user can see.
+    private var remindersEntryRow: some View {
+        let active = vm.schedules.filter(\.active).count
+        let paused = vm.schedules.count - active
+        return Button {
+            router.push(.medicationReminders(medId: medId))
+        } label: {
+            EggCard(variant: .low, paddingH: 18, paddingV: Spacing.l, spacing: 0) {
+                HStack(spacing: Metrics.blockGap) {
+                    Image(systemName: "bell.badge")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(palette.onPrimaryContainer)
+                        .frame(width: 40, height: 40)
+                        .background(palette.primaryContainer, in: RoundedRectangle(cornerRadius: 12))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Gérer les rappels")
+                            .font(EggFont.titleS)
+                            .foregroundStyle(palette.onSurface)
+                        // The paused count is stated rather than folded into a
+                        // total: it is the one a user comes here to act on.
+                        Text(subtitle(active: active, paused: paused))
+                            .font(EggFont.bodyS)
+                            .foregroundStyle(palette.onSurfaceVariant)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(palette.onSurfaceVariant)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func subtitle(active: Int, paused: Int) -> String {
+        if active == 0 && paused == 0 { return "Aucun rappel pour ce traitement." }
+        if paused > 0 { return "\(active) actif(s) · \(paused) en pause." }
+        return "\(active) rappel(s) actif(s)."
+    }
 
     private func reload() {
         guard let session = app.session else {

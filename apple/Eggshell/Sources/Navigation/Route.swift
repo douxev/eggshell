@@ -26,6 +26,8 @@ enum Route: Hashable {
     case medicationDetail(id: Int64)
     case addSchedule(medId: Int64)
     case editSchedule(medId: Int64, scheduleId: Int64)
+    /// The single reminder-management screen for one treatment.
+    case medicationReminders(medId: Int64)
     case logDose(medId: Int64)
     case editDose(medId: Int64, doseId: Int64)
 
@@ -92,6 +94,8 @@ func routeDestination(_ route: Route) -> some View {
     case .editMedication(let id):    AddMedicationView(editId: id)
     case .medicationDetail(let id):  MedicationDetailView(medId: id)
     case .addSchedule(let medId):    AddScheduleView(medId: medId)
+    case .medicationReminders(let medId):
+                                     MedicationRemindersView(medId: medId)
     case .editSchedule(let medId, let scheduleId):
                                      AddScheduleView(medId: medId, editScheduleId: scheduleId)
     case .logDose(let medId):        LogDoseView(medId: medId)

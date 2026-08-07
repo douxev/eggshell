@@ -105,24 +105,76 @@ struct AnalyteChip: View {
 enum MeasureFormat {
     private static let locale = Locale(identifier: "fr")
 
-    /// « 128 », « 0,42 ». A recorded reading is written at full precision and
-    /// only loses a trailing « ,0 »: rounding it here would put a digit the
-    /// sheet never said in front of a doctor.
-    static func value(_ v: Double) -> String {
-        // Kill the binary tail a unit conversion leaves behind — 128 pg/mL
-        // becomes 469,88800000000003 pmol/L — without touching a digit a sheet
-        // could plausibly carry: six decimals is far past clinical precision.
-        let cleaned = abs(v) < 1e9 ? (v * 1_000_000).rounded() / 1_000_000 : v
-        var s = String(cleaned)
-        if s.hasSuffix(".0") { s = String(s.dropLast(2)) }
-        return s.replacingOccurrences(of: ".", with: ",")
+    /// Figures a displayed measurement is quoted to.
+    static let significantDigits = 5
+
+    /// « 128,00 », « 0,42000 » — a reading at five significant figures.
+    ///
+    /// The previous rule was "full precision, minus a trailing ,0", with a
+    /// six-decimal round to kill the binary tail a unit conversion leaves
+    /// behind. It did not go far enough: the tail is not the only problem.
+    /// 128 pg/mL converted to pmol/L is 469,888 — and six decimals of that is
+    /// still five digits past anything the analyser measured, presented to a
+    /// doctor as though it had.
+    ///
+    /// **Significant figures, not decimal places.** Analytes span six orders of
+    /// magnitude between a TSH in mIU/L and a platelet count, so a fixed
+    /// decimal count is wrong at one end or the other: two decimals flatten
+    /// 0,001234 to 0,00.
+    ///
+    /// Trailing zeros are kept. 0,30000 and 0,3 are the same number but not the
+    /// same claim, and a column of readings quoted to one width is the one a
+    /// reader can scan for a change.
+    static func value(_ v: Double, digits: Int = significantDigits) -> String {
+        guard v.isFinite else { return "—" }
+        if v == 0 { return comma(String(format: "%.\(digits - 1)f", 0.0)) }
+
+        // More integer digits than we quote: show it whole. Rounding here would
+        // *destroy* measured digits rather than hide unmeasured ones — a
+        // platelet count of 123456 reported as 123460.
+        if Int(floor(log10(abs(v)))) >= digits {
+            return comma(String(format: "%.0f", v))
+        }
+
+        // Round to the significant run first, then measure where it landed.
+        // Measuring the raw value instead puts 0,0999999 one decade too low and
+        // renders it "0,100000" — six figures, because the rounding that
+        // carried it over 0,1 happened after the width was already decided.
+        let firstPass = String(format: "%.\(scale(of: v, digits: digits))f", v)
+        let rounded = Double(firstPass) ?? v
+        if rounded == 0 { return comma(String(format: "%.\(digits - 1)f", 0.0)) }
+        return comma(String(format: "%.\(scale(of: rounded, digits: digits))f", rounded))
     }
 
-    /// A difference between two readings, rounded to two decimals. Unlike a
-    /// reading, a delta is something we computed — and binary subtraction
-    /// otherwise prints « 0,10000000000000003 » in the pill.
+    /// Decimal places needed for `digits` significant figures of `v`.
+    private static func scale(of v: Double, digits: Int) -> Int {
+        max(digits - 1 - Int(floor(log10(abs(v)))), 0)
+    }
+
+    /// The value as recorded, with a bare « ,0 » dropped.
+    ///
+    /// This is what seeds an editable field, and it deliberately does NOT
+    /// round: saving the sheet writes back whatever the field holds, so
+    /// quoting a rounded value there would let a save silently overwrite the
+    /// stored reading with the display's approximation of it.
+    static func plain(_ v: Double) -> String {
+        guard v.isFinite else { return "—" }
+        var s = String(v)
+        if s.hasSuffix(".0") { s = String(s.dropLast(2)) }
+        return comma(s)
+    }
+
+    /// A difference between two readings.
+    ///
+    /// An unchanged reading is « 0 », not « 0,0000 »: padding a difference of
+    /// exactly nothing out to five figures quotes a precision that has no
+    /// measurement behind it at all.
     static func delta(_ v: Double) -> String {
-        value((v * 100).rounded() / 100)
+        v == 0 ? "0" : value(v)
+    }
+
+    private static func comma(_ s: String) -> String {
+        s.replacingOccurrences(of: ".", with: ",")
     }
 
     /// « 18 juillet 2026 » — the readings list and the sample-date card.

@@ -25,6 +25,20 @@ final class FeaturesStore: ObservableObject {
     /// nothing about its owner. Mirrors android feature `show_notes`.
     @Published var notes: Bool { didSet { d.set(notes, forKey: "notes") } }
 
+    /// A value that changes whenever any module toggle does.
+    ///
+    /// `onChange` needs something `Equatable` to compare, and there is no
+    /// single published property that moves when, say, only `voice` flips.
+    /// Used to republish the Home-Screen quick actions the moment a module is
+    /// hidden — the whole point of turning one off is that it stops being
+    /// visible, and the app icon's long-press menu is the most visible place it
+    /// could possibly remain.
+    var enabledSignature: String {
+        [medications, journal, hormones, weight, photos, voice, bleeding, appointments, notes]
+            .map { $0 ? "1" : "0" }
+            .joined()
+    }
+
     private static func read(_ d: UserDefaults, _ k: String, _ def: Bool) -> Bool {
         d.object(forKey: k) == nil ? def : d.bool(forKey: k)
     }
