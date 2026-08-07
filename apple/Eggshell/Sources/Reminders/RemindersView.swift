@@ -25,25 +25,27 @@ final class RemindersViewModel: ObservableObject {
         do {
             let meds = try await session.listMedications(includeArchived: true)
             medsById = Dictionary(uniqueKeysWithValues: meds.map { ($0.id, $0) })
-            // Paused reminders included, deliberately. Listing only the
-            // active ones hides exactly the reminders that need attention —
-            // the ones that stopped firing — from the screen whose whole job
-            // is to show everything the app may notify about.
-            // VaultService is an actor, so each call has to be awaited — a
-            // flatMap closure cannot do that. Archived medications are walked
-            // too: archiving does not cancel a schedule, so a reminder still
-            // armed under an archived treatment is precisely the one a user
-            // needs this screen to surface.
-            let meds = try await session.listMedications(includeArchived: true)
+            // Paused reminders included, deliberately. Listing only the active
+            // ones hides exactly the reminders that need attention — the ones
+            // that stopped firing — from the screen whose whole job is to show
+            // everything the app may notify about.
+            //
+            // Walked medication by medication because the core offers "all
+            // active" or "one medication, inactive included", and nothing else.
+            // Archived ones are walked too: archiving does not cancel a
+            // schedule, so a reminder still armed under an archived treatment
+            // is precisely the one this screen has to surface. VaultService is
+            // an actor, so this is a loop rather than a flatMap — a closure
+            // cannot await.
             var all: [DoseSchedule] = []
             for med in meds {
                 let own = (try? await session.listSchedulesForMedication(med.id, includeInactive: true)) ?? []
                 all.append(contentsOf: own)
             }
+            // Live reminders first, then paused ones, each block by next-due.
             schedules = all.sorted {
                 $0.active == $1.active ? $0.nextDueAtMs < $1.nextDueAtMs : $0.active
             }
-                .sorted { $0.nextDueAtMs < $1.nextDueAtMs }
             let now = Time.nowMs()
             appointmentReminders = try await session.listAppointments()
                 .filter { ($0.reminderAtMs ?? 0) > now }
