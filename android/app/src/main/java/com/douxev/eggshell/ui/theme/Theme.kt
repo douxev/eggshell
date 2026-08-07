@@ -38,8 +38,15 @@ fun EggshellTheme(content: @Composable () -> Unit) {
         MaterialTheme(
             colorScheme = scheme,
             typography = TransitionTypography,
-            content = content,
-        )
+        ) {
+            // Inside MaterialTheme so it reads the scheme that was just applied:
+            // the status- and navigation-bar icons have to flip polarity with
+            // the palette, and the palette is what this composable exists to
+            // choose. Replaces the appearance handling androidx's
+            // enableEdgeToEdge() used to do for us.
+            SyncSystemBarIcons()
+            content()
+        }
     }
 }
 

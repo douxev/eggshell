@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 29+: `android:enforceNavigationBarContrast` defaults to true, so the
+         platform draws its own scrim behind a transparent navigation bar
+         whenever the content under it would leave the buttons unreadable. That
+         is strictly better than the fixed scrim values/themes.xml has to use for
+         API 26–28, because it only appears when it is actually needed — a
+         gesture-navigation device shows none at all. -->
+    <style name="Theme.Eggshell" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

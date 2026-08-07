@@ -4,7 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
+import com.douxev.eggshell.ui.theme.enableEdgeToEdgeCompat
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.Composable
@@ -145,7 +145,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Our own, rather than androidx's enableEdgeToEdge(): that helper is
+        // where all three of the window APIs Android 15 deprecated actually
+        // live. See ui/theme/EdgeToEdge.kt.
+        enableEdgeToEdgeCompat()
         consumeDeepLink(intent)
         ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
         // FLAG_SECURE: default ON via SecurityPrefs. We additionally force

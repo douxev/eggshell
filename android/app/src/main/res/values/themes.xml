@@ -2,6 +2,26 @@
 <resources>
     <!-- App entry-point theme. Compose owns the actual color scheme via EggshellTheme.
          Parented on AppCompat so AppCompatDelegate.setApplicationLocales can recreate
-         the activity on pre-Android 13. -->
-    <style name="Theme.Eggshell" parent="Theme.AppCompat.Light.NoActionBar"/>
+         the activity on pre-Android 13.
+
+         The system-bar colours are set here as theme *attributes* rather than
+         through Window.setStatusBarColor / setNavigationBarColor, which is what
+         androidx's enableEdgeToEdge() calls and what Play reports as deprecated
+         in Android 15. The attributes reach the same fields before the window is
+         ever shown, so there is no flash of an opaque bar, and no deprecated
+         method ends up in the APK. See EdgeToEdge.kt for the rest.
+
+         From Android 15 the platform ignores both attributes for apps targeting
+         SDK 35+ and keeps the bars transparent regardless; these values are what
+         Android 8 through 14 read. -->
+    <style name="Theme.Eggshell" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <!-- A scrim, not transparent, and only up to API 28. `isAppearanceLight
+             NavigationBar` needs API 27, and `enforceNavigationBarContrast` —
+             which auto-scrims a transparent bar — arrives in API 29. Between
+             those, a fully transparent bar can leave the three navigation
+             buttons drawn light-on-light and invisible. values-v29 drops the
+             scrim once the platform can do this itself. -->
+        <item name="android:navigationBarColor">#80000000</item>
+    </style>
 </resources>
