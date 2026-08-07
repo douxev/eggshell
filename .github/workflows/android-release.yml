@@ -135,7 +135,18 @@ jobs:
           VN=$(grep -oP 'versionName = "\K[^"]+' android/app/build.gradle.kts)
           VC=$(grep -oP 'versionCode = \K\d+' android/app/build.gradle.kts)
           echo "version=$VN" >> "$GITHUB_OUTPUT"
-          cp android/app/build/outputs/apk/release/app-release.apk "eggshell-$VN-$VC.apk"
+          # A tag build is the real thing and keeps the plain name. A manual
+          # build is a test build, and it normally carries the SAME versionName
+          # and versionCode as whatever is already published — so without the
+          # commit stamp, "eggshell-2.1.0-18.apk" sitting in a downloads folder
+          # is indistinguishable from the release of exactly that name, and
+          # which one is on the phone becomes a guess.
+          if [ "${GITHUB_REF#refs/tags/}" != "$GITHUB_REF" ]; then
+            NAME="eggshell-$VN-$VC.apk"
+          else
+            NAME="eggshell-$VN-$VC-${GITHUB_SHA:0:7}.apk"
+          fi
+          cp android/app/build/outputs/apk/release/app-release.apk "$NAME"
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
