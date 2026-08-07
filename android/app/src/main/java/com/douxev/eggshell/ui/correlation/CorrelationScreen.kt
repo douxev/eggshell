@@ -68,6 +68,7 @@ class CorrelationViewModel @Inject constructor(
     private val plannedDoses: PlannedDoses,
     private val bleeding: BleedingRepository,
     private val dreams: com.douxev.eggshell.data.DreamsRepository,
+    private val vault: com.douxev.eggshell.data.VaultRepository,
     private val features: FeaturesPrefs,
 ) : ViewModel() {
 
@@ -90,6 +91,8 @@ class CorrelationViewModel @Inject constructor(
          */
         val dreamNights: List<Long> = emptyList(),
         val lucidNights: List<Long> = emptyList(),
+        /** Ranked links between doses, sleep and mood. Strongest first. */
+        val insights: List<uniffi.transition.Insight> = emptyList(),
         val loading: Boolean = true,
     ) {
         val isEmpty: Boolean
@@ -154,6 +157,23 @@ class CorrelationViewModel @Inject constructor(
                 runCatching { bleeding.list(0, 1000) }.getOrDefault(emptyList())
                     .filter { it.atMs in from..now }.map { it.atMs }
             } else emptyList()
+            // Local midnights are computed here and passed down: the core
+            // cannot know the timezone, and a DST day is not 86 400 000 ms
+            // long — dividing the range arithmetically would drift an hour
+            // twice a year and file entries against the wrong day.
+            val zone = java.time.ZoneId.systemDefault()
+            val dayStarts = generateSequence(
+                java.time.Instant.ofEpochMilli(from).atZone(zone).toLocalDate()
+            ) { it.plusDays(1) }
+                .takeWhile {
+                    !it.isAfter(java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate())
+                }
+                .map { it.atStartOfDay(zone).toInstant().toEpochMilli() }
+                .toList()
+            val found = runCatching {
+                vault.requireSession().insights(from, now, dayStarts)
+            }.getOrDefault(emptyList())
+
             _state.value = State(
                 days = days,
                 fromMs = from,
@@ -169,6 +189,7 @@ class CorrelationViewModel @Inject constructor(
                 // first: they are rare, and a marker that only sometimes means
                 // something is one the eye learns to ignore.
                 lucidNights = dreamEntries.filter { it.lucid }.map { it.nightMs },
+                insights = found,
                 loading = false,
             )
         }
@@ -213,6 +234,9 @@ fun LazyListScope.correlationSegment(
         }
         else -> {
             item(key = "corr-chart") { CorrelationChart(state) }
+            // Findings above the lanes: the card is the answer, the lanes are
+            // the evidence behind it, and that is the order to meet them in.
+            item(key = "corr-insights") { InsightsCard(state.insights) }
             item(key = "corr-summary") {
                 val avgMood = state.moodPoints.map { it.second }.takeIf { it.isNotEmpty() }
                     ?.average()?.let { String.format(Locale.getDefault(), "%.1f", it) } ?: "—"

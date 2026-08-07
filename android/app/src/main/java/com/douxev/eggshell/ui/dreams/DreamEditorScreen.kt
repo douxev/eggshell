@@ -98,6 +98,14 @@ class DreamEditorViewModel @Inject constructor(
     private val editingId: Long = state.get<Long>("id") ?: -1L
     val isEditing: Boolean get() = editingId > 0L
 
+    /**
+     * Night pre-set by tapping an empty cell in the calendar, or -1.
+     *
+     * This is why the calendar is worth having: you remember a dream two days
+     * late and file it against the right night without opening a date picker.
+     */
+    private val presetNightMs: Long = state.get<Long>("night") ?: -1L
+
     data class State(
         val nightMs: Long = DreamsRepository.nightOf(System.currentTimeMillis()),
         val title: String = "",
@@ -159,6 +167,8 @@ class DreamEditorViewModel @Inject constructor(
             } else {
                 defs.forEach { values[it.id] = midpoint(it) }
                 _state.value = State(
+                    nightMs = presetNightMs.takeIf { it > 0L }
+                        ?: DreamsRepository.nightOf(System.currentTimeMillis()),
                     definitions = defs,
                     allTags = tags,
                     transcribeUnavailable = transcriber.availability(),

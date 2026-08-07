@@ -76,6 +76,7 @@ import com.douxev.eggshell.data.MedicationRepository
 import com.douxev.eggshell.data.MetricsRepository
 import com.douxev.eggshell.ui.bleeding.BleedingListViewModel
 import com.douxev.eggshell.ui.bleeding.bleedingSegment
+import com.douxev.eggshell.ui.common.MonthGrid
 import com.douxev.eggshell.ui.common.ScreenHeader
 import com.douxev.eggshell.ui.common.metricAccent
 import com.douxev.eggshell.ui.common.rememberLocale
@@ -490,94 +491,19 @@ private fun MonthCalendarCard(
             .format(Date.from(yearMonth.atDay(1).atStartOfDay(zone).toInstant()))
             .replaceFirstChar { it.titlecase(locale) }
     }
-    val firstDayOfWeek = remember(locale) { WeekFields.of(locale).firstDayOfWeek }
-    val weekdayLabels = remember(firstDayOfWeek, locale) {
-        (0..6).map { i ->
-            DayOfWeek.of(((firstDayOfWeek.value - 1 + i) % 7) + 1)
-                .getDisplayName(TextStyle.NARROW, locale)
-                .uppercase(locale)
-        }
+    val monthDays = remember(yearMonth) {
+        (1..yearMonth.lengthOfMonth()).map { yearMonth.atDay(it) }
     }
-    val firstOfMonth = yearMonth.atDay(1)
-    val leadingBlanks = ((firstOfMonth.dayOfWeek.value - firstDayOfWeek.value) + 7) % 7
-    val daysInMonth = yearMonth.lengthOfMonth()
-
-    val monthDays = remember(yearMonth) { (1..daysInMonth).map { yearMonth.atDay(it) } }
     val monthHasMood = monthDays.any { it in moodByDay }
     val monthHasBleeding = monthDays.any { it in overlays.bleedingDays }
     val monthMedIds = monthDays.flatMap { overlays.medsByDay[it].orEmpty() }.distinct()
 
-    EggCard(variant = CardVariant.Low, padding = PaddingValues(16.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onPrevMonth, modifier = Modifier.size(EggDim.TouchTarget)) {
-                Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                    contentDescription = stringResource(R.string.journal_prev_month),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                monthLabel,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(onClick = onNextMonth, modifier = Modifier.size(EggDim.TouchTarget)) {
-                Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = stringResource(R.string.journal_next_month),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-            weekdayLabels.forEach { label ->
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-
-        // Six rows, always. Columns touch each other so a run of bleeding days
-        // welds into one continuous bar instead of a dotted line of pills.
-        for (row in 0 until 6) {
-            Row(modifier = Modifier.fillMaxWidth()) {
-                for (col in 0..6) {
-                    val dayNumber = row * 7 + col - leadingBlanks + 1
-                    if (dayNumber !in 1..daysInMonth) {
-                        Box(modifier = Modifier.weight(1f).height(CellHeight))
-                        continue
-                    }
-                    val date = yearMonth.atDay(dayNumber)
-                    val bleeding = date in overlays.bleedingDays
-                    DayCell(
-                        modifier = Modifier.weight(1f),
-                        date = date,
-                        isToday = date == today,
-                        isSelected = date == selected,
-                        mood = moodByDay[date],
-                        bleeding = bleeding,
-                        bleedStartsRun = bleeding && date.minusDays(1) !in overlays.bleedingDays,
-                        bleedEndsRun = bleeding && date.plusDays(1) !in overlays.bleedingDays,
-                        medIds = overlays.medsByDay[date].orEmpty(),
-                        medColors = overlays.medColors,
-                        onClick = { onSelect(date) },
-                    )
-                }
-            }
-        }
-
-        if (monthHasMood || monthHasBleeding || monthMedIds.isNotEmpty()) {
+    MonthGrid(
+        yearMonth = yearMonth,
+        onPrevMonth = onPrevMonth,
+        onNextMonth = onNextMonth,
+        footer = {
+            if (!monthHasMood && !monthHasBleeding && monthMedIds.isEmpty()) return@MonthGrid
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -611,7 +537,22 @@ private fun MonthCalendarCard(
                     )
                 }
             }
-        }
+        },
+    ) { date ->
+        val bleeding = date in overlays.bleedingDays
+        DayCell(
+            modifier = Modifier,
+            date = date,
+            isToday = date == today,
+            isSelected = date == selected,
+            mood = moodByDay[date],
+            bleeding = bleeding,
+            bleedStartsRun = bleeding && date.minusDays(1) !in overlays.bleedingDays,
+            bleedEndsRun = bleeding && date.plusDays(1) !in overlays.bleedingDays,
+            medIds = overlays.medsByDay[date].orEmpty(),
+            medColors = overlays.medColors,
+            onClick = { onSelect(date) },
+        )
     }
 }
 

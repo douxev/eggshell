@@ -125,4 +125,5 @@
     <string name="dreams_delete">Supprimer ce rêve</string>
     <string name="dreams_delete_title">Supprimer ce rêve ?</string>
     <string name="dreams_delete_message">Le rêve, ses tags et ses notes vocales seront définitivement supprimés.</string>
+    <string name="dreams_cd_has_dream">rêve noté</string>
 </resources>

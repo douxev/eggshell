@@ -1,7 +1,11 @@
 package com.douxev.eggshell.ui.dreams
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -28,10 +32,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -39,6 +46,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.DreamsRepository
+import com.douxev.eggshell.ui.common.MonthGrid
+import com.douxev.eggshell.ui.common.MonthGridDefaults
 import com.douxev.eggshell.ui.common.ScreenHeader
 import com.douxev.eggshell.ui.common.rememberLocale
 import com.douxev.eggshell.ui.components.ActionBand
@@ -76,6 +85,8 @@ class DreamsViewModel @Inject constructor(
 
     data class State(
         val rows: List<Row> = emptyList(),
+        /** Local date of every night that has a dream, for the calendar. */
+        val nights: Map<java.time.LocalDate, Row> = emptyMap(),
         val tags: List<DreamTag> = emptyList(),
         /** Null = every dream. */
         val filterTagId: Long? = null,
@@ -102,8 +113,12 @@ class DreamsViewModel @Inject constructor(
                     audioCount = runCatching { repo.audioFor(d.id).size }.getOrDefault(0),
                 )
             }
+            val zone = java.time.ZoneId.systemDefault()
             _state.value = State(
                 rows = rows,
+                nights = rows.associateBy {
+                    java.time.Instant.ofEpochMilli(it.dream.nightMs).atZone(zone).toLocalDate()
+                },
                 tags = tags,
                 filterTagId = filter.takeIf { stillExists },
                 loading = false,
@@ -130,9 +145,15 @@ fun DreamsScreen(
     onBack: () -> Unit,
     onOpenDream: (Long) -> Unit,
     onNewDream: () -> Unit,
+    /** Tapping an empty night opens the editor already set to that night. */
+    onNewNightDream: (Long) -> Unit,
     vm: DreamsViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
+    val today = remember { java.time.LocalDate.now() }
+    var visibleMonth by androidx.compose.runtime.saveable.rememberSaveable(
+        stateSaver = YearMonthSaver,
+    ) { androidx.compose.runtime.mutableStateOf(java.time.YearMonth.from(today)) }
     LaunchedEffect(Unit) { vm.refresh() }
 
     Scaffold(
@@ -192,6 +213,29 @@ fun DreamsScreen(
                             )
                         }
                     }
+                }
+            }
+
+            // Calendar first, like the mood journal: a dream journal is read
+            // for its shape over weeks — which nights are blank, where a run of
+            // recall starts — and a list can only ever show that one row at a
+            // time.
+            item {
+                MonthGrid(
+                    yearMonth = visibleMonth,
+                    onPrevMonth = { visibleMonth = visibleMonth.minusMonths(1) },
+                    onNextMonth = { visibleMonth = visibleMonth.plusMonths(1) },
+                ) { date ->
+                    DreamDayCell(
+                        date = date,
+                        isToday = date == today,
+                        row = state.nights[date],
+                        onClick = {
+                            val existing = state.nights[date]
+                            if (existing != null) onOpenDream(existing.dream.id)
+                            else onNewNightDream(DreamsRepository.nightOfDate(date))
+                        },
+                    )
                 }
             }
 
@@ -309,3 +353,97 @@ private fun DreamCard(row: DreamsViewModel.Row, onClick: () -> Unit) {
 
 /** Past this the chips wrap and the card stops reading as one line. */
 private const val MAX_TAG_CHIPS = 3
+
+/**
+ * One night in the dream calendar.
+ *
+ * A night either has a dream or it does not — there is no continuous value to
+ * shade, the way mood shades the journal's cells. So presence is a filled disc,
+ * lucidity is a ring around it, and a voice note adds a dot: three states the
+ * eye separates at a glance, none of them told by colour alone (§10).
+ *
+ * Tapping an empty night opens the editor already set to it, which is the whole
+ * reason a dream journal wants a calendar — you remember a dream two days late
+ * and need to file it against the right night without a date picker.
+ */
+@Composable
+private fun DreamDayCell(
+    date: java.time.LocalDate,
+    isToday: Boolean,
+    row: DreamsViewModel.Row?,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val cdToday = stringResource(R.string.feel_cd_today)
+    val cdDream = stringResource(R.string.dreams_cd_has_dream)
+    val cdLucid = stringResource(R.string.dreams_lucid)
+    val cd = listOfNotNull(
+        date.dayOfMonth.toString(),
+        cdToday.takeIf { isToday },
+        cdDream.takeIf { row != null },
+        cdLucid.takeIf { row?.dream?.lucid == true },
+    ).joinToString(", ")
+
+    Box(
+        modifier = Modifier
+            .height(MonthGridDefaults.CellHeight)
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = cd },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (row != null) {
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .background(
+                        if (row.dream.lucid) scheme.tertiaryContainer else scheme.secondaryContainer,
+                        androidx.compose.foundation.shape.CircleShape,
+                    ),
+            )
+            if (row.dream.lucid) {
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .border(
+                            1.5.dp,
+                            scheme.tertiary,
+                            androidx.compose.foundation.shape.CircleShape,
+                        ),
+                )
+            }
+        }
+        if (isToday && row == null) {
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .border(1.dp, scheme.primary, androidx.compose.foundation.shape.CircleShape),
+            )
+        }
+        Text(
+            date.dayOfMonth.toString(),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (row != null) FontWeight.SemiBold else FontWeight.Normal,
+            color = when {
+                row?.dream?.lucid == true -> scheme.onTertiaryContainer
+                row != null -> scheme.onSecondaryContainer
+                else -> scheme.onSurfaceVariant
+            },
+        )
+        if ((row?.audioCount ?: 0) > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 1.dp)
+                    .size(4.dp)
+                    .background(scheme.tertiary, androidx.compose.foundation.shape.CircleShape),
+            )
+        }
+    }
+}
+
+/** YearMonth is not Parcelable; store it as "yyyy-MM" across process death. */
+private val YearMonthSaver = androidx.compose.runtime.saveable.Saver<java.time.YearMonth, String>(
+    save = { it.toString() },
+    restore = { java.time.YearMonth.parse(it) },
+)

@@ -111,4 +111,5 @@
     <string name="dreams_delete">Delete this dream</string>
     <string name="dreams_delete_title">Delete this dream?</string>
     <string name="dreams_delete_message">The dream, its tags and its voice notes will be permanently deleted.</string>
+    <string name="dreams_cd_has_dream">dream recorded</string>
 </resources>

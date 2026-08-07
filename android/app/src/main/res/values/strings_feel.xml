@@ -69,4 +69,26 @@
     <string name="feel_metric_domain_bleeding">Ces curseurs apparaissent quand tu notes tes menstruations.</string>
     <string name="feel_corr_axis_dreams_fmt">Rêves · %1$d</string>
     <string name="feel_corr_axis_lucid">Rêves lucides</string>
+
+    <!-- ===== Ce qui va ensemble (insights) ===== -->
+    <string name="feel_insights_title">Ce qui va ensemble</string>
+    <string name="feel_insights_sub">Repéré dans tes propres relevés, du plus net au moins net.</string>
+    <!-- « va avec », jamais « à cause de » : le moteur compare des moyennes,
+         il ne peut pas distinguer une cause d\'une coïncidence. -->
+    <string name="feel_insights_up_fmt">%1$s est plus haut %2$s : +%3$s en moyenne.</string>
+    <string name="feel_insights_down_fmt">%1$s est plus bas %2$s : −%3$s en moyenne.</string>
+    <string name="feel_insights_sample_fmt">Sur %1$d relevés contre %2$d</string>
+    <string name="feel_insights_caveat">Ce sont des coïncidences relevées dans ton journal, pas des causes. Beaucoup d\'autres choses bougent en même temps — à regarder comme une piste, pas comme une explication.</string>
+    <string name="feel_insights_cond_missed">les jours avec une prise oubliée</string>
+    <string name="feel_insights_cond_late">les jours avec une prise en retard</string>
+    <string name="feel_insights_cond_clean">les jours où tout a été pris à l\'heure</string>
+    <string name="feel_insights_cond_lucid">le lendemain d\'un rêve lucide</string>
+    <string name="feel_insights_cond_dream">le lendemain d\'une nuit avec rêve</string>
+    <string name="feel_insights_metric_generic">cet indicateur</string>
+
+    <!-- Curseurs du carnet de rêves -->
+    <string name="dreams_gauge_sleep_quality">Qualité du sommeil</string>
+    <string name="dreams_gauge_recall">Netteté du souvenir</string>
+    <string name="dreams_gauge_vividness">Intensité du rêve</string>
+    <string name="dreams_gauge_emotional_tone">Tonalité émotionnelle</string>
 </resources>

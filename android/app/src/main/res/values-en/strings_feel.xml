@@ -69,4 +69,26 @@
     <string name="feel_metric_domain_bleeding">These sliders show up when you log a period day.</string>
     <string name="feel_corr_axis_dreams_fmt">Dreams · %1$d</string>
     <string name="feel_corr_axis_lucid">Lucid dreams</string>
+
+    <!-- ===== What goes together (insights) ===== -->
+    <string name="feel_insights_title">What goes together</string>
+    <string name="feel_insights_sub">Spotted in your own records, clearest first.</string>
+    <!-- "goes with", never "because of": the engine compares averages and
+         cannot tell a cause from a coincidence. -->
+    <string name="feel_insights_up_fmt">%1$s is higher %2$s: +%3$s on average.</string>
+    <string name="feel_insights_down_fmt">%1$s is lower %2$s: −%3$s on average.</string>
+    <string name="feel_insights_sample_fmt">Across %1$d records against %2$d</string>
+    <string name="feel_insights_caveat">These are coincidences found in your journal, not causes. Plenty of other things move at the same time — read it as a lead, not as an explanation.</string>
+    <string name="feel_insights_cond_missed">on days with a missed dose</string>
+    <string name="feel_insights_cond_late">on days with a late dose</string>
+    <string name="feel_insights_cond_clean">on days everything was taken on time</string>
+    <string name="feel_insights_cond_lucid">the day after a lucid dream</string>
+    <string name="feel_insights_cond_dream">the day after a night with a dream</string>
+    <string name="feel_insights_metric_generic">this indicator</string>
+
+    <!-- Dream journal sliders -->
+    <string name="dreams_gauge_sleep_quality">Sleep quality</string>
+    <string name="dreams_gauge_recall">Recall clarity</string>
+    <string name="dreams_gauge_vividness">Dream intensity</string>
+    <string name="dreams_gauge_emotional_tone">Emotional tone</string>
 </resources>

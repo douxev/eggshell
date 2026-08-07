@@ -176,6 +176,10 @@ fun metricEmojis(def: MetricDefinition): Pair<String?, String?> {
     return when (def.metricKey) {
         "mood" -> "😞" to "😊"
         "dysphoria" -> "😌" to "😣"
+        "sleep_quality" -> "😵" to "😴"
+        "recall" -> "🌫️" to "🔎"
+        "vividness" -> "🌫️" to "🎬"
+        "emotional_tone" -> "😢" to "😊"
         "euphoria" -> "😐" to "😄"
         "libido" -> "💤" to "🔥"
         "energy" -> "🥱" to "⚡"
@@ -186,13 +190,27 @@ fun metricEmojis(def: MetricDefinition): Pair<String?, String?> {
     }
 }
 
-private fun builtinLabelRes(domain: String, metricKey: String): Int = when (domain) {
+/**
+ * Localized name of a built-in slider, or 0 for a custom one.
+ *
+ * Internal rather than private so the insights card can name the same metric
+ * the same way — a finding that called it « Qualité du sommeil » while the
+ * editor called it `sleep_quality` would read as two different things.
+ */
+internal fun builtinLabelRes(domain: String, metricKey: String): Int = when (domain) {
     "journal" -> when (metricKey) {
         "mood" -> R.string.gauge_mood
         "dysphoria" -> R.string.gauge_dysphoria
         "euphoria" -> R.string.gauge_euphoria
         "libido" -> R.string.gauge_libido
         "energy" -> R.string.gauge_energy
+        else -> 0
+    }
+    "dreams" -> when (metricKey) {
+        "sleep_quality" -> R.string.dreams_gauge_sleep_quality
+        "recall" -> R.string.dreams_gauge_recall
+        "vividness" -> R.string.dreams_gauge_vividness
+        "emotional_tone" -> R.string.dreams_gauge_emotional_tone
         else -> 0
     }
     "bleeding" -> when (metricKey) {

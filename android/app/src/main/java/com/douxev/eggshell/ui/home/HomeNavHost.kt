@@ -365,11 +365,15 @@ fun HomeNavHost(
                     onBack = { nav.popBackStack() },
                     onOpenDream = { id -> nav.navigate(Routes.dreamEdit(id)) },
                     onNewDream = { nav.navigate(Routes.dreamEdit(-1L)) },
+                    onNewNightDream = { nightMs -> nav.navigate(Routes.dreamNew(nightMs)) },
                 )
             }
             composable(
                 Routes.DREAM_EDIT,
-                arguments = listOf(navArgument("id") { type = NavType.LongType; defaultValue = -1L }),
+                arguments = listOf(
+                    navArgument("id") { type = NavType.LongType; defaultValue = -1L },
+                    navArgument("night") { type = NavType.LongType; defaultValue = -1L },
+                ),
             ) {
                 com.douxev.eggshell.ui.dreams.DreamEditorScreen(
                     onDone = { nav.popBackStack() },
@@ -514,7 +518,7 @@ object Routes {
     const val VOICE = "voice"
 
     const val DREAMS = "dreams"
-    const val DREAM_EDIT = "dreams/edit?id={id}"
+    const val DREAM_EDIT = "dreams/edit?id={id}&night={night}"
 
     const val NOTES = "notes?folder={folder}&name={name}"
     const val NOTE_EDIT = "notes/edit?id={id}"
@@ -537,7 +541,8 @@ object Routes {
     fun journalEdit(id: Long) = "journal/edit/$id"
     fun bleedingEdit(id: Long) = "bleeding/edit/$id"
     fun metricEditor(domain: String) = "metrics/editor/$domain"
-    fun dreamEdit(id: Long) = "dreams/edit?id=$id"
+    fun dreamEdit(id: Long) = "dreams/edit?id=$id&night=-1"
+    fun dreamNew(nightMs: Long) = "dreams/edit?id=-1&night=$nightMs"
     fun appointmentEdit(id: Long) = "appointments/edit/$id"
     fun measures(tab: String) = "measures?tab=$tab"
 
