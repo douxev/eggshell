@@ -183,6 +183,7 @@
     <string name="photo_reminder_title">Photo à prendre</string>
     <string name="voice_reminder_title">Enregistrement à faire</string>
     <string name="journal_reminder_title">Moment journal</string>
+    <string name="dream_reminder_title">Au réveil</string>
     <!-- Generic, content-free copy shown on the lockscreen and on the
          paired watch when the user hasn't unlocked the device. Hides the
          specific lab / dose details from anyone glancing at the screen. -->
@@ -533,4 +534,11 @@
     <string name="feature_notes_title">Notes</string>
     <string name="feature_notes_sub">Un carnet en markdown, avec images et dossiers.</string>
     <string name="widget_lab_title">Bilan à prévoir</string>
+    <string name="reminders_section_dreams">Rêves</string>
+    <string name="reminders_section_dreams_hint">Un rappel au réveil : le souvenir d\'un rêve s\'efface en quelques minutes, donc l\'heure fait tout.</string>
+    <string name="reminders_no_dreams">Aucun rappel de rêve.</string>
+    <string name="reminders_add_dream">Ajouter un rappel de rêve</string>
+    <string name="reminders_dream_dialog_title">Nouveau rappel de rêve</string>
+    <string name="reminders_dream_edit_dialog_title">Modifier le rappel</string>
+    <string name="reminders_dream_default_label">Noter un rêve</string>
 </resources>

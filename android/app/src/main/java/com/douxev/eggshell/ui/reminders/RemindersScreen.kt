@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EditNote
@@ -298,6 +299,19 @@ fun RemindersScreen(
                 onDelete = vm::deleteLab,
             )
 
+            categorySection(
+                titleRes = R.string.reminders_section_dreams,
+                hintRes = R.string.reminders_section_dreams_hint,
+                emptyRes = R.string.reminders_no_dreams,
+                addDescriptionRes = R.string.reminders_add_dream,
+                category = LabReminderPrefs.CATEGORY_DREAM,
+                state = state,
+                onAdd = { dialogTarget = LabDialogTarget.New(LabReminderPrefs.CATEGORY_DREAM) },
+                onEdit = { entry -> dialogTarget = LabDialogTarget.Edit(entry) },
+                onTogglePriority = vm::setLabPriority,
+                onDelete = vm::deleteLab,
+            )
+
             // -- Rendez-vous : read-only recap --------------------------------
             item { SectionHeader(stringResource(R.string.reminders_section_appointments)) }
             item { Hint(stringResource(R.string.reminders_section_appointments_hint)) }
@@ -323,12 +337,14 @@ fun RemindersScreen(
                 LabReminderPrefs.CATEGORY_PHOTO -> R.string.reminders_photo_edit_dialog_title
                 LabReminderPrefs.CATEGORY_VOICE -> R.string.reminders_voice_edit_dialog_title
                 LabReminderPrefs.CATEGORY_JOURNAL -> R.string.reminders_journal_edit_dialog_title
+                LabReminderPrefs.CATEGORY_DREAM -> R.string.reminders_dream_edit_dialog_title
                 else -> R.string.reminders_lab_edit_dialog_title
             }
             is LabDialogTarget.New -> when (category) {
                 LabReminderPrefs.CATEGORY_PHOTO -> R.string.reminders_photo_dialog_title
                 LabReminderPrefs.CATEGORY_VOICE -> R.string.reminders_voice_dialog_title
                 LabReminderPrefs.CATEGORY_JOURNAL -> R.string.reminders_journal_dialog_title
+                LabReminderPrefs.CATEGORY_DREAM -> R.string.reminders_dream_dialog_title
                 else -> R.string.reminders_lab_dialog_title
             }
         }
@@ -339,6 +355,7 @@ fun RemindersScreen(
                     LabReminderPrefs.CATEGORY_PHOTO -> R.string.reminders_photo_default_label
                     LabReminderPrefs.CATEGORY_VOICE -> R.string.reminders_voice_default_label
                     LabReminderPrefs.CATEGORY_JOURNAL -> R.string.reminders_journal_default_label
+                    LabReminderPrefs.CATEGORY_DREAM -> R.string.reminders_dream_default_label
                     else -> R.string.reminders_lab_default_label
                 }
             )
@@ -424,6 +441,7 @@ private fun labIconFor(category: String): ImageVector = when (category) {
     LabReminderPrefs.CATEGORY_PHOTO -> Icons.Filled.PhotoCamera
     LabReminderPrefs.CATEGORY_VOICE -> Icons.Filled.GraphicEq
     LabReminderPrefs.CATEGORY_JOURNAL -> Icons.Filled.EditNote
+    LabReminderPrefs.CATEGORY_DREAM -> Icons.Filled.Bedtime
     else -> Icons.Filled.Science
 }
 

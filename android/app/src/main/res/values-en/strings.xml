@@ -163,6 +163,7 @@
     <string name="photo_reminder_title">Photo check-in</string>
     <string name="voice_reminder_title">Voice check-in</string>
     <string name="journal_reminder_title">Journal time</string>
+    <string name="dream_reminder_title">On waking</string>
     <string name="reminder_public_title">Reminder</string>
     <string name="reminder_public_body">Reminder — unlock to see details.</string>
     <string name="reminder_locked_toast">Unlock the app to log this dose.</string>
@@ -499,4 +500,11 @@
     <string name="feature_notes_title">Notes</string>
     <string name="feature_notes_sub">A markdown notebook, with images and folders.</string>
     <string name="widget_lab_title">Blood work due</string>
+    <string name="reminders_section_dreams">Dreams</string>
+    <string name="reminders_section_dreams_hint">A reminder on waking: dream recall fades within minutes, so the time is the whole feature.</string>
+    <string name="reminders_no_dreams">No dream reminder.</string>
+    <string name="reminders_add_dream">Add a dream reminder</string>
+    <string name="reminders_dream_dialog_title">New dream reminder</string>
+    <string name="reminders_dream_edit_dialog_title">Edit reminder</string>
+    <string name="reminders_dream_default_label">Record a dream</string>
 </resources>
