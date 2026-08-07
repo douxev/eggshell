@@ -1,4 +1,5 @@
 import SwiftUI
+import TransitionCore
 
 /// Every reminder of one treatment, and everything that can be done to one.
 ///
