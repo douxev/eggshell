@@ -1826,7 +1826,7 @@ mod tests {
                 guard
                     .conn()
                     .execute_batch(
-                        "DROP TABLE IF EXISTS note_images;\n                         DROP TABLE IF EXISTS notes;\n                         DROP TABLE IF EXISTS note_folders;",
+                        "DROP TABLE IF EXISTS note_images;\n                         DROP TABLE IF EXISTS notes;\n                         DROP TABLE IF EXISTS note_folders;\n                         DROP TABLE IF EXISTS dream_audio;\n                         DROP TABLE IF EXISTS dream_tag_links;\n                         DROP TABLE IF EXISTS dream_tags;\n                         DROP TABLE IF EXISTS dreams;\n                         DELETE FROM metric_definitions WHERE domain = \"dreams\";",
                     )
                     .unwrap();
                 guard.conn().pragma_update(None, "user_version", 13).unwrap();
