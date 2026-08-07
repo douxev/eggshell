@@ -77,8 +77,8 @@ data class WhatsNewRelease(
  */
 object WhatsNewCatalog {
     val LATEST: WhatsNewRelease = WhatsNewRelease(
-        versionCode = 19,
-        versionName = "2.2.0",
+        versionCode = 20,
+        versionName = "2.3.0",
         titleRes = R.string.set_wn_title,
         highlights = listOf(
             WhatsNewHighlight(

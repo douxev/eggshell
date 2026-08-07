@@ -100,7 +100,7 @@
     <string name="set_wn_4_title">Raccourcis et widgets par module</string>
     <string name="set_wn_4_sub">Un appui long sur l’icône ouvre le module voulu, et chaque module a son widget. Tout disparaît si un PIN leurre ou une icône déguisée est actif.</string>
     <string name="set_wn_5_title">Carnet de rêves</string>
-    <string name="set_wn_5_sub">Bientôt. Le module est déjà visible, grisé, dans Réglages → Modules.</string>
+    <string name="set_wn_5_sub">Il est là. Un calendrier des nuits, des tags pour regrouper les rêves qui se ressemblent, des notes vocales transcrites sur ton téléphone, et des curseurs de sommeil. Ce que tu y notes alimente « Ce qui va ensemble », dans Corrélations.</string>
     <string name="set_wn_6_title">Corrections importantes</string>
     <string name="set_wn_6_sub">Un plantage possible au démarrage sur Android 8, les valeurs à rallonge sur les courbes, le clavier qui recouvrait les champs en bas des formulaires, et l’app qui ne changeait pas de langue sans redémarrer.</string>
 

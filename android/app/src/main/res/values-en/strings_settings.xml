@@ -95,7 +95,7 @@
     <string name="set_wn_4_title">Per-module shortcuts and widgets</string>
     <string name="set_wn_4_sub">Long-press the icon to open a module, and every module has its own widget. Both vanish while a decoy PIN or a disguised icon is active.</string>
     <string name="set_wn_5_title">Dream journal</string>
-    <string name="set_wn_5_sub">Coming soon. The module is already there, greyed out, under Settings → Modules.</string>
+    <string name="set_wn_5_sub">It is here. A calendar of nights, tags to group dreams that resemble each other, voice notes transcribed on your phone, and sleep sliders. What you record feeds “What goes together”, under Correlations.</string>
     <string name="set_wn_6_title">Important fixes</string>
     <string name="set_wn_6_sub">A possible crash at startup on Android 8, run-on values on the curves, the keyboard covering fields at the bottom of forms, and the app not changing language without a restart.</string>
 
