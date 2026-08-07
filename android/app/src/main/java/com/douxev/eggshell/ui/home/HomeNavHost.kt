@@ -3,7 +3,12 @@ package com.douxev.eggshell.ui.home
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -117,7 +122,35 @@ fun HomeNavHost(
         NavHost(
             navController = nav,
             startDestination = Routes.HOME,
-            modifier = Modifier.padding(padding),
+            modifier = Modifier
+                .padding(padding)
+                // Two insets the screens below do not cover. Every one of them
+                // uses a Material3 Scaffold, whose default contentWindowInsets
+                // is `systemBarsForVisualComponents` — status bar and navigation
+                // bar, and nothing else. Both gaps are opened by
+                // enableEdgeToEdge() itself, so they belong here, once, rather
+                // than in thirty-five screens.
+                //
+                // The keyboard: going edge to edge means the system stops
+                // resizing the window for the IME, so a text field near the
+                // bottom of a scrolling form sits *under* it with no way to
+                // scroll into view — the viewport extends behind the keyboard,
+                // so the automatic scroll-to-focused-field has nowhere to go.
+                .imePadding()
+                // The cutout, horizontally only. enableEdgeToEdge() opts the
+                // window into LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES, which
+                // lets content run into the notch — in landscape that is a
+                // column of text disappearing into it.
+                //
+                // Horizontal sides only, and that restriction is load-bearing:
+                // in portrait the cutout inset is a *top* inset covering the
+                // same strip as the status bar, which the inner Scaffolds
+                // already pad for. Padding it again here would push every screen
+                // down by twice the status bar. Horizontally the system bars
+                // contribute nothing, so there is nothing to double.
+                .windowInsetsPadding(
+                    WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)
+                ),
             // A pushed screen slides in horizontally over 250 ms (README §8).
             enterTransition = {
                 slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(250))
