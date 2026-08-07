@@ -81,10 +81,22 @@
 
 # ── AndroidX Biometric / Keystore ───────────────────────────────────────────
 # BiometricPrompt has internal classes loaded by reflection on some OEMs.
--keep class androidx.biometric.** { *; }
+# No blanket keep for androidx.biometric or androidx.camera.
+#
+# Both ship consumer rules written by their own maintainers, aimed at exactly
+# the parts R8 cannot see: biometric keeps the method *names* on its Api* inner
+# classes (32 rules, all `allowobfuscation, allowshrinking`), camera-camera2
+# keeps Camera2Config$DefaultProvider, and camera-core keeps every Quirk
+# subclass — the quirk table is looked up reflectively per device.
+#
+# `-keep class androidx.camera.** { *; }` on top of that was holding 2 609
+# classes, and biometric another 167, out of R8's reach. That is a quarter of
+# the whole app kept verbatim to re-state, less precisely, rules the libraries
+# already provide.
+#
+# -dontwarn stays: that is about compile-time references, not shrinking.
 
 # ── CameraX ─────────────────────────────────────────────────────────────────
--keep class androidx.camera.** { *; }
 -dontwarn androidx.camera.**
 
 # ── AndroidX EXIFInterface ──────────────────────────────────────────────────

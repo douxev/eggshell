@@ -5,6 +5,39 @@
 > Android : ~20 100 lignes Kotlin/Compose · iOS : ~5 200 lignes SwiftUI · cœur Rust partagé via uniffi.
 
 
+## 0-bis. Delta 2.1.0 → 2.3.1 (mis à jour le 2026-08-08)
+
+> `MARKETING_VERSION` passe à 2.3.1, en phase avec Android.
+
+Le carnet de rêves est porté : calendrier, tags, sliders de sommeil, notes
+vocales avec lecture et transcription 100 % locale. Les widgets restent
+volontairement hors périmètre iOS.
+
+Le dernier écart fonctionnel était la carte « Ce qui va ensemble ». Le moteur
+de corrélation vit dans le cœur Rust, donc iOS avait déjà l'arithmétique —
+il manquait la carte, les deux séries rêves, et la liste de minuits locaux
+que le cœur ne peut pas deviner (le fuseau lui est inconnu, et un jour de
+changement d'heure ne fait pas 86 400 000 ms).
+
+**Cause racine identifiée en juin, toujours la bonne :** `VaultService`
+n'enveloppait qu'une partie de l'API uniffi. Le portage du carnet de rêves a
+buté sur ~22 « has no member » avant d'ajouter les wrappers manquants. À
+vérifier en premier lors du prochain portage.
+
+### Ce qu'iOS a encore gagné sans une ligne de Swift
+
+`dream_audio/` rejoint `photos/`, `voice/`, `settings/` et `note_images/` dans
+le bundle v3 — les notes vocales de rêve étaient jusqu'ici absentes des
+sauvegardes, alors que le texte des entrées, lui, y était déjà (le bundle
+emporte un instantané complet de la base, pas une liste de tables). `AppPaths`
+pose déjà le dossier au bon endroit.
+
+En revanche, une correction **a** demandé du Swift : les chemins stockés sont
+absolus, et le conteneur iOS change d'UUID à la réinstallation, à la
+restauration et au changement d'appareil. `DreamsStore.resolve(_:)` les
+ré-enracine sous le conteneur courant. **`Photos/` et `Voice/` ont le même trou
+et ne sont pas corrigés.**
+
 ## 0. Delta depuis la 2.0.3 (mis à jour le 2026-07-30)
 
 > iOS sort bien en 2.1.0 : les trois écarts ci-dessous ont été comblés le
