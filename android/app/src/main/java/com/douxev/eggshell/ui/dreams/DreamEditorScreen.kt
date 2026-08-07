@@ -117,6 +117,8 @@ class DreamEditorViewModel @Inject constructor(
         val audio: List<DreamAudio> = emptyList(),
         val recording: Boolean = false,
         val transcribing: Long? = null,
+        /** Id of the clip currently sounding, or null. */
+        val playing: Long? = null,
         val transcribeUnavailable: OnDeviceTranscriber.Reason? = null,
         val loading: Boolean = true,
         val saved: Boolean = false,
@@ -299,8 +301,46 @@ class DreamEditorViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Play or stop a voice note.
+     *
+     * This is the fallback that makes the whole feature usable on a phone with
+     * no on-device recogniser: without playback, a recording made there could
+     * never be got back out. Tapping the one already sounding stops it.
+     */
+    fun togglePlayback(audio: DreamAudio) {
+        viewModelScope.launch {
+            if (_state.value.playing == audio.id) {
+                repo.stopPlayback()
+                _state.value = _state.value.copy(playing = null)
+                return@launch
+            }
+            _state.value = _state.value.copy(playing = audio.id)
+            val started = runCatching {
+                repo.play(audio) {
+                    // Completion arrives off the composition; bounce it back
+                    // onto the VM so the button returns to "play".
+                    _state.value = _state.value.copy(playing = null)
+                }
+            }.getOrDefault(false)
+            if (!started) _state.value = _state.value.copy(playing = null)
+        }
+    }
+
+    override fun onCleared() {
+        // Leaving the screen has to silence it: a dream reading itself aloud
+        // from a screen the user has already left is the exact opposite of
+        // what this app is for.
+        runCatching { repo.stopPlayback() }
+        super.onCleared()
+    }
+
     fun deleteAudio(audio: DreamAudio) {
         viewModelScope.launch {
+            if (_state.value.playing == audio.id) {
+                repo.stopPlayback()
+                _state.value = _state.value.copy(playing = null)
+            }
             runCatching { repo.deleteAudio(audio) }
             _state.value = _state.value.copy(
                 audio = runCatching { repo.audioFor(dreamId) }.getOrDefault(emptyList()),
@@ -467,8 +507,10 @@ fun DreamEditorScreen(
             state.audio.forEach { clip ->
                 AudioRow(
                     clip = clip,
+                    playing = state.playing == clip.id,
                     transcribing = state.transcribing == clip.id,
                     canTranscribe = state.transcribeUnavailable == null,
+                    onPlay = { vm.togglePlayback(clip) },
                     onTranscribe = { vm.transcribeExisting(clip, locale.toLanguageTag()) },
                     onDelete = { vm.deleteAudio(clip) },
                 )
@@ -613,8 +655,10 @@ fun DreamEditorScreen(
 @Composable
 private fun AudioRow(
     clip: DreamAudio,
+    playing: Boolean,
     transcribing: Boolean,
     canTranscribe: Boolean,
+    onPlay: () -> Unit,
     onTranscribe: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -623,17 +667,20 @@ private fun AudioRow(
         padding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Filled.PlayArrow,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            IconButton(onClick = onPlay, modifier = Modifier.size(EggDim.TouchTarget)) {
+                Icon(
+                    if (playing) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                    contentDescription = stringResource(
+                        if (playing) R.string.dreams_audio_stop else R.string.dreams_audio_play
+                    ),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
             Text(
                 formatDuration(clip.durationMs),
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier
-                    .padding(start = 10.dp)
+                    .padding(start = 4.dp)
                     .weight(1f),
             )
             if (clip.transcript == null && canTranscribe) {

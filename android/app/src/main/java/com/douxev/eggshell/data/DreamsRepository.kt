@@ -1,6 +1,7 @@
 package com.douxev.eggshell.data
 
 import android.content.Context
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Build
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -45,6 +46,8 @@ class DreamsRepository @Inject constructor(
         File(context.cacheDir, "dream_audio").apply { mkdirs() }
     }
 
+    private var player: MediaPlayer? = null
+    private var playingTmp: File? = null
     private var recorder: MediaRecorder? = null
     private var recordingTmp: File? = null
     private var recordingStartedAtMs: Long = 0L
@@ -224,6 +227,54 @@ class DreamsRepository @Inject constructor(
         tmp?.let { wipe(it) }
     }
 
+    /**
+     * Play a voice note, decrypting it to a temp file first.
+     *
+     * Playback is not a nice-to-have here. Transcription is on-device only and
+     * a good number of phones cannot do it at all — on those, listening is the
+     * *only* way to get a dream back out of the app. A recording that can be
+     * made and never heard is worse than no recording.
+     *
+     * The plaintext copy is wiped by [stopPlayback], including from the
+     * completion listener, so it lives exactly as long as the sound does.
+     */
+    suspend fun play(audio: DreamAudio, onComplete: () -> Unit): Boolean =
+        withContext(Dispatchers.IO) {
+            stopPlayback()
+            val plain = runCatching {
+                vault.requireSession().decryptBlob(File(audio.filePath).readBytes())
+            }.getOrNull() ?: return@withContext false
+            val tmp = File(cacheDir, "play-${UUID.randomUUID()}.m4a")
+            runCatching { tmp.writeBytes(plain) }.getOrElse { return@withContext false }
+            val mp = MediaPlayer()
+            try {
+                mp.setDataSource(tmp.absolutePath)
+                mp.prepare()
+                mp.setOnCompletionListener {
+                    stopPlayback()
+                    onComplete()
+                }
+                mp.start()
+                player = mp
+                playingTmp = tmp
+                true
+            } catch (t: Throwable) {
+                mp.release()
+                wipe(tmp)
+                false
+            }
+        }
+
+    fun stopPlayback() {
+        val mp = player
+        val tmp = playingTmp
+        player = null
+        playingTmp = null
+        runCatching { mp?.stop() }
+        runCatching { mp?.release() }
+        tmp?.let { wipe(it) }
+    }
+
     /** Decrypt to a cache file for playback. Purged when the app backgrounds. */
     suspend fun decryptToCache(audio: DreamAudio): File = withContext(Dispatchers.IO) {
         val out = File(cacheDir, File(audio.filePath).nameWithoutExtension + ".m4a")
@@ -246,6 +297,10 @@ class DreamsRepository @Inject constructor(
 
     /** Wipe decrypted copies. Called from the app's background purge. */
     fun purgeAllCache() {
+        // Stop first: the purge would otherwise delete the file out from under
+        // a playing MediaPlayer, and a dream would keep sounding from a phone
+        // whose owner has already put the app away.
+        stopPlayback()
         runCatching { cacheDir.listFiles()?.forEach { wipe(it) } }
     }
 
