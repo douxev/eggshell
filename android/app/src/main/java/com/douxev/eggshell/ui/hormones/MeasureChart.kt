@@ -101,10 +101,6 @@ fun MeasureChart(
 
     var viewport by remember(points) { mutableStateOf(TimeViewport()) }
     var selected by remember(points) { mutableStateOf<MeasurePoint?>(null) }
-    // Plot width in pixels, published by the Canvas so the gesture handler can
-    // convert a drag in pixels into a fraction of the visible span. Without it
-    // a pan would move by a different amount at every zoom level.
-    var plotWidthPx by remember { mutableStateOf(1f) }
 
     // A reading added or removed while zoomed leaves the pinned point dangling.
     LaunchedEffect(points) { selected = null }
@@ -138,9 +134,12 @@ fun MeasureChart(
                     }
                     .pointerInput(points) {
                         detectTapGestures { offset ->
-                            val width = size.width.toFloat().coerceAtLeast(1f)
-                            val plotLeft = GutterWidthPx(density = this@pointerInput.density)
-                            val plotWidth = (width - plotLeft).coerceAtLeast(1f)
+                            // Same plot rectangle the draw uses. Deriving it a
+                            // second time by eye would put the hit-test a few
+                            // pixels off the dots it is meant to pick.
+                            val plotLeft = gutterPx(this@pointerInput.density)
+                            val plotRight = size.width - plotRightInsetPx(this@pointerInput.density)
+                            val plotWidth = (plotRight - plotLeft).coerceAtLeast(1f)
                             val fraction = ((offset.x - plotLeft) / plotWidth).coerceIn(0f, 1f)
                             val hit = nearestPoint(points, viewport, fraction)
                             // Tapping the pinned reading again unpins it, so the
@@ -149,7 +148,6 @@ fun MeasureChart(
                         }
                     },
             ) {
-                plotWidthPx = size.width
                 drawMeasureChart(
                     points = points,
                     viewport = viewport,
@@ -340,10 +338,10 @@ private fun DrawScope.drawMeasureChart(
 ) {
     if (points.size < 2) return
 
-    val gutter = GutterWidthPx(density)
-    val bottomAxis = BottomAxisPx(density)
+    val gutter = gutterPx(density)
+    val bottomAxis = bottomAxisPx(density)
     val plotLeft = gutter
-    val plotRight = size.width - 4.dp.toPx()
+    val plotRight = size.width - plotRightInsetPx(density)
     val plotWidth = (plotRight - plotLeft).coerceAtLeast(1f)
     val plotTop = 8.dp.toPx()
     val plotBottom = (size.height - bottomAxis).coerceAtLeast(plotTop + 1f)
@@ -579,11 +577,18 @@ private fun totalSpanMs(points: List<MeasurePoint>): Long =
 private val ChartHeight = 180.dp
 private val ReadoutHeight = 30.dp
 
+// The plot rectangle, in px. Shared by the draw and the tap hit-test so the two
+// cannot drift apart — the dots a user aims at are placed by the first and
+// picked by the second.
+
 /** Room for the widest Y label ValueFormat can produce at a sane magnitude. */
-private fun GutterWidthPx(density: Float): Float = 52f * density
+private fun gutterPx(density: Float): Float = 52f * density
 
 /** Room for the X gradations and their labels. */
-private fun BottomAxisPx(density: Float): Float = 22f * density
+private fun bottomAxisPx(density: Float): Float = 22f * density
+
+/** Breathing room so the last reading's halo isn't clipped by the card edge. */
+private fun plotRightInsetPx(density: Float): Float = 4f * density
 
 /** Above this many visible readings the per-point dots merge into a stripe. */
 private const val MAX_DOTS = 40

@@ -537,7 +537,10 @@ private fun CurveCard(
 private fun DeltaPill(delta: Double) {
     val rising = delta > 0.0
     val flat = delta == 0.0
-    val magnitude = ValueFormat.significant(kotlin.math.abs(delta))
+    // An unchanged reading is "→ 0", not "→ 0.0000". Padding a difference of
+    // exactly nothing out to five figures quotes a precision that has no
+    // measurement behind it at all.
+    val magnitude = if (flat) "0" else ValueFormat.significant(kotlin.math.abs(delta))
     val label = stringResource(
         when {
             flat -> R.string.measures_delta_flat_fmt
