@@ -839,7 +839,9 @@ private fun ColumnScope.FailedStep(
     }
 }
 
-private fun trimDouble(v: Double): String {
-    val s = v.toString()
-    return if (s.endsWith(".0")) s.dropLast(2) else s
-}
+/**
+ * Deliberately NOT the significant-figure rendering the curves use: this row
+ * exists to be checked against the paper sheet it was read off, so it must show
+ * what the parser actually captured, digit for digit.
+ */
+private fun trimDouble(v: Double): String = com.douxev.eggshell.ui.common.ValueFormat.plain(v)

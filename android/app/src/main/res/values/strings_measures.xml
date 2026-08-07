@@ -24,6 +24,9 @@
     <string name="measures_legend_change">Changement de dose</string>
     <string name="measures_chart_a11y_fmt">Courbe de %1$s, de %2$s à %3$s. Dernière valeur %4$s.</string>
     <string name="measures_chart_one_point">Encore un relevé et la courbe se dessine.</string>
+    <string name="measures_legend_level_fmt">Taux (%1$s)</string>
+    <string name="measures_chart_hint">Pincez pour zoomer, glissez pour parcourir. Touchez un point pour le détail.</string>
+    <string name="measures_chart_reset_zoom">Tout voir</string>
 
     <string name="measures_readings">Relevés</string>
     <string name="measures_reading_manual">Saisi à la main</string>

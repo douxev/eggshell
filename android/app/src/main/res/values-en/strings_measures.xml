@@ -24,6 +24,9 @@
     <string name="measures_legend_change">Treatment change</string>
     <string name="measures_chart_a11y_fmt">%1$s curve, from %2$s to %3$s. Latest value %4$s.</string>
     <string name="measures_chart_one_point">One more reading and the curve appears.</string>
+    <string name="measures_legend_level_fmt">Level (%1$s)</string>
+    <string name="measures_chart_hint">Pinch to zoom, drag to scroll. Tap a point for details.</string>
+    <string name="measures_chart_reset_zoom">Show all</string>
 
     <string name="measures_readings">Readings</string>
     <string name="measures_reading_manual">Typed in by hand</string>

@@ -1,6 +1,5 @@
 package com.douxev.eggshell.ui.hormones
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -40,14 +38,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -69,10 +59,10 @@ import com.douxev.eggshell.R
 import com.douxev.eggshell.data.HormoneUnitPrefs
 import com.douxev.eggshell.data.HormonesRepository
 import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.common.ValueFormat
 import com.douxev.eggshell.ui.components.ActionBand
 import com.douxev.eggshell.ui.components.CardRule
 import com.douxev.eggshell.ui.components.CardVariant
-import com.douxev.eggshell.ui.components.Decorative
 import com.douxev.eggshell.ui.components.EggCard
 import com.douxev.eggshell.ui.components.EggFab
 import com.douxev.eggshell.ui.components.EmptyState
@@ -487,7 +477,7 @@ private fun CurveCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text(
-                        formatDouble(latest.displayValue),
+                        ValueFormat.significant(latest.displayValue),
                         style = MaterialTheme.typography.displayMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -511,52 +501,20 @@ private fun CurveCard(
                 kindLabel,
                 axisFmt.format(Date(first)),
                 axisFmt.format(Date(last)),
-                "${formatDouble(latest.displayValue)} ${latest.displayUnit}",
+                "${ValueFormat.significant(latest.displayValue)} ${latest.displayUnit}",
             )
             MeasureChart(
-                points = sortedAsc.map { it.raw.atMs to it.displayValue },
+                points = remember(sortedAsc) {
+                    sortedAsc.map { MeasurePoint(atMs = it.raw.atMs, value = it.displayValue) }
+                },
+                unit = latest.displayUnit,
                 doseMarkers = doseMarkers,
                 treatmentChanges = treatmentChanges,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(132.dp)
-                    .padding(top = 12.dp)
-                    .semantics { contentDescription = chartLabel },
+                    .padding(top = 12.dp),
+                contentDescription = chartLabel,
             )
-            // The axis gradations carry the legend — there is no separate row
-            // under the plot (§5.1). The dates bound the X axis; the two series
-            // names sit on the same line, each in its own colour and spelled
-            // out, so nothing is told by hue alone.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                MicroLabel(axisFmt.format(Date(first)).uppercase(Locale.getDefault()))
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (doseMarkers.isNotEmpty()) {
-                        AxisKey(
-                            label = stringResource(R.string.measures_legend_doses),
-                            color = MaterialTheme.colorScheme.tertiary,
-                            dashed = false,
-                        )
-                    }
-                    if (treatmentChanges.isNotEmpty()) {
-                        AxisKey(
-                            label = stringResource(R.string.measures_legend_change),
-                            color = MaterialTheme.colorScheme.secondary,
-                            dashed = true,
-                        )
-                    }
-                }
-                MicroLabel(axisFmt.format(Date(last)).uppercase(Locale.getDefault()))
-            }
         } else {
             Text(
                 stringResource(R.string.measures_chart_one_point),
@@ -579,7 +537,7 @@ private fun CurveCard(
 private fun DeltaPill(delta: Double) {
     val rising = delta > 0.0
     val flat = delta == 0.0
-    val magnitude = formatDouble(kotlin.math.abs(delta))
+    val magnitude = ValueFormat.significant(kotlin.math.abs(delta))
     val label = stringResource(
         when {
             flat -> R.string.measures_delta_flat_fmt
@@ -613,155 +571,6 @@ private fun DeltaPill(delta: Double) {
     }
 }
 
-/** One axis gradation: the mark, then the word. */
-@Composable
-private fun AxisKey(label: String, color: Color, dashed: Boolean) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Decorative {
-            if (dashed) {
-                Box(
-                    modifier = Modifier
-                        .width(14.dp)
-                        .height(2.dp)
-                        .background(color),
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .background(color, EggShapes.Pill),
-                )
-            }
-        }
-        MicroLabel(label, color = color)
-    }
-}
-
-/**
- * Time-proportional area chart (§5.1). X follows the real draw dates, so a
- * six-month gap looks like one. Dose markers ride the interpolated curve in
- * `tertiary`; each treatment change is a dashed `secondary` vertical; the last
- * point is filled and haloed.
- */
-@Composable
-private fun MeasureChart(
-    points: List<Pair<Long, Double>>,
-    doseMarkers: List<DoseMarker>,
-    treatmentChanges: List<Long>,
-    modifier: Modifier,
-) {
-    val curve = MaterialTheme.colorScheme.primary
-    val doseColor = MaterialTheme.colorScheme.tertiary
-    val changeColor = MaterialTheme.colorScheme.secondary
-    val grid = EggColors.chartGrid
-
-    val values = points.map { it.second }
-    val min = values.min()
-    val max = values.max()
-    val range = (max - min).takeIf { it > 0.0 } ?: 1.0
-    val tMin = points.first().first
-    val tMax = points.last().first
-    val tRange = (tMax - tMin).takeIf { it > 0L } ?: 1L
-
-    Canvas(modifier = modifier) {
-        val padTop = 12.dp.toPx()
-        val padSide = 10.dp.toPx()
-        val baseline = size.height - 8.dp.toPx()
-        val plotWidth = (size.width - 2 * padSide).coerceAtLeast(1f)
-
-        fun xFor(t: Long): Float = padSide + plotWidth * ((t - tMin).toFloat() / tRange.toFloat())
-        fun yFor(v: Double): Float =
-            padTop + (baseline - padTop) * (1f - ((v - min) / range).toFloat())
-
-        // Three gradations, evenly spread over the plot.
-        repeat(3) { i ->
-            val y = padTop + (baseline - padTop) * (i + 1) / 4f
-            drawLine(
-                color = grid,
-                start = Offset(0f, y),
-                end = Offset(size.width, y),
-                strokeWidth = 1.dp.toPx(),
-            )
-        }
-
-        val line = Path()
-        val area = Path()
-        points.forEachIndexed { i, (t, v) ->
-            val x = xFor(t)
-            val y = yFor(v)
-            if (i == 0) {
-                line.moveTo(x, y)
-                area.moveTo(x, baseline)
-                area.lineTo(x, y)
-            } else {
-                line.lineTo(x, y)
-                area.lineTo(x, y)
-            }
-        }
-        area.lineTo(xFor(tMax), baseline)
-        area.close()
-
-        drawPath(
-            path = area,
-            brush = Brush.verticalGradient(
-                colors = listOf(curve.copy(alpha = 0.34f), curve.copy(alpha = 0f)),
-                startY = padTop,
-                endY = baseline,
-            ),
-        )
-        drawPath(
-            path = line,
-            color = curve,
-            style = Stroke(
-                width = 2.4.dp.toPx(),
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round,
-            ),
-        )
-
-        // Treatment changes: a dashed vertical the eye can line up with the
-        // bend of the curve.
-        val dash = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))
-        treatmentChanges.filter { it in tMin..tMax }.forEach { at ->
-            drawLine(
-                color = changeColor.copy(alpha = 0.8f),
-                start = Offset(xFor(at), padTop - 4.dp.toPx()),
-                end = Offset(xFor(at), baseline),
-                strokeWidth = 1.5.dp.toPx(),
-                pathEffect = dash,
-            )
-        }
-
-        // Linear interpolation of the curve's value at time t.
-        fun curveValueAt(t: Long): Double {
-            var i = points.indexOfLast { it.first <= t }
-            if (i < 0) i = 0
-            if (i >= points.lastIndex) return points.last().second
-            val (t0, v0) = points[i]
-            val (t1, v1) = points[i + 1]
-            if (t1 == t0) return v0
-            val f = (t - t0).toDouble() / (t1 - t0).toDouble()
-            return v0 + (v1 - v0) * f
-        }
-        doseMarkers.filter { it.atMs in tMin..tMax }.forEach { m ->
-            drawCircle(
-                color = doseColor,
-                radius = 3.4.dp.toPx(),
-                center = Offset(xFor(m.atMs), yFor(curveValueAt(m.atMs))),
-            )
-        }
-
-        // The end point is filled and slightly bigger, with a halo.
-        val endX = xFor(tMax)
-        val endY = yFor(values.last())
-        drawCircle(curve.copy(alpha = 0.22f), radius = 9.dp.toPx(), center = Offset(endX, endY))
-        drawCircle(curve, radius = 5.dp.toPx(), center = Offset(endX, endY))
-    }
-}
-
 // ---------------------------------------------------------------------------
 // The readings list
 // ---------------------------------------------------------------------------
@@ -781,7 +590,7 @@ private fun ReadingsCard(
     ) {
         items.forEachIndexed { i, m ->
             val date = dateFmt.format(Date(m.raw.atMs))
-            val value = formatDouble(m.displayValue)
+            val value = ValueFormat.significant(m.displayValue)
             // The subtitle carries the provenance, and the original unit
             // whenever the display unit differs — so the user can always audit
             // the conversion against what the sheet said.
@@ -789,7 +598,7 @@ private fun ReadingsCard(
             val original = if (m.displayUnit != m.raw.unit) {
                 stringResource(
                     R.string.measures_reading_original_fmt,
-                    formatDouble(m.raw.value),
+                    ValueFormat.significant(m.raw.value),
                     m.raw.unit,
                 )
             } else {
@@ -894,7 +703,7 @@ private fun EditMeasurementDialog(
     val units = if (isWeight) HormoneCatalog.WEIGHT_UNITS else HormoneCatalog.UNITS
     MeasurementDialog(
         titleRes = if (isWeight) R.string.weight_edit_title else R.string.hormones_edit_title,
-        initialValueText = formatDouble(entry.raw.value),
+        initialValueText = ValueFormat.plain(entry.raw.value),
         initialUnit = entry.raw.unit,
         unitOptions = units,
         initialAtMs = entry.raw.atMs,
@@ -1058,7 +867,3 @@ private fun MeasurementDialog(
     }
 }
 
-private fun formatDouble(v: Double): String {
-    val s = v.toString()
-    return if (s.endsWith(".0")) s.dropLast(2) else s
-}
