@@ -5,7 +5,7 @@
 Transition/Eggshell is a **native app** (Rust core + Kotlin/Compose Android +
 SwiftUI iOS). It had **no JavaScript design system** before this sync. The
 package at `design-system/` was authored during the first sync (2026-07-24) to
-give Claude Design the app's real components. It is a **web port of the app's
+give the design tool the app's real components. It is a **web port of the app's
 design language**, not a dependency the app builds against.
 
 Sources it was ported from, in order of authority:
@@ -23,7 +23,7 @@ Sources it was ported from, in order of authority:
    and colours were sampled from the pixels, not eyeballed. User instruction:
    "keep the logo identity with the yellow and the egg" → `--brand-*` tokens
    are fixed and **never** overridden by a palette.
-4. `design/transi/project/*.jsx` + `m3.css` — the Claude Design handoff bundle.
+4. `design/transi/project/*.jsx` + `m3.css` — the design-tool handoff bundle.
    **Untracked / local-only** (not in git). Source of the primitives and the
    M3 token set. `Type.kt` confirms the app's type scale was ported *from*
    `m3.css`, so the two agree.
