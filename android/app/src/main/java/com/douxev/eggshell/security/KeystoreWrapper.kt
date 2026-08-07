@@ -3,7 +3,6 @@ package com.douxev.eggshell.security
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import android.security.keystore.StrongBoxUnavailableException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -67,7 +66,7 @@ class KeystoreWrapper(private val alias: String) {
         val tryStrongBox = !requireBiometric
         return runCatching { generateKey(requireBiometric, useStrongBox = tryStrongBox) }
             .getOrElse { t ->
-                if (t is StrongBoxUnavailableException) {
+                if (isStrongBoxUnavailable(t)) {
                     generateKey(requireBiometric, useStrongBox = false)
                 } else throw t
             }

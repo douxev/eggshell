@@ -92,6 +92,7 @@ import com.douxev.eggshell.data.JournalRepository
 import com.douxev.eggshell.data.MetricsRepository
 import com.douxev.eggshell.ui.common.MetricSliderStack
 import com.douxev.eggshell.ui.common.clickToDismissKeyboard
+import com.douxev.eggshell.ui.common.rememberLocale
 import com.douxev.eggshell.ui.components.ActionBand
 import com.douxev.eggshell.ui.components.CardVariant
 import com.douxev.eggshell.ui.components.EggCard
@@ -495,8 +496,9 @@ fun AddJournalEntryScreen(
 @Composable
 private fun DateLine(atMs: Long, onEdit: () -> Unit) {
     val zone = remember { ZoneId.systemDefault() }
-    val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val dayFmt = remember { SimpleDateFormat("EEE d MMM", Locale.getDefault()) }
+    val locale = rememberLocale()
+    val timeFmt = remember(locale) { SimpleDateFormat("HH:mm", locale) }
+    val dayFmt = remember(locale) { SimpleDateFormat("EEE d MMM", locale) }
     val isToday = remember(atMs) {
         Instant.ofEpochMilli(atMs).atZone(zone).toLocalDate() == LocalDate.now(zone)
     }

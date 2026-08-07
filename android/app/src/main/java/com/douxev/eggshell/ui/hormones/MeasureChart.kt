@@ -48,6 +48,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.douxev.eggshell.R
 import com.douxev.eggshell.ui.common.ValueFormat
+import com.douxev.eggshell.ui.common.rememberLocale
 import com.douxev.eggshell.ui.components.MicroLabel
 import com.douxev.eggshell.ui.theme.EggColors
 import com.douxev.eggshell.ui.theme.EggShapes
@@ -105,9 +106,10 @@ fun MeasureChart(
     // A reading added or removed while zoomed leaves the pinned point dangling.
     LaunchedEffect(points) { selected = null }
 
-    val dayFmt = remember { SimpleDateFormat("d MMM", Locale.getDefault()) }
-    val yearFmt = remember { SimpleDateFormat("MMM yy", Locale.getDefault()) }
-    val fullFmt = remember { SimpleDateFormat("d MMMM yyyy", Locale.getDefault()) }
+    val locale = rememberLocale()
+    val dayFmt = remember(locale) { SimpleDateFormat("d MMM", locale) }
+    val yearFmt = remember(locale) { SimpleDateFormat("MMM yy", locale) }
+    val fullFmt = remember(locale) { SimpleDateFormat("d MMMM yyyy", locale) }
 
     Column(modifier = modifier) {
         Box {

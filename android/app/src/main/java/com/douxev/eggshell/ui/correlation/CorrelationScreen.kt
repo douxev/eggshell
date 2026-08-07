@@ -52,6 +52,7 @@ import com.douxev.eggshell.data.PlannedDoses
 import com.douxev.eggshell.punctuality.DoseTiming
 import com.douxev.eggshell.punctuality.timingOf
 import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.common.rememberLocale
 import com.douxev.eggshell.ui.components.CardVariant
 import com.douxev.eggshell.ui.components.EggCard
 import com.douxev.eggshell.ui.components.EmptyState
@@ -382,7 +383,8 @@ private fun CorrelationChart(state: CorrelationViewModel.State) {
             }
 
             // X axis: three time gradations, proportional to time, never an index.
-            val fmt = remember { SimpleDateFormat("d MMM", Locale.getDefault()) }
+            val fmtLocale = rememberLocale()
+            val fmt = remember(fmtLocale) { SimpleDateFormat("d MMM", fmtLocale) }
             Row(modifier = Modifier.fillMaxWidth()) {
                 Box(modifier = Modifier.width(AxisGutter))
                 Row(

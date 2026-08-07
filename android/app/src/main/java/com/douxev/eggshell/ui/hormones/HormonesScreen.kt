@@ -60,6 +60,7 @@ import com.douxev.eggshell.data.HormoneUnitPrefs
 import com.douxev.eggshell.data.HormonesRepository
 import com.douxev.eggshell.ui.common.ScreenHeader
 import com.douxev.eggshell.ui.common.ValueFormat
+import com.douxev.eggshell.ui.common.rememberLocale
 import com.douxev.eggshell.ui.components.ActionBand
 import com.douxev.eggshell.ui.components.CardRule
 import com.douxev.eggshell.ui.components.CardVariant
@@ -454,8 +455,9 @@ private fun CurveCard(
 ) {
     val latest = sortedAsc.last()
     val prev = sortedAsc.dropLast(1).lastOrNull()
-    val headerFmt = remember { SimpleDateFormat("d MMMM", Locale.getDefault()) }
-    val axisFmt = remember { SimpleDateFormat("MMM yy", Locale.getDefault()) }
+    val locale = rememberLocale()
+    val headerFmt = remember(locale) { SimpleDateFormat("d MMMM", locale) }
+    val axisFmt = remember(locale) { SimpleDateFormat("MMM yy", locale) }
 
     EggCard(variant = CardVariant.Low, padding = PaddingValues(18.dp)) {
         Row(
@@ -468,7 +470,7 @@ private fun CurveCard(
                     stringResource(
                         if (weight) R.string.measures_last_weight_fmt
                         else R.string.measures_last_value_fmt,
-                        headerFmt.format(Date(latest.raw.atMs)).uppercase(Locale.getDefault()),
+                        headerFmt.format(Date(latest.raw.atMs)).uppercase(locale),
                     ),
                 )
                 Row(
@@ -583,7 +585,8 @@ private fun ReadingsCard(
     items: List<DisplayMeasurement>,
     onItemClick: (DisplayMeasurement) -> Unit,
 ) {
-    val dateFmt = remember { SimpleDateFormat("d MMMM yyyy", Locale.getDefault()) }
+    val readingsLocale = rememberLocale()
+    val dateFmt = remember(readingsLocale) { SimpleDateFormat("d MMMM yyyy", readingsLocale) }
     val editLabel = stringResource(R.string.measures_reading_edit)
     val manual = stringResource(R.string.measures_reading_manual)
 
@@ -756,7 +759,8 @@ private fun MeasurementDialog(
     val parsed = raw.replace(',', '.').toDoubleOrNull()
     val canSave = parsed != null && parsed > 0.0
 
-    val dateFmt = remember { SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
+    val dialogLocale = rememberLocale()
+    val dateFmt = remember(dialogLocale) { SimpleDateFormat("d MMM yyyy", dialogLocale) }
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,

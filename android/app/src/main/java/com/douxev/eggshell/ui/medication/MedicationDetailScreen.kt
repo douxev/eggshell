@@ -80,6 +80,7 @@ import com.douxev.eggshell.punctuality.timingOf
 import com.douxev.eggshell.reminders.MedAliasPrefs
 import com.douxev.eggshell.ui.common.DateTimePickerField
 import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.common.rememberLocale
 import com.douxev.eggshell.ui.components.ActionBand
 import com.douxev.eggshell.ui.components.CardRule
 import com.douxev.eggshell.ui.components.CardVariant
@@ -1017,16 +1018,21 @@ private fun AliasDialog(
  */
 @Composable
 private fun rememberDateTimeText(atMs: Long): String {
-    val context = LocalContext.current
-    val locale = Locale.getDefault()
-    return remember(atMs, locale) {
+    val locale = rememberLocale()
+    // Resolved through stringResource, not context.getString inside the
+    // remember: a Context captured in a composable is not re-read when the
+    // configuration changes, so the cached string would keep the old language
+    // after a switch — the same staleness the locale key above exists to fix.
+    val todayLabel = stringResource(R.string.today_section_today)
+    val yesterdayLabel = stringResource(R.string.meds_yesterday)
+    return remember(atMs, locale, todayLabel, yesterdayLabel) {
         val zone = ZoneId.systemDefault()
         val at = Instant.ofEpochMilli(atMs).atZone(zone)
         val today = LocalDate.now(zone)
         val days = java.time.temporal.ChronoUnit.DAYS.between(at.toLocalDate(), today)
         val day = when {
-            days == 0L -> context.getString(R.string.today_section_today)
-            days == 1L -> context.getString(R.string.meds_yesterday)
+            days == 0L -> todayLabel
+            days == 1L -> yesterdayLabel
             days in 2..6 -> at.dayOfWeek.getDisplayName(TextStyle.FULL_STANDALONE, locale)
                 .replaceFirstChar { it.titlecase(locale) }
             else -> DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)

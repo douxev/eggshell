@@ -58,6 +58,7 @@ import com.douxev.eggshell.R
 import com.douxev.eggshell.data.VaultRepository
 import com.douxev.eggshell.security.VaultPrefs
 import com.douxev.eggshell.ui.common.PasswordField
+import com.douxev.eggshell.ui.common.currentFragmentActivity
 import com.douxev.eggshell.ui.components.CardVariant
 import com.douxev.eggshell.ui.components.EggCard
 
@@ -85,7 +86,7 @@ fun UnlockScreen(
     val attemptsLeft by vm.attemptsLeft.collectAsState()
     val recoveryAttempt by vm.recoveryAttempt.collectAsState()
     val keystoreUnusable by vm.keystoreUnusable.collectAsState()
-    val activity = LocalContext.current as FragmentActivity
+    val activity = currentFragmentActivity()
     val biometricCopy = VaultRepository.BiometricCopy(
         title = stringResource(R.string.biometric_unlock_title),
         subtitle = stringResource(R.string.biometric_unlock_subtitle),

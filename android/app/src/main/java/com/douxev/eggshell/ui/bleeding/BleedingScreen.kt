@@ -42,6 +42,7 @@ import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.BleedingRepository
 import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.common.rememberLocale
 import com.douxev.eggshell.ui.components.ActionBand
 import com.douxev.eggshell.ui.components.CardVariant
 import com.douxev.eggshell.ui.components.EggCard
@@ -184,7 +185,8 @@ fun BleedingScreen(
 
 @Composable
 private fun BleedingCard(entry: BleedingEntry, onClick: () -> Unit) {
-    val dateFmt = remember { SimpleDateFormat("EEEE d MMMM", Locale.getDefault()) }
+    val rowLocale = rememberLocale()
+    val dateFmt = remember(rowLocale) { SimpleDateFormat("EEEE d MMMM", rowLocale) }
     val kind = when (entry.isSpotting) {
         true -> stringResource(R.string.bleeding_kind_spotting)
         false -> stringResource(R.string.bleeding_kind_bleed)
@@ -225,7 +227,7 @@ private fun BleedingCard(entry: BleedingEntry, onClick: () -> Unit) {
             ) {
                 Text(
                     dateFmt.format(Date(entry.atMs))
-                        .replaceFirstChar { it.titlecase(Locale.getDefault()) },
+                        .replaceFirstChar { it.titlecase(rowLocale) },
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                 )

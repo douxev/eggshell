@@ -78,8 +78,7 @@ import com.douxev.eggshell.ui.bleeding.BleedingListViewModel
 import com.douxev.eggshell.ui.bleeding.bleedingSegment
 import com.douxev.eggshell.ui.common.ScreenHeader
 import com.douxev.eggshell.ui.common.metricAccent
-import com.douxev.eggshell.ui.correlation.CorrelationViewModel
-import com.douxev.eggshell.ui.correlation.correlationSegment
+import com.douxev.eggshell.ui.common.rememberLocale
 import com.douxev.eggshell.ui.components.ActionBand
 import com.douxev.eggshell.ui.components.CardVariant
 import com.douxev.eggshell.ui.components.EggCard
@@ -91,6 +90,8 @@ import com.douxev.eggshell.ui.components.MicroLabel
 import com.douxev.eggshell.ui.components.SectionTitle
 import com.douxev.eggshell.ui.components.Segmented
 import com.douxev.eggshell.ui.components.SkeletonBlock
+import com.douxev.eggshell.ui.correlation.CorrelationViewModel
+import com.douxev.eggshell.ui.correlation.correlationSegment
 import com.douxev.eggshell.ui.theme.EggDim
 import com.douxev.eggshell.ui.theme.EggShapes
 import uniffi.transition.JournalEntry
@@ -395,7 +396,8 @@ fun JournalListScreen(
                         )
                     }
                     item(key = "feel-history-title") {
-                        val fmt = remember { SimpleDateFormat("EEEE d MMMM", Locale.getDefault()) }
+                        val fmtLocale = rememberLocale()
+                        val fmt = remember(fmtLocale) { SimpleDateFormat("EEEE d MMMM", fmtLocale) }
                         SectionTitle(
                             text = selectedDate?.let { day ->
                                 fmt.format(Date.from(day.atStartOfDay(zone).toInstant()))
@@ -481,7 +483,7 @@ private fun MonthCalendarCard(
     onNextMonth: () -> Unit,
     onSelect: (LocalDate) -> Unit,
 ) {
-    val locale = Locale.getDefault()
+    val locale = rememberLocale()
     val zone = remember { ZoneId.systemDefault() }
     val monthLabel = remember(yearMonth, locale) {
         SimpleDateFormat("LLLL yyyy", locale)
@@ -667,7 +669,7 @@ private fun DayCell(
     val cdSelected = stringResource(R.string.feel_cd_selected)
     val cdMood = stringResource(
         R.string.feel_cd_mood_fmt,
-        String.format(Locale.getDefault(), "%.1f", mood ?: 0.0),
+        String.format(rememberLocale(), "%.1f", mood ?: 0.0),
     )
     val cdDoses = stringResource(R.string.feel_cd_doses_fmt, medIds.size)
     val cdBleeding = stringResource(R.string.feel_cd_bleeding)
@@ -771,8 +773,9 @@ private fun EntryCard(
     zone: ZoneId,
     onClick: () -> Unit,
 ) {
-    val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val dayFmt = remember { SimpleDateFormat("d MMMM", Locale.getDefault()) }
+    val entryLocale = rememberLocale()
+    val timeFmt = remember(entryLocale) { SimpleDateFormat("HH:mm", entryLocale) }
+    val dayFmt = remember(entryLocale) { SimpleDateFormat("d MMMM", entryLocale) }
     val day = remember(entry.atMs) { Instant.ofEpochMilli(entry.atMs).atZone(zone).toLocalDate() }
     val time = timeFmt.format(Date(entry.atMs))
     val dateLabel = when (day) {
@@ -780,7 +783,7 @@ private fun EntryCard(
         today.minusDays(1) -> stringResource(R.string.feel_entry_yesterday_fmt, time)
         else -> stringResource(
             R.string.feel_entry_date_fmt,
-            dayFmt.format(Date(entry.atMs)).uppercase(Locale.getDefault()),
+            dayFmt.format(Date(entry.atMs)).uppercase(rememberLocale()),
             time,
         )
     }

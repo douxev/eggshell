@@ -3,7 +3,6 @@ package com.douxev.eggshell.security
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import android.security.keystore.StrongBoxUnavailableException
 import android.util.Base64
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -110,7 +109,7 @@ class MetadataObfuscator @Inject constructor() {
             .generateKey()
     }.getOrElse { t ->
         // StrongBox is absent on most devices; retry in the TEE.
-        if (t is StrongBoxUnavailableException && useStrongBox) generate(useStrongBox = false)
+        if (useStrongBox && isStrongBoxUnavailable(t)) generate(useStrongBox = false)
         else throw t
     }
 

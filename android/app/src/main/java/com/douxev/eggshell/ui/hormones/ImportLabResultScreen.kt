@@ -76,6 +76,7 @@ import com.douxev.eggshell.data.lab.LabResultOcrService
 import com.douxev.eggshell.data.lab.LabResultParser
 import com.douxev.eggshell.ui.common.PasswordField
 import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.common.rememberLocale
 import com.douxev.eggshell.ui.components.ActionBand
 import com.douxev.eggshell.ui.components.CardRule
 import com.douxev.eggshell.ui.components.CardVariant
@@ -566,7 +567,8 @@ private fun ColumnScope.ReviewStep(
     onSetDate: (Long) -> Unit,
 ) {
     var datePickerOpen by rememberSaveable { mutableStateOf(false) }
-    val dateFmt = remember { SimpleDateFormat("d MMMM yyyy", Locale.getDefault()) }
+    val locale = rememberLocale()
+    val dateFmt = remember(locale) { SimpleDateFormat("d MMMM yyyy", locale) }
     val dateText = dateFmt.format(Date(atMs))
     val dateLabel = stringResource(R.string.ocr_date_a11y_fmt, dateText)
 

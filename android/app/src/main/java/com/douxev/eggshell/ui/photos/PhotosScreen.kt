@@ -105,6 +105,7 @@ import com.douxev.eggshell.R
 import com.douxev.eggshell.data.PhotosRepository
 import com.douxev.eggshell.ui.common.PrivacyNote
 import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.common.rememberLocale
 import com.douxev.eggshell.ui.components.ActionBand
 import com.douxev.eggshell.ui.components.CardVariant
 import com.douxev.eggshell.ui.components.EggCard
@@ -679,8 +680,9 @@ private fun PhotoLightbox(
         val bytes = vm.decryptBytes(record) ?: return@LaunchedEffect
         bitmap = withContext(Dispatchers.Default) { decodeSampled(bytes, 2048) }
     }
-    val dateLabel = remember(record.atMs) {
-        SimpleDateFormat("EEEE d MMMM yyyy", Locale.getDefault()).format(Date(record.atMs))
+    val photoLocale = rememberLocale()
+    val dateLabel = remember(record.atMs, photoLocale) {
+        SimpleDateFormat("EEEE d MMMM yyyy", photoLocale).format(Date(record.atMs))
     }
 
     // Pinch-zoom + pan + double-tap-to-toggle state.
@@ -768,7 +770,7 @@ private fun PhotoLightbox(
                 ) {
                     Text(
                         dateLabel.replaceFirstChar {
-                            if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
+                            if (it.isLowerCase()) it.titlecase(photoLocale) else it.toString()
                         },
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),

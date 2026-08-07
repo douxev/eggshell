@@ -47,6 +47,7 @@ import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.VaultRepository
 import com.douxev.eggshell.ui.common.PasswordField
+import com.douxev.eggshell.ui.common.currentFragmentActivity
 import com.douxev.eggshell.ui.components.CardVariant
 import com.douxev.eggshell.ui.components.EggCard
 
@@ -70,7 +71,7 @@ fun RecoverySetupScreen(
     vm: RecoverySetupViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
-    val activity = LocalContext.current as FragmentActivity
+    val activity = currentFragmentActivity()
     val biometricCopy = VaultRepository.BiometricCopy(
         title = stringResource(R.string.recovery_setup_confirm_title),
         subtitle = stringResource(R.string.recovery_setup_confirm_subtitle),

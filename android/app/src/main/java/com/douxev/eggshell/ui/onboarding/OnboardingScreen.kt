@@ -78,6 +78,7 @@ import com.douxev.eggshell.data.VaultRepository
 import com.douxev.eggshell.security.VaultPrefs
 import com.douxev.eggshell.ui.common.EncryptionNoteCard
 import com.douxev.eggshell.ui.common.PasswordField
+import com.douxev.eggshell.ui.common.currentFragmentActivity
 import com.douxev.eggshell.ui.components.ActionBand
 import com.douxev.eggshell.ui.components.CardVariant
 import com.douxev.eggshell.ui.components.EggCard
@@ -111,7 +112,7 @@ fun OnboardingScreen(
     // A Paranoid key derivation takes seconds on purpose, and « Passer » would
     // otherwise start a second, concurrent vault creation on top of it.
     val provisioning by vm.provisioning.collectAsState()
-    val activity = LocalContext.current as FragmentActivity
+    val activity = currentFragmentActivity()
     val biometricCopy = VaultRepository.BiometricCopy(
         title = stringResource(R.string.biometric_setup_title),
         subtitle = stringResource(R.string.biometric_setup_subtitle),

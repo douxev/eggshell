@@ -63,12 +63,13 @@ import com.douxev.eggshell.data.ScheduleRepository
 import com.douxev.eggshell.reminders.LabReminderManager
 import com.douxev.eggshell.reminders.LabReminderPrefs
 import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.common.rememberLocale
 import com.douxev.eggshell.ui.components.CardVariant
 import com.douxev.eggshell.ui.components.EggCard
 import com.douxev.eggshell.ui.components.EmptyState
 import com.douxev.eggshell.ui.components.IconTile
-import com.douxev.eggshell.ui.components.StatusPill
 import com.douxev.eggshell.ui.components.SectionTitle
+import com.douxev.eggshell.ui.components.StatusPill
 import com.douxev.eggshell.ui.medication.MedicationCatalog
 import com.douxev.eggshell.ui.theme.EggDim
 import com.douxev.eggshell.ui.theme.EggShapes
@@ -428,10 +429,12 @@ private fun labIconFor(category: String): ImageVector = when (category) {
 
 @Composable
 private fun AppointmentReminderRow(appt: Appointment) {
-    val dateFmt = remember(java.util.Locale.getDefault()) {
+    val locale = rememberLocale()
+    val dateFmt = remember(locale) {
         java.text.DateFormat.getDateTimeInstance(
             java.text.DateFormat.MEDIUM,
             java.text.DateFormat.SHORT,
+            locale,
         )
     }
     EggCard(

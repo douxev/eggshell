@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 import com.douxev.eggshell.R
 import com.douxev.eggshell.data.AppointmentRepository
 import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.common.rememberLocale
 import com.douxev.eggshell.ui.components.ActionBand
 import com.douxev.eggshell.ui.components.CardRule
 import com.douxev.eggshell.ui.components.CardVariant
@@ -527,7 +528,7 @@ private fun whenLabel(atMs: Long): String =
 
 @Composable
 private fun dayLabel(atMs: Long): String {
-    val locale = Locale.getDefault()
+    val locale = rememberLocale()
     val zone = remember { ZoneId.systemDefault() }
     return DateTimeFormatter.ofPattern("EEEE d MMMM", locale)
         .format(Instant.ofEpochMilli(atMs).atZone(zone))
@@ -536,7 +537,7 @@ private fun dayLabel(atMs: Long): String {
 
 @Composable
 private fun timeLabel(atMs: Long): String {
-    val locale = Locale.getDefault()
+    val locale = rememberLocale()
     val zone = remember { ZoneId.systemDefault() }
     return DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
         .withLocale(locale)

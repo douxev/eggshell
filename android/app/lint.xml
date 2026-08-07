@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!--
+        The UniFFI Kotlin bindings are generated into build/generated/uniffi by
+        `uniffiGenerateBindings` and added to the Kotlin source set, which is why
+        lint analyses them as if they were ours. They are regenerated from
+        core/transition-uniffi/src/transition.udl on every build, so any
+        annotation added to them is erased before it is ever read.
+
+        NewApi fires there on java.lang.ref.Cleaner (API 33) — but the generated
+        code selects that path only after a successful
+
+            java.lang.Class.forName("java.lang.ref.Cleaner")
+
+        inside a try/catch, falling back to the JNA cleaner otherwise. That is a
+        correct runtime guard; lint simply cannot see through Class.forName.
+
+        Scoped to this one path on purpose: NewApi stays fully enabled for our
+        own sources, where it has already caught a real crash — an unguarded
+        `is StrongBoxUnavailableException` against a class that does not exist
+        on Android 8, sitting in the key-generation fallback.
+    -->
+    <issue id="NewApi">
+        <ignore path="**/build/generated/uniffi/**"/>
+    </issue>
+</lint>

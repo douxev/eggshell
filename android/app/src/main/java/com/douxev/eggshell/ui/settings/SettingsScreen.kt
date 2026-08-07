@@ -524,16 +524,19 @@ fun SettingsScreen(
     // Dialog for mode change — collects the secrets we need depending on
     // current vs target mode.
     modeDialog?.let { target ->
+        // Resolved here, in composition, rather than from the captured Context
+        // inside onConfirm: a Context does not carry the configuration forward,
+        // so a language switch would put the prompt back in the old one.
+        val copy = VaultRepository.BiometricCopy(
+            title = stringResource(R.string.biometric_setup_title),
+            subtitle = stringResource(R.string.biometric_setup_subtitle),
+            cancel = stringResource(R.string.action_cancel),
+        )
         ChangeModeDialog(
             currentMode = mode,
             targetMode = target,
             onDismiss = { modeDialog = null },
             onConfirm = { currentPass, newPass ->
-                val copy = VaultRepository.BiometricCopy(
-                    title = context.getString(R.string.biometric_setup_title),
-                    subtitle = context.getString(R.string.biometric_setup_subtitle),
-                    cancel = context.getString(R.string.action_cancel),
-                )
                 vm.changeMode(target, currentPass, newPass, activity, copy)
                 modeDialog = null
             },

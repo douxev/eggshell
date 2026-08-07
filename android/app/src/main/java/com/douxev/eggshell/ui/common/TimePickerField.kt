@@ -63,7 +63,7 @@ fun TimePickerField(
         ) {
             Text(label, style = MaterialTheme.typography.labelSmall)
             Text(
-                String.format(Locale.getDefault(), "%02d:%02d", hour, minute),
+                String.format(rememberLocale(), "%02d:%02d", hour, minute),
                 style = MaterialTheme.typography.bodyLarge,
             )
         }

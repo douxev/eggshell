@@ -104,6 +104,7 @@ import com.douxev.eggshell.data.SettingsRepository
 import com.douxev.eggshell.data.VoiceRepository
 import com.douxev.eggshell.ui.appointments.appointmentTodoItems
 import com.douxev.eggshell.ui.common.ScreenHeader
+import com.douxev.eggshell.ui.common.rememberLocale
 import com.douxev.eggshell.ui.components.ActionBand
 import com.douxev.eggshell.ui.components.CardVariant
 import com.douxev.eggshell.ui.components.EggCard
@@ -1659,7 +1660,7 @@ private fun DayPickerDialog(
  */
 @Composable
 private fun rangeLabel(fromMs: Long, toMs: Long): String {
-    val locale = Locale.getDefault()
+    val locale = rememberLocale()
     val zone = remember { ZoneId.systemDefault() }
     val from = Instant.ofEpochMilli(fromMs).atZone(zone).toLocalDate()
     val to = Instant.ofEpochMilli(toMs).atZone(zone).toLocalDate()
@@ -1672,7 +1673,7 @@ private fun rangeLabel(fromMs: Long, toMs: Long): String {
 /** « 26 avr. 2026 » — the abbreviated form the date fields use. */
 @Composable
 private fun shortDayLabel(atMs: Long): String {
-    val locale = Locale.getDefault()
+    val locale = rememberLocale()
     val zone = remember { ZoneId.systemDefault() }
     return DateTimeFormatter.ofPattern("d MMM yyyy", locale)
         .format(Instant.ofEpochMilli(atMs).atZone(zone).toLocalDate())
@@ -1684,14 +1685,14 @@ private fun shortDayLabel(atMs: Long): String {
  */
 @Composable
 private fun longDayLabel(day: LocalDate): String {
-    val locale = Locale.getDefault()
+    val locale = rememberLocale()
     return DateTimeFormatter.ofPattern("d MMMM yyyy", locale).format(day)
 }
 
 /** « 12 août » — a date inside a sentence, so no year and no weekday. */
 @Composable
 private fun dayMonthLabel(atMs: Long): String {
-    val locale = Locale.getDefault()
+    val locale = rememberLocale()
     val zone = remember { ZoneId.systemDefault() }
     return DateTimeFormatter.ofPattern("d MMMM", locale)
         .format(Instant.ofEpochMilli(atMs).atZone(zone).toLocalDate())
