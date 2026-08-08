@@ -137,6 +137,20 @@ final class DreamEditorViewModel: ObservableObject {
         }
     }
 
+    /// A transcript the user wrote or corrected themselves.
+    func writeTranscript(
+        session: VaultService,
+        store: DreamsStore,
+        _ clip: DreamAudio,
+        _ text: String
+    ) async {
+        await store.setTranscript(
+            session: session,
+            audioId: clip.id,
+            transcript: text.isEmpty ? nil : text)
+        audio = await store.audio(session: session, for: dreamId)
+    }
+
     func deleteAudio(session: VaultService, store: DreamsStore, _ clip: DreamAudio) async {
         await store.deleteAudio(session: session, clip)
         audio = await store.audio(session: session, for: dreamId)
@@ -195,7 +209,9 @@ struct DreamEditorView: View {
     @State private var newTag = ""
     @State private var showNightPicker = false
     @State private var confirmDelete = false
-    @State private var autoTranscribe = true
+    // @AppStorage, not @State: as plain state the switch reset to "on" every
+    // time the editor opened, so turning it off never survived one dream.
+    @AppStorage("dreams_auto_transcribe") private var autoTranscribe = true
 
     init(editingId: Int64?, presetNightMs: Int64?) {
         self.editingId = editingId
@@ -330,6 +346,13 @@ struct DreamEditorView: View {
                                 session: session, store: dreamsStore, clip)
                         }
                     },
+                    onWriteTranscript: { text in
+                        guard let session = app.session else { return }
+                        Task {
+                            await vm.writeTranscript(
+                                session: session, store: dreamsStore, clip, text)
+                        }
+                    },
                     onDelete: {
                         guard let session = app.session else { return }
                         Task {
@@ -441,6 +464,62 @@ struct DreamEditorView: View {
     }
 }
 
+/// Write or correct a voice note's transcript by hand.
+///
+/// Mirrors Android's dialog, and exists for the same reason: transcription can
+/// be unavailable on a perfectly capable phone — the on-device model is a
+/// system download, and iOS exposes no way to trigger it or to call another
+/// app's engine. A recording that can never become text is half a journal
+/// entry, and it is the half « Ce qui va ensemble » reads.
+///
+/// The dictation key on the keyboard types into this field, so whichever engine
+/// the user already trusts does the work, and nothing decrypted leaves the app.
+private struct TranscriptEditor: View {
+    @Environment(\.palette) private var palette
+
+    let initial: String
+    let onSave: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var text: String = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: Spacing.s) {
+                TextEditor(text: $text)
+                    .font(.eggBody)
+                    .frame(minHeight: 180)
+                    .focused($focused)
+                    .scrollContentBackground(.hidden)
+                    .background(palette.surfaceContainerHighest, in: RoundedRectangle(cornerRadius: 12))
+                MicroLabel(
+                    "La touche micro de ton clavier écrit directement ici. Si ta saisie vocale est locale, c’est elle qui transcrit, et rien ne sort d’eggshell."
+                )
+                Spacer(minLength: 0)
+            }
+            .padding(Metrics.screenMargin)
+            .background(palette.surface.ignoresSafeArea())
+            .navigationTitle("Transcription")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annuler", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Enregistrer") {
+                        onSave(text.trimmingCharacters(in: .whitespacesAndNewlines))
+                    }
+                }
+            }
+            .onAppear {
+                text = initial
+                focused = true
+            }
+        }
+    }
+}
+
 private struct DreamAudioRow: View {
     @Environment(\.palette) private var palette
 
@@ -450,7 +529,10 @@ private struct DreamAudioRow: View {
     let canTranscribe: Bool
     let onPlay: () -> Void
     let onTranscribe: () -> Void
+    let onWriteTranscript: (String) -> Void
     let onDelete: () -> Void
+
+    @State private var editing = false
 
     var body: some View {
         EggCard(variant: .low, paddingH: 18, paddingV: 12, spacing: 0) {
@@ -469,6 +551,21 @@ private struct DreamAudioRow: View {
                     .font(.eggBody)
                     .foregroundStyle(palette.onSurface)
                 Spacer(minLength: Spacing.s)
+
+                // Offered exactly where the automatic path is not. Apple gives
+                // no way to drive a third-party engine, and the on-device model
+                // is a system download we cannot perform — so without this, a
+                // phone missing it has a recording it can never turn into text.
+                // The keyboard's dictation key types straight into the field,
+                // which is the one route iOS does leave open.
+                if clip.transcript == nil && !canTranscribe {
+                    Button { editing = true } label: {
+                        Label("Écrire", systemImage: "square.and.pencil")
+                            .font(EggFont.label)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(palette.primary)
+                }
 
                 if clip.transcript == nil && canTranscribe {
                     Button(action: onTranscribe) {
@@ -495,7 +592,18 @@ private struct DreamAudioRow: View {
                     .font(EggFont.bodyS)
                     .foregroundStyle(palette.onSurfaceVariant)
                     .padding(.top, 8)
+                    .onTapGesture { editing = true }
+                // Correctable even when a machine wrote it: on-device models
+                // are the less accurate ones, a dream is what they mangle
+                // worst, and this text feeds « Ce qui va ensemble ».
+                MicroLabel("Touche le texte pour le corriger.")
             }
+        }
+        .sheet(isPresented: $editing) {
+            TranscriptEditor(
+                initial: clip.transcript ?? "",
+                onSave: { onWriteTranscript($0); editing = false },
+                onCancel: { editing = false })
         }
     }
 

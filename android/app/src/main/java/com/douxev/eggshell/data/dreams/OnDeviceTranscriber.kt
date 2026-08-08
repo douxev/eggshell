@@ -313,6 +313,19 @@ class OnDeviceTranscriber @Inject constructor(
         }.apply()
 
     /**
+     * Whether a new recording is transcribed as soon as it stops.
+     *
+     * Persisted rather than held in the composable, where it reset to "on"
+     * every time the editor opened. Someone who turned it off did so for a
+     * reason — a slow engine, a wrong one, or not wanting the text at all —
+     * and having to turn it off again for every dream is the app overruling
+     * that reason once a day.
+     */
+    var autoTranscribe: Boolean
+        get() = prefs.getBoolean(KEY_AUTO, true)
+        set(value) = prefs.edit().putBoolean(KEY_AUTO, value).apply()
+
+    /**
      * Resolve the stored choice against what is installed *now*.
      *
      * An engine can be uninstalled between two dreams. Falling back to the
@@ -368,8 +381,14 @@ class OnDeviceTranscriber @Inject constructor(
         // instead. That does not fail: it returns a confident transcript of
         // whatever the room was saying, attributed to the dream.
         val pcmFile = File(audio.parentFile, "${audio.nameWithoutExtension}.pcm")
-        val pcm = PcmDecoder.decode(audio, pcmFile)
-            ?: return Result.Failed(SpeechRecognizer.ERROR_AUDIO)
+        val pcm = PcmDecoder.decode(audio, pcmFile) ?: run {
+            // A failed decode still leaves whatever it managed to write, and
+            // that is decrypted dream audio. The success path deletes in a
+            // `finally`; this path returned before the `try` and left it on
+            // disk until the next lock swept the cache.
+            pcmFile.delete()
+            return Result.Failed(SpeechRecognizer.ERROR_AUDIO)
+        }
 
         return try {
             withTimeoutOrNull(TIMEOUT_MS) { runRecognizer(pcm, languageTag, engine) }
@@ -504,6 +523,7 @@ class OnDeviceTranscriber @Inject constructor(
         const val ENCODING_PCM_16BIT = 2
 
         const val KEY_ENGINE = "engine_component"
+        const val KEY_AUTO = "auto_transcribe"
 
         const val ERROR_LANGUAGE_NOT_SUPPORTED = 12
         const val ERROR_LANGUAGE_UNAVAILABLE = 13

@@ -42,7 +42,20 @@
     <key>NSCameraUsageDescription</key>
     <string>Prendre des photos de suivi, stockées chiffrées sur votre appareil.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Enregistrer des clips vocaux pour le suivi de la voix, stockés chiffrés.</string>
+    <string>Enregistrer des clips vocaux pour le suivi de la voix et des notes vocales dans le carnet de rêves, stockés chiffrés sur votre appareil.</string>
+    <!--
+      Required the moment SFSpeechRecognizer.requestAuthorization is called,
+      and its absence is not a warning at runtime: the call terminates the
+      process. ITMS-90683 rejected build 2.3.1 for it, which is the lucky
+      outcome — the unlucky one is shipping and crashing on the first tap of
+      « Transcrire ».
+
+      The wording states the thing a reviewer cannot verify from the binary and
+      a user has every reason to doubt: recognition is forced on-device
+      (requiresOnDeviceRecognition = true) and there is no network fallback.
+    -->
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Transcrire vos notes vocales de rêve en texte. La reconnaissance se fait uniquement sur votre appareil : aucun enregistrement n’est envoyé à un serveur.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Importer des photos de suivi depuis votre photothèque.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>

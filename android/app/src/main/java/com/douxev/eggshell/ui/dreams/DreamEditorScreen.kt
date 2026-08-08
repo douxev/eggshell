@@ -133,6 +133,7 @@ class DreamEditorViewModel @Inject constructor(
         val selectedEngine: OnDeviceTranscriber.Engine? = null,
         /** The last attempt produced no text. Shown; never inferred silently. */
         val transcribeFailed: Boolean = false,
+        val autoTranscribe: Boolean = true,
         val loading: Boolean = true,
         val saved: Boolean = false,
     ) {
@@ -198,6 +199,7 @@ class DreamEditorViewModel @Inject constructor(
                         .getOrDefault(emptyList()).map { it.id }.toSet(),
                     audio = runCatching { repo.audioFor(editingId) }.getOrDefault(emptyList()),
                     transcribeUnavailable = transcriber.availability(),
+                    autoTranscribe = transcriber.autoTranscribe,
                     loading = false,
                 )
                 refreshLanguageSupport()
@@ -209,6 +211,7 @@ class DreamEditorViewModel @Inject constructor(
                     definitions = defs,
                     allTags = tags,
                     transcribeUnavailable = transcriber.availability(),
+                    autoTranscribe = transcriber.autoTranscribe,
                     loading = false,
                 )
                 refreshLanguageSupport()
@@ -246,7 +249,13 @@ class DreamEditorViewModel @Inject constructor(
         _state.value = _state.value.copy(
             engines = transcriber.engines(),
             selectedEngine = transcriber.selectedEngine(),
+            autoTranscribe = transcriber.autoTranscribe,
         )
+    }
+
+    fun setAutoTranscribe(on: Boolean) {
+        transcriber.autoTranscribe = on
+        _state.value = _state.value.copy(autoTranscribe = on)
     }
 
     fun selectEngine(engine: OnDeviceTranscriber.Engine?) {
@@ -511,7 +520,10 @@ fun DreamEditorScreen(
     var newTag by rememberSaveable { mutableStateOf("") }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
-    var autoTranscribe by rememberSaveable { mutableStateOf(true) }
+    // Read from and written back to the store, not remembered: rememberSaveable
+    // survives rotation but not leaving the screen, so the switch silently
+    // returned to "on" for every new dream.
+    val autoTranscribe = state.autoTranscribe
 
     LaunchedEffect(state.saved) { if (state.saved) onDone() }
 
@@ -752,7 +764,10 @@ fun DreamEditorScreen(
                         )
                         MicroLabel(stringResource(R.string.dreams_auto_transcribe_hint))
                     }
-                    Switch(checked = autoTranscribe, onCheckedChange = { autoTranscribe = it })
+                    Switch(
+                        checked = autoTranscribe,
+                        onCheckedChange = { vm.setAutoTranscribe(it) },
+                    )
                 }
             }
 
