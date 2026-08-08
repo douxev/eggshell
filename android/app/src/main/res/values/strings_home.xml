@@ -119,7 +119,11 @@
     <string name="dreams_auto_transcribe_hint">La transcription se fait sur ton téléphone. Rien n\'est envoyé à un serveur.</string>
     <string name="dreams_transcribe_api_too_old">La transcription sur l\'appareil demande Android 12 ou plus. L\'audio reste enregistré et chiffré.</string>
     <string name="dreams_transcribe_no_recognizer">Ce téléphone n\'a pas de moteur de transcription hors ligne. On n\'envoie rien à un serveur, donc l\'audio reste sans texte.</string>
-    <string name="dreams_transcribe_no_language">Le modèle de langue n\'est pas installé sur ce téléphone. Ajoute-le dans les réglages système de la reconnaissance vocale.</string>
+    <string name="dreams_transcribe_no_language">Le modèle de langue hors ligne n\'est pas encore installé sur ce téléphone.</string>
+    <string name="dreams_transcribe_open_settings">Ouvrir les réglages vocaux</string>
+    <string name="dreams_transcribe_download">Installer le modèle</string>
+    <string name="dreams_transcribe_downloading">Installation…</string>
+    <string name="dreams_transcribe_download_hint">C\'est le modèle qui est téléchargé vers ton téléphone, une seule fois. Aucun enregistrement n\'est envoyé — c\'est justement ce modèle qui permet de transcrire sans passer par un serveur.</string>
     <string name="dreams_audio_delete">Supprimer cette note vocale</string>
     <string name="dreams_audio_count_cd">%1$d note(s) vocale(s)</string>
     <string name="dreams_delete">Supprimer ce rêve</string>

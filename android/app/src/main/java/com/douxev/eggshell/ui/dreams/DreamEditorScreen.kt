@@ -2,6 +2,8 @@ package com.douxev.eggshell.ui.dreams
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -64,6 +66,7 @@ import com.douxev.eggshell.ui.common.MetricSliderStack
 import com.douxev.eggshell.ui.common.ScreenHeader
 import com.douxev.eggshell.ui.common.clickToDismissKeyboard
 import com.douxev.eggshell.ui.common.rememberLocale
+import java.util.Locale
 import com.douxev.eggshell.ui.components.ActionBand
 import com.douxev.eggshell.ui.components.CardVariant
 import com.douxev.eggshell.ui.components.EggCard
@@ -120,6 +123,9 @@ class DreamEditorViewModel @Inject constructor(
         /** Id of the clip currently sounding, or null. */
         val playing: Long? = null,
         val transcribeUnavailable: OnDeviceTranscriber.Reason? = null,
+        /** The offline model is missing but this phone can fetch it. */
+        val modelDownloadable: Boolean = false,
+        val downloadingModel: Boolean = false,
         val loading: Boolean = true,
         val saved: Boolean = false,
     )
@@ -166,6 +172,7 @@ class DreamEditorViewModel @Inject constructor(
                     transcribeUnavailable = transcriber.availability(),
                     loading = false,
                 )
+                refreshLanguageSupport()
             } else {
                 defs.forEach { values[it.id] = midpoint(it) }
                 _state.value = State(
@@ -176,7 +183,37 @@ class DreamEditorViewModel @Inject constructor(
                     transcribeUnavailable = transcriber.availability(),
                     loading = false,
                 )
+                refreshLanguageSupport()
             }
+        }
+    }
+
+    /**
+     * A recogniser that exists but has never been given this language looks
+     * exactly like a working one until the first transcription fails. Asking up
+     * front is what turns « le modèle n'est pas installé » from a dead end into
+     * a button.
+     */
+    private fun refreshLanguageSupport(tag: String = Locale.getDefault().toLanguageTag()) {
+        viewModelScope.launch {
+            val downloadable =
+                transcriber.languageSupport(tag) is OnDeviceTranscriber.LanguageSupport.Downloadable
+            _state.value = _state.value.copy(modelDownloadable = downloadable)
+        }
+    }
+
+    fun downloadModel(tag: String) {
+        if (_state.value.downloadingModel) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(downloadingModel = true)
+            val ok = transcriber.downloadLanguage(tag)
+            _state.value = _state.value.copy(
+                downloadingModel = false,
+                // Clear the stale reason so the transcribe buttons come back
+                // without having to leave and re-open the dream.
+                transcribeUnavailable = if (ok) null else _state.value.transcribeUnavailable,
+            )
+            refreshLanguageSupport(tag)
         }
     }
 
@@ -516,22 +553,67 @@ fun DreamEditorScreen(
                 )
             }
 
-            state.transcribeUnavailable?.let { reason ->
+            // Two things can put a card here: a hard stop (no recogniser, too
+            // old an Android) or a missing model, which is not a stop at all —
+            // the phone can fetch it. Only the second gets a button, and it is
+            // the case that actually occurs on a current phone.
+            val offerDownload = state.modelDownloadable ||
+                state.transcribeUnavailable == OnDeviceTranscriber.Reason.LanguageNotDownloaded
+            if (state.transcribeUnavailable != null || offerDownload) {
                 EggCard(variant = CardVariant.Outlined) {
                     Text(
                         stringResource(
-                            when (reason) {
-                                OnDeviceTranscriber.Reason.ApiTooOld ->
+                            when {
+                                offerDownload -> R.string.dreams_transcribe_no_language
+                                state.transcribeUnavailable ==
+                                    OnDeviceTranscriber.Reason.ApiTooOld ->
                                     R.string.dreams_transcribe_api_too_old
-                                OnDeviceTranscriber.Reason.NoRecognizer ->
-                                    R.string.dreams_transcribe_no_recognizer
-                                OnDeviceTranscriber.Reason.LanguageNotDownloaded ->
-                                    R.string.dreams_transcribe_no_language
+                                else -> R.string.dreams_transcribe_no_recognizer
                             }
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    // No offline engine at all. The app cannot install one —
+                    // it comes from the system's speech service — but it can
+                    // stop pretending the user knows where that lives. Three
+                    // levels deep in Settings is not findable by description.
+                    if (!offerDownload &&
+                        state.transcribeUnavailable == OnDeviceTranscriber.Reason.NoRecognizer
+                    ) {
+                        val ctx = LocalContext.current
+                        TextButton(
+                            onClick = {
+                                runCatching {
+                                    ctx.startActivity(
+                                        Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                }
+                            }
+                        ) { Text(stringResource(R.string.dreams_transcribe_open_settings)) }
+                    }
+                    if (offerDownload) {
+                        // Says what travels, because "downloads something" and
+                        // "sends my dream somewhere" read alike, and this app
+                        // spent the whole module promising the second never
+                        // happens.
+                        MicroLabel(stringResource(R.string.dreams_transcribe_download_hint))
+                        TextButton(
+                            onClick = { vm.downloadModel(locale.toLanguageTag()) },
+                            enabled = !state.downloadingModel,
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (state.downloadingModel) {
+                                        R.string.dreams_transcribe_downloading
+                                    } else {
+                                        R.string.dreams_transcribe_download
+                                    }
+                                )
+                            )
+                        }
+                    }
                 }
             }
 

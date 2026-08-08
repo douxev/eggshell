@@ -105,7 +105,11 @@
     <string name="dreams_auto_transcribe_hint">Transcription runs on your phone. Nothing is sent to a server.</string>
     <string name="dreams_transcribe_api_too_old">On-device transcription needs Android 12 or later. The audio is still recorded and encrypted.</string>
     <string name="dreams_transcribe_no_recognizer">This phone has no offline transcription engine. We never send audio to a server, so the recording stays without text.</string>
-    <string name="dreams_transcribe_no_language">The language model is not installed on this phone. Add it in the system speech-recognition settings.</string>
+    <string name="dreams_transcribe_no_language">The offline language model is not installed on this phone yet.</string>
+    <string name="dreams_transcribe_open_settings">Open voice settings</string>
+    <string name="dreams_transcribe_download">Install the model</string>
+    <string name="dreams_transcribe_downloading">Installing…</string>
+    <string name="dreams_transcribe_download_hint">The model is downloaded to your phone, once. No recording is sent — that model is exactly what makes transcription work without going through a server.</string>
     <string name="dreams_audio_delete">Delete this voice note</string>
     <string name="dreams_audio_count_cd">%1$d voice note(s)</string>
     <string name="dreams_delete">Delete this dream</string>
