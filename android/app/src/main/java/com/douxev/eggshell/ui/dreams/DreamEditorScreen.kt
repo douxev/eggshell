@@ -157,6 +157,10 @@ class DreamEditorViewModel @Inject constructor(
          */
         val hasEngineChoice: Boolean
             get() = engines.any { it.component != null }
+
+        /** Whether Android's own on-device recogniser is one of the options. */
+        val systemEngineAvailable: Boolean
+            get() = engines.any { it.component == null }
     }
 
     private val _state = MutableStateFlow(State())
@@ -647,8 +651,17 @@ fun DreamEditorScreen(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         MicroLabel(
-                            state.selectedEngine?.label
-                                ?: stringResource(R.string.dreams_engine_system)
+                            state.selectedEngine?.label ?: stringResource(
+                                // "Moteur du système" as the fallback label was
+                                // a lie on the phone that most needs this row:
+                                // one with no system recogniser at all, where
+                                // nothing is selected and nothing is running.
+                                if (state.systemEngineAvailable) {
+                                    R.string.dreams_engine_system
+                                } else {
+                                    R.string.dreams_engine_unset
+                                }
+                            )
                         )
                     }
                     TextButton(onClick = { picking = true }) {
@@ -716,20 +729,33 @@ fun DreamEditorScreen(
                         // the app not looking? Only an app publishing a
                         // RecognitionService can be used from here — that is
                         // the only hook Android offers.
-                        if (!state.hasEngineChoice) {
-                            MicroLabel(stringResource(R.string.dreams_engine_none))
-                        }
-                        val ctx = LocalContext.current
-                        TextButton(
-                            onClick = {
-                                runCatching {
-                                    ctx.startActivity(
-                                        Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)
-                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    )
+                        // Two different situations wearing the same card:
+                        // nothing installed anywhere, or something installed
+                        // and simply not picked yet. Telling the second one to
+                        // go hunting in system settings is useless advice with
+                        // the answer sitting one row above.
+                        MicroLabel(
+                            stringResource(
+                                if (state.hasEngineChoice) {
+                                    R.string.dreams_engine_pick_one
+                                } else {
+                                    R.string.dreams_engine_none
                                 }
-                            }
-                        ) { Text(stringResource(R.string.dreams_transcribe_open_settings)) }
+                            )
+                        )
+                        val ctx = LocalContext.current
+                        if (!state.hasEngineChoice) {
+                            TextButton(
+                                onClick = {
+                                    runCatching {
+                                        ctx.startActivity(
+                                            Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        )
+                                    }
+                                }
+                            ) { Text(stringResource(R.string.dreams_transcribe_open_settings)) }
+                        }
                     }
                     if (offerDownload) {
                         // Says what travels, because "downloads something" and

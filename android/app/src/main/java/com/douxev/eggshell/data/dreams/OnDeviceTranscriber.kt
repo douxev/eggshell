@@ -101,9 +101,6 @@ class OnDeviceTranscriber @Inject constructor(
      * error and returns an empty list — the failure mode is "your transcription
      * app is not in the list" with nothing to explain why.
      */
-    /** True when some app publishes a RecognitionService, whatever it is. */
-    fun hasThirdPartyEngine(): Boolean = engines().any { it.component != null }
-
     fun engines(): List<Engine> = buildList {
         if (availability() == null) {
             add(Engine(null, context.getString(R.string.dreams_engine_system), true))

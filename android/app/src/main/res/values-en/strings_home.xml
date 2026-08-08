@@ -112,6 +112,8 @@
     <string name="dreams_transcript_hint">Play it back and type — or dictate with your keyboard\'s mic.</string>
     <string name="dreams_transcript_dictate_hint">Your keyboard\'s mic types straight into this field. If you use a local voice input (Whisper and the like), that engine does the transcribing and nothing leaves eggshell.</string>
     <string name="dreams_transcript_edit_hint">Tap the text to correct it.</string>
+    <string name="dreams_engine_unset">No engine chosen</string>
+    <string name="dreams_engine_pick_one">This phone has no Android offline engine, but another app provides one. Pick it above.</string>
     <string name="dreams_engine_system">System engine (guaranteed offline)</string>
     <string name="dreams_engine_title">Transcription engine</string>
     <string name="dreams_engine_change">Change engine</string>

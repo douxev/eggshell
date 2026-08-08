@@ -14,7 +14,7 @@ enum WhatsNewCatalog {
     /// a version-14 entry was already in the list, so the 2.0.0 notes could
     /// never surface on their own — anyone who had seen the sheet at 13 was
     /// already past the gate.
-    static let latestVersion: Int = 18
+    static let latestVersion: Int = 21
 
     struct Release: Identifiable {
         var id: Int { version }
@@ -26,6 +26,17 @@ enum WhatsNewCatalog {
     /// Releases, newest first.
     static let releases: [Release] = [
         Release(
+            version: 21,
+            title: "Quoi de neuf",
+            highlights: [
+                "Carnet de rêves — il est là. Un calendrier des nuits, des tags pour regrouper les rêves qui se ressemblent, des curseurs de sommeil et des notes vocales.",
+                "Ce qui va ensemble — les liens entre tes prises, ton sommeil et ton humeur, repérés dans tes propres relevés. Des coïncidences, jamais des causes.",
+                "Transcription sur l'appareil — ou pas du tout. Quand le modèle hors ligne manque, écris la transcription toi-même : la touche micro de ton clavier écrit dans le champ.",
+                "Notes vocales de rêve dans les sauvegardes — le texte des entrées y était déjà, l'audio non. Refais une sauvegarde pour qu'elle les emporte.",
+                "Corrigé — les liens disparaissaient les jours de changement d'heure, et un enregistrement pouvait devenir illisible après un changement d'appareil.",
+            ]
+        ),
+        Release(
             version: 18,
             title: "Quoi de neuf",
             highlights: [
@@ -33,7 +44,6 @@ enum WhatsNewCatalog {
                 "Clé de récupération — une seconde façon d'ouvrir le coffre. Ajouter une empreinte ou un visage au téléphone ne peut plus t'enfermer dehors.",
                 "Sauvegardes complètes — tes photos et tes mémos vocaux voyagent maintenant dans l'export chiffré, et reviennent à la restauration.",
                 "Coffre plus prudent — une sauvegarde écrite par une version plus récente est refusée au lieu d'être lue à moitié, et une mauvaise phrase secrète est signalée comme telle.",
-                "Carnet de rêves — bientôt. Le module est déjà visible, grisé, dans Réglages → Modules.",
             ]
         ),
         Release(

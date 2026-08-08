@@ -126,6 +126,8 @@
     <string name="dreams_transcript_hint">Réécoute et écris — ou dicte avec le micro de ton clavier.</string>
     <string name="dreams_transcript_dictate_hint">Le micro de ton clavier écrit directement ici. Si tu utilises une saisie vocale locale (Whisper et compagnie), c\'est ton moteur qui transcrit, et rien ne sort d\'eggshell.</string>
     <string name="dreams_transcript_edit_hint">Touche le texte pour le corriger.</string>
+    <string name="dreams_engine_unset">Aucun moteur choisi</string>
+    <string name="dreams_engine_pick_one">Ce téléphone n\'a pas de moteur hors ligne d\'Android, mais une autre application en propose un. Choisis-le ci-dessus.</string>
     <string name="dreams_engine_system">Moteur du système (hors ligne garanti)</string>
     <string name="dreams_engine_title">Moteur de transcription</string>
     <string name="dreams_engine_change">Changer de moteur</string>
