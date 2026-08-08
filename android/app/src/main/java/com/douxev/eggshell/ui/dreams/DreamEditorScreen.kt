@@ -6,6 +6,7 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -35,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -126,6 +128,8 @@ class DreamEditorViewModel @Inject constructor(
         /** The offline model is missing but this phone can fetch it. */
         val modelDownloadable: Boolean = false,
         val downloadingModel: Boolean = false,
+        val engines: List<OnDeviceTranscriber.Engine> = emptyList(),
+        val selectedEngine: OnDeviceTranscriber.Engine? = null,
         val loading: Boolean = true,
         val saved: Boolean = false,
     )
@@ -199,7 +203,20 @@ class DreamEditorViewModel @Inject constructor(
             val downloadable =
                 transcriber.languageSupport(tag) is OnDeviceTranscriber.LanguageSupport.Downloadable
             _state.value = _state.value.copy(modelDownloadable = downloadable)
+            refreshEngines()
         }
+    }
+
+    fun refreshEngines() {
+        _state.value = _state.value.copy(
+            engines = transcriber.engines(),
+            selectedEngine = transcriber.selectedEngine(),
+        )
+    }
+
+    fun selectEngine(engine: OnDeviceTranscriber.Engine?) {
+        transcriber.selectedEngineId = engine?.id
+        _state.value = _state.value.copy(selectedEngine = transcriber.selectedEngine())
     }
 
     fun downloadModel(tag: String) {
@@ -320,7 +337,11 @@ class DreamEditorViewModel @Inject constructor(
     private suspend fun transcribe(audio: DreamAudio, plaintext: File, languageTag: String) {
         _state.value = _state.value.copy(transcribing = audio.id)
         try {
-            when (val r = transcriber.transcribe(plaintext, languageTag)) {
+            when (val r = transcriber.transcribe(
+                audio = plaintext,
+                languageTag = languageTag,
+                engine = _state.value.selectedEngine,
+            )) {
                 is OnDeviceTranscriber.Result.Text -> {
                     runCatching { repo.setTranscript(audio.id, r.transcript) }
                 }
@@ -553,6 +574,42 @@ fun DreamEditorScreen(
                 )
             }
 
+            // The engine row. Shown whenever there is a choice to make — a
+            // phone with only the system engine gets no decision it cannot act
+            // on.
+            if (state.engines.size > 1) {
+                var picking by remember { mutableStateOf(false) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.dreams_engine_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        MicroLabel(
+                            state.selectedEngine?.label
+                                ?: stringResource(R.string.dreams_engine_system)
+                        )
+                    }
+                    TextButton(onClick = { picking = true }) {
+                        Text(stringResource(R.string.dreams_engine_change))
+                    }
+                }
+                // Stated on the row, not only in the dialog: the person who
+                // needs it most is the one who chose weeks ago and has since
+                // forgotten that recordings leave for another app.
+                if (state.selectedEngine != null) {
+                    MicroLabel(stringResource(R.string.dreams_engine_third_party_warning))
+                }
+                if (picking) {
+                    EngineDialog(
+                        engines = state.engines,
+                        selected = state.selectedEngine,
+                        onPick = { vm.selectEngine(it); picking = false },
+                        onDismiss = { picking = false },
+                    )
+                }
+            }
+
             // Two things can put a card here: a hard stop (no recogniser, too
             // old an Android) or a missing model, which is not a stop at all —
             // the phone can fetch it. Only the second gets a button, and it is
@@ -732,6 +789,64 @@ fun DreamEditorScreen(
             },
         )
     }
+}
+
+/**
+ * Pick which engine transcribes a dream.
+ *
+ * The system entry is listed first and named as guaranteed offline, because
+ * that is the only one about which the claim can be made. Every other row
+ * carries the warning rather than hiding it behind the choice: by the time
+ * someone reads a confirmation dialog they have already decided.
+ */
+@Composable
+private fun EngineDialog(
+    engines: List<OnDeviceTranscriber.Engine>,
+    selected: OnDeviceTranscriber.Engine?,
+    onPick: (OnDeviceTranscriber.Engine?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dreams_engine_title)) },
+        text = {
+            Column {
+                engines.forEach { engine ->
+                    val isSelected = engine.component == selected?.component
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(engine.component?.let { engine }) }
+                            .padding(vertical = 10.dp),
+                    ) {
+                        RadioButton(selected = isSelected, onClick = {
+                            onPick(engine.component?.let { engine })
+                        })
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(engine.label, style = MaterialTheme.typography.bodyMedium)
+                            if (!engine.onDeviceGuaranteed) {
+                                MicroLabel(
+                                    stringResource(R.string.dreams_engine_third_party_warning)
+                                )
+                                // The nastiest failure this can produce, said
+                                // before the choice rather than after. Android
+                                // documents that a recogniser which cannot read
+                                // the supplied audio opens the microphone
+                                // instead — so a wrong engine does not error,
+                                // it returns a fluent transcript of the room
+                                // and files it under a dream.
+                                MicroLabel(stringResource(R.string.dreams_engine_file_caveat))
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_ok)) }
+        },
+    )
 }
 
 @Composable

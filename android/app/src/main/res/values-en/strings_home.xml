@@ -106,6 +106,12 @@
     <string name="dreams_transcribe_api_too_old">On-device transcription needs Android 12 or later. The audio is still recorded and encrypted.</string>
     <string name="dreams_transcribe_no_recognizer">This phone has no offline transcription engine. We never send audio to a server, so the recording stays without text.</string>
     <string name="dreams_transcribe_no_language">The offline language model is not installed on this phone yet.</string>
+    <string name="dreams_engine_system">System engine (guaranteed offline)</string>
+    <string name="dreams_engine_title">Transcription engine</string>
+    <string name="dreams_engine_change">Change engine</string>
+    <string name="dreams_engine_third_party_warning">This engine belongs to another app. Eggshell hands it the recording and can no longer guarantee it stays on the device — only that app knows. The system engine is guaranteed offline by Android.</string>
+    <string name="dreams_engine_file_caveat">Not every engine can read an existing recording; some only listen to the live microphone. If the transcript sounds like the room rather than your dream, that is why — switch back to the system engine.</string>
+    <string name="dreams_engine_none">No other engine installed on this phone.</string>
     <string name="dreams_transcribe_open_settings">Open voice settings</string>
     <string name="dreams_transcribe_download">Install the model</string>
     <string name="dreams_transcribe_downloading">Installing…</string>

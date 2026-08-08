@@ -1,18 +1,22 @@
 package com.douxev.eggshell.data.dreams
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
+import android.content.pm.PackageManager
 import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.os.Bundle
 import android.speech.ModelDownloadListener
 import android.speech.RecognitionListener
+import android.speech.RecognitionService
 import android.speech.RecognitionSupport
 import android.speech.RecognitionSupportCallback
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.core.content.ContextCompat
 import androidx.annotation.RequiresApi
+import com.douxev.eggshell.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
@@ -69,6 +73,55 @@ class OnDeviceTranscriber @Inject constructor(
         NoRecognizer,
         /** The recogniser is there but has no model for this language yet. */
         LanguageNotDownloaded,
+    }
+
+    /**
+     * A recognition engine this phone can use.
+     *
+     * [component] null means the system's own on-device recogniser — the one
+     * Android guarantees never puts audio on a network. Anything else is a
+     * third-party `RecognitionService`, and that guarantee does not transfer:
+     * only that app knows where the audio goes. [onDeviceGuaranteed] is the
+     * difference, and the UI must not blur it.
+     */
+    data class Engine(
+        val component: ComponentName?,
+        val label: String,
+        val onDeviceGuaranteed: Boolean,
+    ) {
+        val id: String get() = component?.flattenToString().orEmpty()
+    }
+
+    /**
+     * Every engine installed here: the system's on-device one when present,
+     * then each app that publishes a `RecognitionService`.
+     *
+     * Requires the `<queries>` element in the manifest. Without it the package
+     * manager filters the whole list to nothing on API 30+, which is not an
+     * error and returns an empty list — the failure mode is "your transcription
+     * app is not in the list" with nothing to explain why.
+     */
+    fun engines(): List<Engine> = buildList {
+        if (availability() == null) {
+            add(Engine(null, context.getString(R.string.dreams_engine_system), true))
+        }
+        val pm = context.packageManager
+        val intent = Intent(RecognitionService.SERVICE_INTERFACE)
+        val flags = PackageManager.MATCH_DEFAULT_ONLY
+        runCatching { pm.queryIntentServices(intent, flags) }
+            .getOrDefault(emptyList())
+            .forEach { info ->
+                val svc = info.serviceInfo ?: return@forEach
+                add(
+                    Engine(
+                        component = ComponentName(svc.packageName, svc.name),
+                        label = runCatching { svc.loadLabel(pm).toString() }
+                            .getOrDefault(svc.packageName),
+                        // Cannot be verified from here, so never claimed.
+                        onDeviceGuaranteed = false,
+                    )
+                )
+            }
     }
 
     /** What this phone can do about one particular language. */
@@ -238,6 +291,37 @@ class OnDeviceTranscriber @Inject constructor(
         equals(tag, ignoreCase = true) ||
             substringBefore('-').equals(tag.substringBefore('-'), ignoreCase = true)
 
+    /**
+     * The engine the user picked, or null for the system's on-device one.
+     *
+     * A plain preference on purpose. It holds a component name the user chose,
+     * which is a setting and not vault content — nothing here says what any
+     * dream contains. It has to be readable before the vault is unlocked
+     * anyway, because the editor asks for it while composing.
+     */
+    var selectedEngineId: String?
+        get() = prefs.getString(KEY_ENGINE, null)?.takeIf { it.isNotEmpty() }
+        set(value) = prefs.edit().apply {
+            if (value.isNullOrEmpty()) remove(KEY_ENGINE) else putString(KEY_ENGINE, value)
+        }.apply()
+
+    /**
+     * Resolve the stored choice against what is installed *now*.
+     *
+     * An engine can be uninstalled between two dreams. Falling back to the
+     * system one silently is right — the alternative is transcription that
+     * stops working with no explanation — but only because the fallback is the
+     * stricter of the two, never the looser.
+     */
+    fun selectedEngine(): Engine? {
+        val id = selectedEngineId ?: return null
+        return engines().firstOrNull { it.id == id && it.component != null }
+    }
+
+    private val prefs by lazy {
+        context.getSharedPreferences("dreams_transcription", Context.MODE_PRIVATE)
+    }
+
     /** Cheap enough to call while composing a row. */
     fun availability(): Reason? = when {
         Build.VERSION.SDK_INT < Build.VERSION_CODES.S -> Reason.ApiTooOld
@@ -254,35 +338,82 @@ class OnDeviceTranscriber @Inject constructor(
      * it already had in hand from recording rather than us decrypting a second
      * one: fewer plaintext copies, and a shorter window.
      */
-    suspend fun transcribe(audio: File, languageTag: String): Result {
-        availability()?.let { return Result.Unavailable(it) }
+    suspend fun transcribe(
+        audio: File,
+        languageTag: String,
+        engine: Engine? = null,
+    ): Result {
+        // A third-party engine stands in for the system one, so the on-device
+        // availability check does not apply to it — that check asks whether
+        // *Android's* recogniser exists, which is a different question.
+        if (engine?.component == null) availability()?.let { return Result.Unavailable(it) }
         // Repeated inline even though availability() just checked it: lint
         // cannot see a version guard through a helper that returns a reason,
         // and the API-31 call below is exactly the kind it should be strict
         // about. Costs one comparison.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+        if (engine?.component == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             return Result.Unavailable(Reason.ApiTooOld)
         }
 
-        // Guarded so the whole call can be awaited with a deadline: a recogniser
-        // that never calls back would otherwise leave the UI spinning and the
-        // plaintext copy on disk.
-        return withTimeoutOrNull(TIMEOUT_MS) { runRecognizer(audio, languageTag) }
-            ?: Result.Failed(SpeechRecognizer.ERROR_SERVER_DISCONNECTED)
+        // EXTRA_AUDIO_SOURCE takes an open descriptor of raw PCM. Give it
+        // anything else — an m4a, or a Uri where a descriptor belongs — and the
+        // documented behaviour is that the recogniser *opens the microphone*
+        // instead. That does not fail: it returns a confident transcript of
+        // whatever the room was saying, attributed to the dream.
+        val pcmFile = File(audio.parentFile, "${audio.nameWithoutExtension}.pcm")
+        val pcm = PcmDecoder.decode(audio, pcmFile)
+            ?: return Result.Failed(SpeechRecognizer.ERROR_AUDIO)
+
+        return try {
+            withTimeoutOrNull(TIMEOUT_MS) { runRecognizer(pcm, languageTag, engine) }
+                ?: Result.Failed(SpeechRecognizer.ERROR_SERVER_DISCONNECTED)
+        } finally {
+            // A second plaintext copy existed for the length of the call. It
+            // does not outlive it.
+            pcmFile.delete()
+        }
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
-    private suspend fun runRecognizer(audio: File, languageTag: String): Result =
+    private suspend fun runRecognizer(
+        pcm: PcmDecoder.Pcm,
+        languageTag: String,
+        engine: Engine?,
+    ): Result =
         suspendCancellableCoroutine { cont ->
             val recognizer = runCatching {
-                SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+                val chosen = engine?.component
+                when {
+                    // A third-party service is bound by component and has no
+                    // API-31 floor — that floor belongs to the on-device
+                    // factory below, not to recognition itself.
+                    chosen != null -> SpeechRecognizer.createSpeechRecognizer(context, chosen)
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                        SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+                    // transcribe() already returned ApiTooOld here; repeated
+                    // because lint cannot follow a version check through a
+                    // helper, and this is exactly the call it should be strict
+                    // about.
+                    else -> null
+                }
             }.getOrNull() ?: run {
                 cont.resume(Result.Unavailable(Reason.NoRecognizer))
                 return@suspendCancellableCoroutine
             }
 
+            // "The caller of the recognizer is responsible for closing the
+            // audio" — so it is opened here and closed on every exit, including
+            // cancellation, or the app leaks a descriptor per transcription.
+            val descriptor = runCatching {
+                ParcelFileDescriptor.open(pcm.file, ParcelFileDescriptor.MODE_READ_ONLY)
+            }.getOrNull() ?: run {
+                runCatching { recognizer.destroy() }
+                cont.resume(Result.Failed(SpeechRecognizer.ERROR_AUDIO))
+                return@suspendCancellableCoroutine
+            }
+
             fun finish(r: Result) {
                 if (cont.isActive) cont.resume(r)
+                runCatching { descriptor.close() }
                 runCatching { recognizer.destroy() }
             }
 
@@ -330,13 +461,19 @@ class OnDeviceTranscriber @Inject constructor(
                 // guarantees this, but the flag costs nothing and makes the
                 // intent state the requirement out loud for anyone reading it.
                 putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-                putExtra(EXTRA_AUDIO_SOURCE, Uri.fromFile(audio))
-                putExtra(EXTRA_AUDIO_SOURCE_CHANNEL_COUNT, 1)
+                putExtra(EXTRA_AUDIO_SOURCE, descriptor)
+                // Measured off the decoder's own output format, not assumed:
+                // it may resample or downmix, and describing the bytes wrongly
+                // makes the recogniser hear the wrong pitch and speed.
+                putExtra(EXTRA_AUDIO_SOURCE_CHANNEL_COUNT, pcm.channelCount)
                 putExtra(EXTRA_AUDIO_SOURCE_ENCODING, ENCODING_PCM_16BIT)
-                putExtra(EXTRA_AUDIO_SOURCE_SAMPLING_RATE, 44_100)
+                putExtra(EXTRA_AUDIO_SOURCE_SAMPLING_RATE, pcm.sampleRate)
             }
 
-            cont.invokeOnCancellation { runCatching { recognizer.destroy() } }
+            cont.invokeOnCancellation {
+                runCatching { descriptor.close() }
+                runCatching { recognizer.destroy() }
+            }
             runCatching { recognizer.startListening(intent) }
                 .onFailure { finish(Result.Failed(SpeechRecognizer.ERROR_CLIENT)) }
         }
@@ -358,6 +495,8 @@ class OnDeviceTranscriber @Inject constructor(
         const val EXTRA_AUDIO_SOURCE_SAMPLING_RATE =
             "android.speech.extra.AUDIO_SOURCE_SAMPLING_RATE"
         const val ENCODING_PCM_16BIT = 2
+
+        const val KEY_ENGINE = "engine_component"
 
         const val ERROR_LANGUAGE_NOT_SUPPORTED = 12
         const val ERROR_LANGUAGE_UNAVAILABLE = 13

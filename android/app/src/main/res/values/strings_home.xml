@@ -120,6 +120,12 @@
     <string name="dreams_transcribe_api_too_old">La transcription sur l\'appareil demande Android 12 ou plus. L\'audio reste enregistré et chiffré.</string>
     <string name="dreams_transcribe_no_recognizer">Ce téléphone n\'a pas de moteur de transcription hors ligne. On n\'envoie rien à un serveur, donc l\'audio reste sans texte.</string>
     <string name="dreams_transcribe_no_language">Le modèle de langue hors ligne n\'est pas encore installé sur ce téléphone.</string>
+    <string name="dreams_engine_system">Moteur du système (hors ligne garanti)</string>
+    <string name="dreams_engine_title">Moteur de transcription</string>
+    <string name="dreams_engine_change">Changer de moteur</string>
+    <string name="dreams_engine_third_party_warning">Ce moteur appartient à une autre application. Eggshell lui transmet l\'enregistrement et ne peut plus garantir qu\'il reste sur l\'appareil — seule cette application le sait. Le moteur du système, lui, est garanti hors ligne par Android.</string>
+    <string name="dreams_engine_file_caveat">Tous les moteurs ne savent pas lire un enregistrement déjà fait : certains n\'écoutent que le micro en direct. Si la transcription ressemble à ce qui se passait dans la pièce plutôt qu\'à ton rêve, c\'est ça — reviens au moteur du système.</string>
+    <string name="dreams_engine_none">Aucun autre moteur installé sur ce téléphone.</string>
     <string name="dreams_transcribe_open_settings">Ouvrir les réglages vocaux</string>
     <string name="dreams_transcribe_download">Installer le modèle</string>
     <string name="dreams_transcribe_downloading">Installation…</string>

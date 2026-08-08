@@ -15,6 +15,19 @@
     <!-- Media (Phase 5) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
+    <!--
+      Without this, queryIntentServices() for RecognitionService returns an
+      empty list on API 30+ and the app cannot see a single third-party
+      transcription engine the user has installed. It is not an error and there
+      is no warning: the picker is simply empty, with nothing to explain why.
+      Declares an intent, not a package — no app is named.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
+    </queries>
+
     <uses-feature android:name="android.hardware.microphone" android:required="false"/>
 
     <application
