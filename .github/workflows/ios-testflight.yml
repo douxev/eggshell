@@ -31,6 +31,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: the Fastfile falls back to the commit count for the
+          # build number when App Store Connect is unreachable, and a shallow
+          # clone reports 1. The repo's .git is ~26 MB, so this is cheap.
+          fetch-depth: 0
 
       - uses: maxim-lobanov/setup-xcode@v1
         with:

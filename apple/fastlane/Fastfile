@@ -57,12 +57,36 @@ platform :ios do
     )
 
     # Build number must be strictly increasing per (version) on TestFlight.
-    next_build = latest_testflight_build_number(
-      app_identifier:       APP_IDENTIFIER,
-      version:              get_version_number(xcodeproj: PROJECT, target: SCHEME),
-      initial_build_number: 0,
-      api_key:              api_key
-    ) + 1
+    #
+    # The App Store Connect lookup is NOT load-bearing, and must not be. On
+    # 2026-08-08 it returned HTTP 500 twice in a row and took the whole release
+    # down at step 6 of 9 — before a single line was compiled, over a number we
+    # can derive locally. A build number only has to be an increasing integer,
+    # and the repository already has one.
+    #
+    # The commit count is monotonic, deterministic and needs no network. It
+    # requires fetch-depth: 0 on the checkout, or git reports 1 on a shallow
+    # clone — hence the guard, which prefers whatever ASC knows over a lie.
+    commit_count = `git rev-list --count HEAD`.strip.to_i
+    asc_latest =
+      begin
+        latest_testflight_build_number(
+          app_identifier:       APP_IDENTIFIER,
+          version:              get_version_number(xcodeproj: PROJECT, target: SCHEME),
+          initial_build_number: 0,
+          api_key:              api_key
+        )
+      rescue StandardError => e
+        UI.important("TestFlight build-number lookup failed (#{e.message}).")
+        UI.important("Falling back to the commit count: #{commit_count}.")
+        0
+      end
+
+    # max, not either-or: whichever source is available, the result still only
+    # ever goes up. Once a commit-count build is uploaded, ASC reports it back
+    # and asc + 1 carries on from there.
+    next_build = [asc_latest + 1, commit_count].max
+    UI.message("Build number: #{next_build} (ASC: #{asc_latest}, commits: #{commit_count})")
     increment_build_number(xcodeproj: PROJECT, build_number: next_build)
 
     build_app(
