@@ -130,9 +130,32 @@ class DreamEditorViewModel @Inject constructor(
         val downloadingModel: Boolean = false,
         val engines: List<OnDeviceTranscriber.Engine> = emptyList(),
         val selectedEngine: OnDeviceTranscriber.Engine? = null,
+        /** The last attempt produced no text. Shown; never inferred silently. */
+        val transcribeFailed: Boolean = false,
         val loading: Boolean = true,
         val saved: Boolean = false,
-    )
+    ) {
+        /**
+         * What actually stops a transcription, as opposed to what stops
+         * *Android's own* recogniser.
+         *
+         * [transcribeUnavailable] only ever described the system engine. Once
+         * the user has picked someone else's, its absence is not an obstacle —
+         * gating on it directly is what made a chosen third-party engine
+         * unusable while sitting right there in the list.
+         */
+        val transcribeBlocked: OnDeviceTranscriber.Reason?
+            get() = if (selectedEngine != null) null else transcribeUnavailable
+
+        /**
+         * True when there is a decision to make. A phone offering only the
+         * system engine gets no row; a phone offering anything else does —
+         * *including* one where the system engine is missing, which is exactly
+         * the phone whose owner most needs to reach the alternative.
+         */
+        val hasEngineChoice: Boolean
+            get() = engines.any { it.component != null }
+    }
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
@@ -299,7 +322,7 @@ class DreamEditorViewModel @Inject constructor(
             )
             if (result == null) return@launch
             val (row, plaintext) = result
-            if (autoTranscribe && _state.value.transcribeUnavailable == null) {
+            if (autoTranscribe && _state.value.transcribeBlocked == null) {
                 transcribe(row, plaintext, languageTag)
             } else {
                 // Nothing else will read it; the plaintext copy must not linger.
@@ -335,7 +358,7 @@ class DreamEditorViewModel @Inject constructor(
     }
 
     private suspend fun transcribe(audio: DreamAudio, plaintext: File, languageTag: String) {
-        _state.value = _state.value.copy(transcribing = audio.id)
+        _state.value = _state.value.copy(transcribing = audio.id, transcribeFailed = false)
         try {
             when (val r = transcriber.transcribe(
                 audio = plaintext,
@@ -346,9 +369,22 @@ class DreamEditorViewModel @Inject constructor(
                     runCatching { repo.setTranscript(audio.id, r.transcript) }
                 }
                 is OnDeviceTranscriber.Result.Unavailable -> {
-                    _state.value = _state.value.copy(transcribeUnavailable = r.reason)
+                    _state.value = _state.value.copy(
+                        transcribeUnavailable = r.reason,
+                        // A chosen engine reporting Unavailable is masked by
+                        // transcribeBlocked, which is right — the *system*
+                        // engine's absence is not the story — but it would
+                        // leave the failure with nowhere to appear.
+                        transcribeFailed = _state.value.selectedEngine != null,
+                    )
                 }
-                else -> Unit
+                // Both used to land in `else -> Unit`: the spinner stopped, no
+                // text arrived, and nothing said why. That is indistinguishable
+                // from the feature not working at all.
+                is OnDeviceTranscriber.Result.Failed,
+                is OnDeviceTranscriber.Result.NoSpeech -> {
+                    _state.value = _state.value.copy(transcribeFailed = true)
+                }
             }
         } finally {
             runCatching { plaintext.delete() }
@@ -567,7 +603,7 @@ fun DreamEditorScreen(
                     clip = clip,
                     playing = state.playing == clip.id,
                     transcribing = state.transcribing == clip.id,
-                    canTranscribe = state.transcribeUnavailable == null,
+                    canTranscribe = state.transcribeBlocked == null,
                     onPlay = { vm.togglePlayback(clip) },
                     onTranscribe = { vm.transcribeExisting(clip, locale.toLanguageTag()) },
                     onDelete = { vm.deleteAudio(clip) },
@@ -577,7 +613,7 @@ fun DreamEditorScreen(
             // The engine row. Shown whenever there is a choice to make — a
             // phone with only the system engine gets no decision it cannot act
             // on.
-            if (state.engines.size > 1) {
+            if (state.hasEngineChoice) {
                 var picking by remember { mutableStateOf(false) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
@@ -610,19 +646,31 @@ fun DreamEditorScreen(
                 }
             }
 
+            if (state.transcribeFailed) {
+                MicroLabel(
+                    stringResource(
+                        if (state.selectedEngine != null) {
+                            R.string.dreams_transcribe_failed_engine
+                        } else {
+                            R.string.dreams_transcribe_failed
+                        }
+                    )
+                )
+            }
+
             // Two things can put a card here: a hard stop (no recogniser, too
             // old an Android) or a missing model, which is not a stop at all —
             // the phone can fetch it. Only the second gets a button, and it is
             // the case that actually occurs on a current phone.
             val offerDownload = state.modelDownloadable ||
-                state.transcribeUnavailable == OnDeviceTranscriber.Reason.LanguageNotDownloaded
-            if (state.transcribeUnavailable != null || offerDownload) {
+                state.transcribeBlocked == OnDeviceTranscriber.Reason.LanguageNotDownloaded
+            if (state.transcribeBlocked != null || offerDownload) {
                 EggCard(variant = CardVariant.Outlined) {
                     Text(
                         stringResource(
                             when {
                                 offerDownload -> R.string.dreams_transcribe_no_language
-                                state.transcribeUnavailable ==
+                                state.transcribeBlocked ==
                                     OnDeviceTranscriber.Reason.ApiTooOld ->
                                     R.string.dreams_transcribe_api_too_old
                                 else -> R.string.dreams_transcribe_no_recognizer
@@ -636,8 +684,16 @@ fun DreamEditorScreen(
                     // stop pretending the user knows where that lives. Three
                     // levels deep in Settings is not findable by description.
                     if (!offerDownload &&
-                        state.transcribeUnavailable == OnDeviceTranscriber.Reason.NoRecognizer
+                        state.transcribeBlocked == OnDeviceTranscriber.Reason.NoRecognizer
                     ) {
+                        // Answers the question the empty screen otherwise
+                        // leaves open: is my transcription app missing, or is
+                        // the app not looking? Only an app publishing a
+                        // RecognitionService can be used from here — that is
+                        // the only hook Android offers.
+                        if (!state.hasEngineChoice) {
+                            MicroLabel(stringResource(R.string.dreams_engine_none))
+                        }
                         val ctx = LocalContext.current
                         TextButton(
                             onClick = {
@@ -674,7 +730,7 @@ fun DreamEditorScreen(
                 }
             }
 
-            if (state.transcribeUnavailable == null) {
+            if (state.transcribeBlocked == null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(

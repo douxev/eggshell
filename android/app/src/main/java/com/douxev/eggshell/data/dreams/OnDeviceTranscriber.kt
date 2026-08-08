@@ -101,14 +101,21 @@ class OnDeviceTranscriber @Inject constructor(
      * error and returns an empty list — the failure mode is "your transcription
      * app is not in the list" with nothing to explain why.
      */
+    /** True when some app publishes a RecognitionService, whatever it is. */
+    fun hasThirdPartyEngine(): Boolean = engines().any { it.component != null }
+
     fun engines(): List<Engine> = buildList {
         if (availability() == null) {
             add(Engine(null, context.getString(R.string.dreams_engine_system), true))
         }
         val pm = context.packageManager
         val intent = Intent(RecognitionService.SERVICE_INTERFACE)
-        val flags = PackageManager.MATCH_DEFAULT_ONLY
-        runCatching { pm.queryIntentServices(intent, flags) }
+        // GET_META_DATA, not MATCH_DEFAULT_ONLY. That flag keeps only filters
+        // declaring CATEGORY_DEFAULT, which is an activity convention —
+        // RecognitionService filters carry the bare action, so the flag
+        // silently matched nothing. This is how AOSP's own voice-input picker
+        // enumerates them.
+        runCatching { pm.queryIntentServices(intent, PackageManager.GET_META_DATA) }
             .getOrDefault(emptyList())
             .forEach { info ->
                 val svc = info.serviceInfo ?: return@forEach
