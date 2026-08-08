@@ -88,6 +88,19 @@ android {
         }
     }
 
+    lint {
+        // lintVitalRelease costs ~55s of every assembleRelease, and it is the
+        // ONLY lint gate in the release pipeline — the CI workflow runs
+        // assembleRelease and nothing else, so switching this off outright
+        // would remove the check from the one place it must run.
+        //
+        // Opt-out is therefore explicit and local:
+        //     ./gradlew assembleRelease -PskipLintVital
+        //
+        // Never put that flag in CI.
+        checkReleaseBuilds = !project.hasProperty("skipLintVital")
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true

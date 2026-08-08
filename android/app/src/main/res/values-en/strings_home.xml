@@ -108,6 +108,10 @@
     <string name="dreams_transcribe_no_language">The offline language model is not installed on this phone yet.</string>
     <string name="dreams_transcribe_failed">The transcription came back empty. The recording is untouched.</string>
     <string name="dreams_transcribe_failed_engine">This engine returned nothing — it may not be able to read an existing recording. The recording is untouched; try another engine.</string>
+    <string name="dreams_transcript_write">Write the transcript</string>
+    <string name="dreams_transcript_hint">Play it back and type — or dictate with your keyboard\'s mic.</string>
+    <string name="dreams_transcript_dictate_hint">Your keyboard\'s mic types straight into this field. If you use a local voice input (Whisper and the like), that engine does the transcribing and nothing leaves eggshell.</string>
+    <string name="dreams_transcript_edit_hint">Tap the text to correct it.</string>
     <string name="dreams_engine_system">System engine (guaranteed offline)</string>
     <string name="dreams_engine_title">Transcription engine</string>
     <string name="dreams_engine_change">Change engine</string>

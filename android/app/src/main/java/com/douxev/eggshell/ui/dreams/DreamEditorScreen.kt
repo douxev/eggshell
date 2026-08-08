@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -227,6 +228,17 @@ class DreamEditorViewModel @Inject constructor(
                 transcriber.languageSupport(tag) is OnDeviceTranscriber.LanguageSupport.Downloadable
             _state.value = _state.value.copy(modelDownloadable = downloadable)
             refreshEngines()
+        }
+    }
+
+    /** A transcript the user wrote or corrected themselves. */
+    fun writeTranscript(audio: DreamAudio, text: String) {
+        viewModelScope.launch {
+            runCatching { repo.setTranscript(audio.id, text.ifBlank { null }) }
+            _state.value = _state.value.copy(
+                transcribeFailed = false,
+                audio = runCatching { repo.audioFor(dreamId) }.getOrDefault(_state.value.audio),
+            )
         }
     }
 
@@ -606,6 +618,7 @@ fun DreamEditorScreen(
                     canTranscribe = state.transcribeBlocked == null,
                     onPlay = { vm.togglePlayback(clip) },
                     onTranscribe = { vm.transcribeExisting(clip, locale.toLanguageTag()) },
+                    onWriteTranscript = { vm.writeTranscript(clip, it) },
                     onDelete = { vm.deleteAudio(clip) },
                 )
             }
@@ -913,8 +926,10 @@ private fun AudioRow(
     canTranscribe: Boolean,
     onPlay: () -> Unit,
     onTranscribe: () -> Unit,
+    onWriteTranscript: (String) -> Unit,
     onDelete: () -> Unit,
 ) {
+    var editing by remember(clip.id) { mutableStateOf(false) }
     EggCard(
         variant = CardVariant.Low,
         padding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
@@ -936,6 +951,24 @@ private fun AudioRow(
                     .padding(start = 4.dp)
                     .weight(1f),
             )
+            // Always available, engine or no engine. A keyboard with voice
+            // input — Whisper, Gboard, anything — dictates straight into the
+            // field, which is the one path Android leaves open when the
+            // transcription app is an IME: no app may invoke another's
+            // keyboard, but every text field can receive one.
+            if (clip.transcript == null && !canTranscribe) {
+                TextButton(onClick = { editing = true }) {
+                    Icon(
+                        Icons.Filled.Subject,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        stringResource(R.string.dreams_transcript_write),
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+            }
             if (clip.transcript == null && canTranscribe) {
                 TextButton(onClick = onTranscribe, enabled = !transcribing) {
                     Icon(
@@ -965,10 +998,67 @@ private fun AudioRow(
                 text,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .clickable { editing = true },
             )
+            // Editable even when a machine wrote it. On-device models are the
+            // less accurate ones, and a dream is exactly the material they get
+            // wrong — a transcript you cannot correct is one you stop trusting.
+            MicroLabel(stringResource(R.string.dreams_transcript_edit_hint))
         }
     }
+
+    if (editing) {
+        TranscriptDialog(
+            initial = clip.transcript.orEmpty(),
+            onSave = { onWriteTranscript(it); editing = false },
+            onDismiss = { editing = false },
+        )
+    }
+}
+
+/**
+ * Write or correct a voice note's transcript by hand.
+ *
+ * This is what makes the module work on a phone with no usable engine, and it
+ * is not a consolation prize: the field takes dictation from whatever keyboard
+ * the user already trusts. Android forbids one app from driving another's IME,
+ * so a Whisper *keyboard* can never be called by Eggshell — but it can type
+ * into it, and nothing decrypted leaves the app either way.
+ */
+@Composable
+private fun TranscriptDialog(
+    initial: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var text by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dreams_transcript_write)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 140.dp),
+                    placeholder = { Text(stringResource(R.string.dreams_transcript_hint)) },
+                )
+                MicroLabel(stringResource(R.string.dreams_transcript_dictate_hint))
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text.trim()) }) {
+                Text(stringResource(R.string.action_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
 }
 
 @Composable
