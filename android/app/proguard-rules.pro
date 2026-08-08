@@ -80,24 +80,17 @@
 # suppressors above + KSP-generated symbols stay.
 
 # ── AndroidX Biometric / Keystore ───────────────────────────────────────────
-# BiometricPrompt has internal classes loaded by reflection on some OEMs.
-# No blanket keep for androidx.biometric or androidx.camera.
+# No blanket keep for androidx.biometric.
 #
-# Both ship consumer rules written by their own maintainers, aimed at exactly
-# the parts R8 cannot see: biometric keeps the method *names* on its Api* inner
-# classes (32 rules, all `allowobfuscation, allowshrinking`), camera-camera2
-# keeps Camera2Config$DefaultProvider, and camera-core keeps every Quirk
-# subclass — the quirk table is looked up reflectively per device.
+# BiometricPrompt does load internal classes reflectively on some OEMs, which
+# is why a keep was here at all — but the library ships 32 rules of its own for
+# exactly that, keeping the method *names* on its Api* inner classes with
+# `allowobfuscation, allowshrinking`. Ours restated them less precisely and
+# took the shrinking away, holding 167 classes out of R8's reach.
 #
-# `-keep class androidx.camera.** { *; }` on top of that was holding 2 609
-# classes, and biometric another 167, out of R8's reach. That is a quarter of
-# the whole app kept verbatim to re-state, less precisely, rules the libraries
-# already provide.
-#
-# -dontwarn stays: that is about compile-time references, not shrinking.
-
-# ── CameraX ─────────────────────────────────────────────────────────────────
--dontwarn androidx.camera.**
+# There is no CameraX section below any more: the dependency is gone. It was
+# declared, force-kept by a blanket rule, and imported by nothing — see the
+# commit that removed it.
 
 # ── AndroidX EXIFInterface ──────────────────────────────────────────────────
 -keep class androidx.exifinterface.media.ExifInterface { *; }

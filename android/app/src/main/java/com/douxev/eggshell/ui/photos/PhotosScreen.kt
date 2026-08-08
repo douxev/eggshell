@@ -41,7 +41,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -252,7 +252,11 @@ fun PhotosScreen(
         bottomBar = {
             ActionBand {
                 EggFab(
-                    icon = Icons.Filled.AddAPhoto,
+                    // A picture frame, not a camera body. The app has no
+                    // capture path at all — this opens the system picker — and
+                    // an icon promising a shutter is how that gets read as a
+                    // broken camera button rather than the gallery it is.
+                    icon = Icons.Filled.AddPhotoAlternate,
                     contentDescription = stringResource(R.string.media_photos_add),
                     onClick = { pick() },
                 )

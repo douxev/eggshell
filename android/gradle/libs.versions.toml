@@ -24,7 +24,6 @@ workManager = "2.11.2"
 # no stable line past 1.1.0) and depends on fragment 1.6.2.
 biometric = "1.4.0-alpha07"
 datastore = "1.2.1"
-cameraX = "1.6.1"
 # 5.17.0+ ships 16 KB page-aligned libjnidispatch.so (Android 15 requirement)
 jna = "5.19.1"
 reorderable = "3.1.0"
@@ -56,9 +55,6 @@ androidx-biometric = { group = "androidx.biometric", name = "biometric", version
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
 androidx-work-hilt = { group = "androidx.hilt", name = "hilt-work", version.ref = "hiltNavigationCompose" }
 androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
-androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "cameraX" }
-androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraX" }
-androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraX" }
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
