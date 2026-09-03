@@ -35,7 +35,7 @@ class WidgetVisibility @Inject constructor(
             PackageManager.COMPONENT_ENABLED_STATE_DISABLED
         }
 
-        // The reminder widget and all nine module widgets move together. A
+        // The reminder widget and every module widget move together. A
         // module widget carries no vault data, but its *existence in the
         // picker* names a module — which is the disclosure the decoy is there
         // to prevent, and one reachable without ever meeting the PIN prompt.
@@ -55,6 +55,12 @@ class WidgetVisibility @Inject constructor(
         // EggshellWidgetProvider.broadcastRefresh documents: a broadcast action
         // would have to be exported, letting any installed app trigger a render.
         if (!enabled) {
+            // Empty the content mirror too. The providers blank themselves under
+            // a decoy, so nothing is *displayed* either way — but leaving note
+            // titles and journal gauges sitting in a file while the decoy is
+            // active keeps a copy of exactly what the decoy exists to hide.
+            // It is rebuilt at the next real unlock if the decoy is removed.
+            runCatching { WidgetContentMirror(context).clear() }
             val mgr = AppWidgetManager.getInstance(context)
             runCatching {
                 if (mgr.getAppWidgetIds(reminderWidget).isNotEmpty()) {

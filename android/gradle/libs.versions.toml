@@ -35,6 +35,10 @@ pdfboxAndroid = "2.0.27.0"
 # 4.8.0+ ships 16 KB page-aligned native libs (libtesseract, libleptonica, …)
 tesseract4android = "4.9.0"
 exifinterface = "1.4.2"
+junit = "4.13.2"
+# Test-only: runTest + StandardTestDispatcher, so a ViewModel's viewModelScope
+# is drained deterministically instead of racing the assertions.
+coroutinesTest = "1.10.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -65,6 +69,8 @@ androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfboxAndroid" }
 tesseract4android = { group = "com.github.adaptech-cz.Tesseract4Android", name = "tesseract4android", version.ref = "tesseract4android" }
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutinesTest" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

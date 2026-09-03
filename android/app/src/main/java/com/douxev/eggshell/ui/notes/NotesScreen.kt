@@ -281,7 +281,11 @@ fun NotesScreen(
                 )
             }
 
-            items(folders, key = { "f\${it.id}" }) { folder ->
+            // "f" + id, not the escaped literal this used to be: `"f\${it.id}"`
+            // is the same nine characters for every folder, and a LazyColumn
+            // rejects a duplicate key outright — two folders were enough to
+            // take the whole Notes screen down.
+            items(folders, key = { "f" + it.id }) { folder ->
                 FolderRow(
                     name = folder.name,
                     onClick = { onOpenFolder(folder.id, folder.name) },

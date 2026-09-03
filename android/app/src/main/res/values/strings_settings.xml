@@ -61,11 +61,25 @@
     <string name="set_module_photos_sub">Ta timeline datée, chiffrée sur l’appareil.</string>
     <string name="set_module_voice">Voix</string>
     <string name="set_module_voice_sub">Tes extraits audio datés, pour entendre l’évolution.</string>
+    <string name="set_module_sport">Sport</string>
+    <string name="set_module_sport_sub">Tes séances, tes pas et tes séries. Tout reste sur l\'appareil.</string>
 
     <!-- ============ Porte 2 — Sécurité ============ -->
     <string name="set_sec_intro">Tout reste sur ton téléphone. Ces réglages décident de ce qu’il faut pour ouvrir le coffre — et de ce qu’un regard de côté peut en voir.</string>
     <string name="set_sec_section_lock">Mode de verrouillage</string>
     <string name="set_sec_current_mode_fmt">Actuel : %1$s</string>
+    <string name="set_sec_section_pass">Mot de passe</string>
+    <string name="set_sec_change_pass">Changer le mot de passe</string>
+    <string name="set_sec_change_pass_sub">Remplace celui que tu tapes à l’ouverture. L’ancien cesse aussitôt de fonctionner.</string>
+    <string name="set_sec_change_pass_confirm">Confirmer le nouveau mot de passe</string>
+    <string name="set_sec_change_pass_warn_paranoid">En mode parano, ton mot de passe est la clé elle-même : tout le coffre est rechiffré. Ça peut prendre un moment selon le nombre de photos et d’enregistrements. Ne ferme pas l’app.</string>
+    <string name="set_sec_change_pass_working">Rechiffrement du coffre…</string>
+    <string name="set_sec_change_pass_done">Mot de passe changé. L’ancien ne fonctionne plus.</string>
+    <string name="set_sec_change_pass_done_partial">Mot de passe changé. %1$d fichier(s) média étaient déjà illisibles et ont été laissés en place.</string>
+    <string name="set_sec_change_pass_wrong">Mot de passe actuel incorrect.</string>
+    <string name="set_sec_change_pass_same">C’est déjà ton mot de passe actuel.</string>
+    <string name="set_sec_change_pass_na">Ce mode n’utilise pas de mot de passe.</string>
+    <string name="set_sec_change_pass_failed">Échec : %1$s</string>
     <string name="set_sec_section_pins">Code d’accès et PIN de leurre</string>
     <string name="set_sec_section_masking">Icône et nom de l’app</string>
     <string name="set_sec_masking_hint">Ce que ton écran d’accueil affiche. Le changement prend effet tout de suite.</string>

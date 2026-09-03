@@ -77,6 +77,7 @@ import com.douxev.eggshell.data.AppAliasManager
 import com.douxev.eggshell.data.VaultRepository
 import com.douxev.eggshell.security.VaultPrefs
 import com.douxev.eggshell.ui.common.EncryptionNoteCard
+import com.douxev.eggshell.ui.common.MIN_PASSPHRASE_LEN
 import com.douxev.eggshell.ui.common.PasswordField
 import com.douxev.eggshell.ui.common.currentFragmentActivity
 import com.douxev.eggshell.ui.components.ActionBand
@@ -1151,4 +1152,3 @@ private const val LAB_INTERVAL_DAYS = 90
 private const val MEDIA_INTERVAL_DAYS = 30
 
 // Below this, brute-force is fast enough that Argon2id alone can't save us.
-private const val MIN_PASSPHRASE_LEN = 8

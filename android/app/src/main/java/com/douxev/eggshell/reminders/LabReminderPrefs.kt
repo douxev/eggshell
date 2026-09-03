@@ -120,6 +120,19 @@ class LabReminderPrefs(context: Context) {
          *  is the one reminder whose *time* is the whole feature. */
         const val CATEGORY_DREAM = "dream"
 
+        /**
+         * Session reminders for the sport module.
+         *
+         * A category rather than a mirror of its own: this file already IS the
+         * generic non-medication reminder store — the alarm path, the next-due
+         * arithmetic, the priority flag and the notification are all shared, and
+         * the only thing a category changes is which innocuous title the
+         * lockscreen shows. Duplicating that for sport would have bought a
+         * second copy of the one thing that must not drift: what a reminder
+         * says in front of someone else.
+         */
+        const val CATEGORY_SPORT = "sport"
+
         private const val PREFS_NAME = "transition_lab_reminder_prefs"
         private const val KEY_IDS = "ids"
     }

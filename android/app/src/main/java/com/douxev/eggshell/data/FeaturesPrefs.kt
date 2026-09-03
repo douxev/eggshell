@@ -86,6 +86,23 @@ class FeaturesPrefs @Inject constructor(
     private val _dreams = MutableStateFlow(prefs.getBoolean(KEY_DREAMS, true))
     val dreams: StateFlow<Boolean> = _dreams.asStateFlow()
 
+    /**
+     * Sport. OFF by default, unlike Notes and Rêves.
+     *
+     * Those default on because an empty one says nothing about its owner. Sport
+     * is different: switching it on is what makes the app ask for the activity
+     * recognition permission, and an app that requests a body-sensor permission
+     * nobody asked it to is exactly the kind of surprise this app should not
+     * spring on someone.
+     */
+    private val _sport = MutableStateFlow(prefs.getBoolean(KEY_SPORT, false))
+    val sport: StateFlow<Boolean> = _sport.asStateFlow()
+
+    fun setSport(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SPORT, enabled).apply()
+        _sport.value = enabled
+    }
+
     fun setMedications(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_MEDS, enabled).apply()
         _medications.value = enabled
@@ -157,5 +174,6 @@ class FeaturesPrefs @Inject constructor(
         private const val KEY_BLEEDING = "feature_bleeding"
         private const val KEY_APPOINTMENTS = "feature_appointments"
         private const val KEY_DREAMS = "feature_dreams"
+        private const val KEY_SPORT = "feature_sport"
     }
 }

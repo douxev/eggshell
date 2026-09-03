@@ -110,7 +110,7 @@ class ReminderReceiver : BroadcastReceiver() {
         )
         prefs.setNextDue(scheduleId, nextDue)
         alarmScheduler.schedule(scheduleId, nextDue)
-        com.douxev.eggshell.widget.EggshellWidgetProvider.broadcastRefresh(context)
+        com.douxev.eggshell.widget.WidgetRefresh.refreshAll(context)
 
         if (vault.isUnlocked) {
             val pending = goAsync()
@@ -156,7 +156,11 @@ class ReminderReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val now = System.currentTimeMillis()
+                // The widget can say when the dose was actually taken; a
+                // notification action does not, and means "now".
+                val now = intent.getLongExtra(AlarmScheduler.EXTRA_TAKEN_AT_MS, 0L)
+                    .takeIf { it > 0L }
+                    ?: System.currentTimeMillis()
                 if (vault.isUnlocked) {
                     runCatching {
                         val sched = vault.requireSession().listActiveSchedules()
@@ -235,7 +239,7 @@ class ReminderReceiver : BroadcastReceiver() {
                         ).show()
                     }
                 }
-                com.douxev.eggshell.widget.EggshellWidgetProvider.broadcastRefresh(context)
+                com.douxev.eggshell.widget.WidgetRefresh.refreshAll(context)
             } finally {
                 pending.finish()
             }
@@ -261,7 +265,7 @@ class ReminderReceiver : BroadcastReceiver() {
         )
         prefs.setNextDue(labId, nextDue)
         alarmScheduler.scheduleLab(labId, nextDue)
-        com.douxev.eggshell.widget.EggshellWidgetProvider.broadcastRefresh(context)
+        com.douxev.eggshell.widget.WidgetRefresh.refreshAll(context)
     }
 
     /**

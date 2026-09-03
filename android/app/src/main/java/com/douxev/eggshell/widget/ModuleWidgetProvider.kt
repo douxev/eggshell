@@ -16,19 +16,30 @@ import com.douxev.eggshell.modules.ModuleDeepLink
  * A home-screen widget per module: the module's name, its icon, and one or two
  * ways into it.
  *
- * **It renders no data, by construction.** Every module's content lives in the
- * encrypted vault, which is shut whenever the widget draws — a widget is
- * rendered by the launcher's process on its own schedule, long after the app
- * has locked. The only reason [EggshellWidgetProvider] can show anything at all
- * is the deliberate plaintext reminder mirror, which exists precisely so that
- * *timings* can be surfaced without the vault. Building equivalent mirrors for
- * notes, journal entries or photos would mean writing exactly the content this
- * app encrypts into a file any forensic reader can open — the widget would be
- * bought at the price of the thing being widgeted.
+ * **The default render shows no data, and that is the safe default rather than
+ * a limitation to route around.** A widget is drawn by the launcher's process,
+ * on its own schedule, long after the app has locked — so anything it displays
+ * has to exist outside the encrypted vault. For most modules that would mean
+ * writing exactly the content this app encrypts into a file a forensic reader
+ * can open: the widget bought at the price of the thing being widgeted.
  *
- * So these are doors, not dashboards: tap the card to open the module, tap
- * « + » to land on its capture screen. That is a real saving of two taps, and
- * it costs nothing in plaintext.
+ * Two ways out of that, and only two:
+ *
+ * 1. **Data that already lives off-vault.** The reminder mirror
+ *    ([com.douxev.eggshell.reminders.ReminderPrefs]) exists because alarms fire
+ *    while the vault is shut, and it is sealed at rest. A widget reading it
+ *    adds no new disclosure — it shows what the notification already shows.
+ *    [MedsWidgetProvider] is that case, which is why it works in every security
+ *    mode, paranoid included.
+ * 2. **An explicit, per-widget opt-in mirror.** Anything else is the user
+ *    choosing to put a specific slice of their content on the home screen,
+ *    knowing it becomes readable without the passphrase. Off by default, and
+ *    refused outright in paranoid mode, where the whole promise is that nothing
+ *    usable survives without it.
+ *
+ * A subclass that overrides [render] is taking one of those two routes and must
+ * say which. Everything else stays a door: tap the card to open the module, tap
+ * « + » to land on its capture screen.
  *
  * **Decoy.** The receivers are disabled wholesale by [WidgetVisibility] while a
  * decoy PIN is set, which removes them from the launcher's widget picker. This
@@ -38,7 +49,7 @@ import com.douxev.eggshell.modules.ModuleDeepLink
  * check below is what turns a stale card reading « Menstruations » into a blank
  * one on the next update the launcher asks for.
  */
-abstract class ModuleWidgetProvider(private val module: AppModule) : AppWidgetProvider() {
+abstract class ModuleWidgetProvider(internal val module: AppModule) : AppWidgetProvider() {
 
     override fun onUpdate(
         context: Context,
@@ -51,7 +62,7 @@ abstract class ModuleWidgetProvider(private val module: AppModule) : AppWidgetPr
         }
     }
 
-    private fun render(context: Context, manager: AppWidgetManager, widgetId: Int) {
+    protected open fun render(context: Context, manager: AppWidgetManager, widgetId: Int) {
         val views = RemoteViews(context.packageName, R.layout.widget_module)
         val decoyed = runCatching { isDecoyActive(context) }.getOrDefault(false)
 
@@ -100,7 +111,7 @@ abstract class ModuleWidgetProvider(private val module: AppModule) : AppWidgetPr
         manager.updateAppWidget(widgetId, views)
     }
 
-    private fun pendingIntent(context: Context, intent: android.content.Intent, req: Int) =
+    protected fun pendingIntent(context: Context, intent: android.content.Intent, req: Int) =
         PendingIntent.getActivity(
             context,
             // The request code must differ per module as well as per action:
@@ -118,20 +129,26 @@ abstract class ModuleWidgetProvider(private val module: AppModule) : AppWidgetPr
      * plain name always came back empty — which is how a previous version of
      * this check concluded "no decoy" on every install that had one.
      */
-    private fun isDecoyActive(context: Context): Boolean =
+    protected fun isDecoyActive(context: Context): Boolean =
         SecurePrefs.get(context.applicationContext, "transition_vault_prefs")
             .contains("decoy_salt")
 
-    private companion object {
+    protected companion object {
         const val TAG = "ModuleWidget"
         const val REQ_OPEN = 0
         const val REQ_ADD = 1
-        const val REQ_STRIDE = 10
+        /**
+         * Spacing between one module's request codes and the next module's.
+         * Wide enough that a subclass can carve per-row action codes out of its
+         * own slice without colliding with the neighbouring module — see
+         * [MedsWidgetProvider], which uses REQ_ROW_BASE upward.
+         */
+        const val REQ_STRIDE = 100
     }
 }
 
 /** Modules whose « + » has a screen of its own to land on. */
-private val AppModule.hasCaptureScreen: Boolean
+internal val AppModule.hasCaptureScreen: Boolean
     get() = when (this) {
         // Photos and Voix capture from inside their own screen and Poids opens
         // a dialog over its, so none of the three has a route to push.
@@ -141,16 +158,7 @@ private val AppModule.hasCaptureScreen: Boolean
 
 // One concrete receiver per module. They exist because AppWidgetProvider is
 // bound to a manifest <receiver>, and a receiver names exactly one class — a
-// single parameterised provider cannot be pointed at nine widget types.
-class MedsWidgetProvider : ModuleWidgetProvider(AppModule.Meds)
-class JournalWidgetProvider : ModuleWidgetProvider(AppModule.Journal)
-class LabsWidgetProvider : ModuleWidgetProvider(AppModule.Labs)
-class AppointmentsWidgetProvider : ModuleWidgetProvider(AppModule.Appointments)
-class NotesWidgetProvider : ModuleWidgetProvider(AppModule.Notes)
-class WeightWidgetProvider : ModuleWidgetProvider(AppModule.Weight)
-class BleedingWidgetProvider : ModuleWidgetProvider(AppModule.Bleeding)
-class PhotosWidgetProvider : ModuleWidgetProvider(AppModule.Photos)
-class VoiceWidgetProvider : ModuleWidgetProvider(AppModule.Voice)
+// single parameterised provider cannot be pointed at ten widget types.
 
 /**
  * Every module widget, as a fresh provider instance paired with its component.
@@ -168,8 +176,10 @@ internal fun moduleWidgets(context: Context): List<Pair<ComponentName, ModuleWid
         LabsWidgetProvider(),
         AppointmentsWidgetProvider(),
         NotesWidgetProvider(),
+        DreamsWidgetProvider(),
         WeightWidgetProvider(),
         BleedingWidgetProvider(),
         PhotosWidgetProvider(),
         VoiceWidgetProvider(),
+        SportWidgetProvider(),
     ).map { ComponentName(context, it.javaClass) to it }

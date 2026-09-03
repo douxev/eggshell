@@ -34,7 +34,21 @@ import uniffi.transition.NoteImage
 class NotesRepository @Inject constructor(
     private val vault: VaultRepository,
     @ApplicationContext private val context: Context,
-) {
+    /**
+     * Kept in step after every write. A Notes widget configured to show content
+     * reads a mirror, not the vault — so a note edited and not mirrored is a
+     * home screen quietly showing the previous version.
+     *
+     * Cheap when nobody opted in, which is the default: the refresh reads two
+     * sealed prefs and returns.
+     */
+    private val mirrors: com.douxev.eggshell.widget.WidgetMirrorUpdater,
+) : NoteStore {
+
+    /** Never let a widget refresh turn a successful write into a failure. */
+    private suspend fun mirrorChanged() {
+        runCatching { mirrors.refresh() }
+    }
     private val imagesDir: File by lazy {
         File(context.filesDir, "note_images").apply { mkdirs() }
     }
@@ -80,17 +94,19 @@ class NotesRepository @Inject constructor(
         val doomed = runCatching { session.noteImagePathsUnderFolder(id) }.getOrDefault(emptyList())
         session.deleteNoteFolder(id)
         doomed.forEach { runCatching { File(it).delete() } }
+        mirrorChanged()
     }
 
     suspend fun moveToFolder(noteId: Long, folderId: Long?) = withContext(Dispatchers.IO) {
         vault.requireSession().moveNoteToFolder(noteId, folderId)
+        mirrorChanged()
     }
 
-    suspend fun get(id: Long): Note? = withContext(Dispatchers.IO) {
+    override suspend fun get(id: Long): Note? = withContext(Dispatchers.IO) {
         vault.requireSession().getNote(id)
     }
 
-    suspend fun create(title: String, body: String, folderId: Long? = null): Note =
+    override suspend fun create(title: String, body: String, folderId: Long?): Note =
         withContext(Dispatchers.IO) {
             val now = System.currentTimeMillis()
             vault.requireSession().addNote(
@@ -98,11 +114,12 @@ class NotesRepository @Inject constructor(
                     folderId = folderId, title = title, body = body,
                     createdMs = now, updatedMs = now,
                 )
-            )
+            ).also { mirrorChanged() }
         }
 
-    suspend fun update(id: Long, title: String, body: String): Note = withContext(Dispatchers.IO) {
+    override suspend fun update(id: Long, title: String, body: String): Note = withContext(Dispatchers.IO) {
         vault.requireSession().updateNote(id, title, body, System.currentTimeMillis())
+            .also { mirrorChanged() }
     }
 
     /**
@@ -112,20 +129,22 @@ class NotesRepository @Inject constructor(
      * nothing left to say which files belonged to this note, and they would sit
      * on disk until the orphan sweep noticed.
      */
-    suspend fun delete(id: Long) = withContext(Dispatchers.IO) {
+    override suspend fun delete(id: Long) = withContext(Dispatchers.IO) {
         val session = vault.requireSession()
         val doomed = runCatching { session.noteImages(id) }.getOrDefault(emptyList())
         session.deleteNote(id)
         doomed.forEach { runCatching { File(it.filePath).delete() } }
+        mirrorChanged()
     }
 
     suspend fun reorder(idsInOrder: List<Long>) = withContext(Dispatchers.IO) {
         vault.requireSession().reorderNotes(idsInOrder)
+        mirrorChanged()
     }
 
     // -- images --------------------------------------------------------------
 
-    suspend fun images(noteId: Long): List<NoteImage> = withContext(Dispatchers.IO) {
+    override suspend fun images(noteId: Long): List<NoteImage> = withContext(Dispatchers.IO) {
         vault.requireSession().noteImages(noteId)
     }
 
@@ -136,7 +155,7 @@ class NotesRepository @Inject constructor(
      * attachment dropped into a note is exactly as revealing as one added to
      * the gallery, so it must not carry GPS or camera identity either.
      */
-    suspend fun attachImage(noteId: Long, uri: Uri): NoteImage = withContext(Dispatchers.IO) {
+    override suspend fun attachImage(noteId: Long, uri: Uri): NoteImage = withContext(Dispatchers.IO) {
         val session = vault.requireSession()
         val cleaned = readAndStripExif(uri) ?: error("could not decode image at $uri")
         val ciphertext = session.encryptBlob(cleaned)
@@ -159,12 +178,12 @@ class NotesRepository @Inject constructor(
         }
     }
 
-    suspend fun detachImage(image: NoteImage) = withContext(Dispatchers.IO) {
+    override suspend fun detachImage(image: NoteImage): Unit = withContext(Dispatchers.IO) {
         vault.requireSession().deleteNoteImage(image.id)
         runCatching { File(image.filePath).delete() }
     }
 
-    suspend fun decrypt(image: NoteImage): ByteArray = withContext(Dispatchers.IO) {
+    override suspend fun decrypt(image: NoteImage): ByteArray = withContext(Dispatchers.IO) {
         vault.requireSession().decryptBlob(File(image.filePath).readBytes())
     }
 

@@ -49,6 +49,22 @@ class VaultRepository @Inject constructor(
         set(value) {
             field = value
             _unlocked.value = value != null
+            // Withdraw, then repaint, on every transition.
+            //
+            // The lock direction is the one that matters, and it needs both
+            // halves. Emptying the mirror alone changes nothing on screen: a
+            // launcher keeps the last RemoteViews it was handed until something
+            // replaces them, so the note titles would sit on the home screen
+            // for hours after the app locked, straight through the screen-off
+            // the user locked it with. Repainting alone would redraw them from
+            // a mirror that is still full.
+            //
+            // The plain store rather than WidgetMirrorUpdater: the updater
+            // depends on this class, so reaching for it here would be a cycle.
+            if (value == null) {
+                runCatching { com.douxev.eggshell.widget.WidgetContentMirror(context).clear() }
+            }
+            runCatching { com.douxev.eggshell.widget.WidgetRefresh.refreshAll(context) }
         }
 
     /**
@@ -68,6 +84,27 @@ class VaultRepository @Inject constructor(
      */
     private val _unlocked = MutableStateFlow(false)
     val unlocked: StateFlow<Boolean> = _unlocked.asStateFlow()
+
+    /**
+     * True while the vault is deliberately closed for maintenance the user
+     * asked for — today, a paranoid-mode passphrase change, which re-encrypts
+     * the database in place and therefore cannot run with a connection open.
+     *
+     * The router treats "closed" as "the user must re-authenticate", which is
+     * right for every other way a session ends and wrong for this one: it would
+     * tear down the very screen that is driving the operation. Combined with
+     * [unlocked] it says "closed, but not locked — hold".
+     */
+    private val _busy = MutableStateFlow(false)
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    /**
+     * Set when something asked to lock while [busy]. The vault was already
+     * closed, so [lock] had nothing to do — but the request must still be
+     * honoured, or backgrounding the phone mid-rekey would end with the vault
+     * re-opened behind a lock screen the user never passed.
+     */
+    @Volatile private var lockRequestedWhileBusy = false
 
     val isInitialized: Boolean get() = prefs.mode != null
     val currentMode: VaultPrefs.Mode? get() = prefs.mode
@@ -212,6 +249,14 @@ class VaultRepository @Inject constructor(
         session = Vault(dbPath, key)
         prefs.setKdfMaterial(kdf.toPrefs())
         prefs.commitModeAndWrappedKey(VaultPrefs.Mode.PARANOID, null)
+        // Paranoid promises that nothing usable survives without the
+        // passphrase, and the widget content mirror is openable with the
+        // Keystore key alone. Any opt-in that predates this mode was consented
+        // to under a different promise, so it is withdrawn rather than honoured.
+        runCatching {
+            com.douxev.eggshell.widget.WidgetConfigPrefs(context).revokeAllContent()
+            com.douxev.eggshell.widget.WidgetContentMirror(context).clear()
+        }
     }
 
     // -- change mode ---------------------------------------------------------
@@ -235,7 +280,12 @@ class VaultRepository @Inject constructor(
     ): ChangeModeOutcome = withContext(Dispatchers.IO) {
         val current = prefs.mode
             ?: return@withContext ChangeModeOutcome.Failed("vault not initialized")
-        if (current == newMode) return@withContext ChangeModeOutcome.Success
+        // Not a success: nothing was changed. This arm used to swallow the
+        // passphrase-change dialog whole — the UI collected an old and a new
+        // passphrase for PARANOID -> PARANOID, landed here, and reported the
+        // mode as updated. Changing a passphrase now goes through
+        // [changePassphrase]; this only guards against a stale tap.
+        if (current == newMode) return@withContext ChangeModeOutcome.AlreadyInThisMode
 
         if (current == VaultPrefs.Mode.PARANOID || newMode == VaultPrefs.Mode.PARANOID) {
             return@withContext ChangeModeOutcome.RequiresRekey
@@ -359,8 +409,197 @@ class VaultRepository @Inject constructor(
 
     sealed interface ChangeModeOutcome {
         data object Success : ChangeModeOutcome
+        data object AlreadyInThisMode : ChangeModeOutcome
         data object RequiresRekey : ChangeModeOutcome
         data class Failed(val reason: String) : ChangeModeOutcome
+    }
+
+    // -- change passphrase ---------------------------------------------------
+
+    /**
+     * Replace the passphrase that opens the vault, keeping every byte of data.
+     *
+     * This used to not exist. The only route to it in the UI was the mode
+     * picker, and picking the mode you are already in hit
+     * `if (current == newMode) return Success` at the top of [changeMode] —
+     * so the dialog collected an old and a new passphrase, wrote neither, and
+     * reported "Mode mis à jour". The old passphrase kept working because
+     * nothing had ever asked it to stop.
+     *
+     * The two passphrase modes need entirely different work:
+     *
+     * - `KEYSTORE_PASSPHRASE` wraps a random master key with a passphrase-derived
+     *   KEK. A new passphrase is a new wrap of the same key: one Argon2id pass,
+     *   one commit, nothing on disk moves.
+     * - `PARANOID` derives the SQLCipher key from the passphrase itself. There
+     *   is no wrap to replace — the database and every sealed photo, recording
+     *   and note image has to be re-encrypted. See [rekeyUnderNewPassphrase].
+     */
+    suspend fun changePassphrase(
+        currentPassphrase: String,
+        newPassphrase: String,
+    ): ChangePassphraseOutcome = withContext(Dispatchers.IO) {
+        val mode = prefs.mode
+            ?: return@withContext ChangePassphraseOutcome.Failed("vault not initialized")
+        if (newPassphrase.isBlank()) {
+            return@withContext ChangePassphraseOutcome.Failed("empty passphrase")
+        }
+        if (currentPassphrase == newPassphrase) {
+            return@withContext ChangePassphraseOutcome.Unchanged
+        }
+        if (!vaultFileExists) {
+            return@withContext ChangePassphraseOutcome.Failed("vault database missing")
+        }
+        when (mode) {
+            VaultPrefs.Mode.KEYSTORE_PASSPHRASE ->
+                rewrapUnderNewPassphrase(currentPassphrase, newPassphrase)
+            VaultPrefs.Mode.PARANOID ->
+                rekeyUnderNewPassphrase(currentPassphrase, newPassphrase)
+            // Nothing the user typed opens these; there is no passphrase to change.
+            VaultPrefs.Mode.KEYSTORE_ONLY, VaultPrefs.Mode.KEYSTORE_BIOMETRIC ->
+                ChangePassphraseOutcome.NotApplicable
+        }
+    }
+
+    /**
+     * `KEYSTORE_PASSPHRASE`: same master key, new wrap.
+     *
+     * Salt and wrapped blob are committed in a single edit — half of this pair
+     * on disk is a vault nobody can open.
+     */
+    private fun rewrapUnderNewPassphrase(
+        current: String,
+        new: String,
+    ): ChangePassphraseOutcome {
+        val wrapped = prefs.wrappedKey()
+            ?: return ChangePassphraseOutcome.Failed("missing wrapped key")
+        val kdf = prefs.kdfMaterial()
+            ?: return ChangePassphraseOutcome.Failed("missing kdf params")
+        val secret = try {
+            keystore.getOrCreate(requireBiometric = false)
+        } catch (t: Throwable) {
+            return ChangePassphraseOutcome.Failed(describe(t))
+        }
+        // A failure here is the GCM tag refusing the KEK, i.e. the wrong
+        // current passphrase. Anything else (a dead Keystore) would have thrown
+        // above, so this arm can name the cause honestly.
+        val key = try {
+            VaultKey.unwrapWithPassphrase(
+                keystore.decrypt(secret, wrapped), current,
+                kdf.salt, kdf.mCostKib, kdf.tCost, kdf.pCost,
+            )
+        } catch (t: Throwable) {
+            return ChangePassphraseOutcome.WrongPassphrase
+        }
+        return try {
+            val fresh = freshKdfMaterial().toPrefs()
+            val rewrapped = key.wrapWithPassphrase(
+                new, fresh.salt, fresh.mCostKib, fresh.tCost, fresh.pCost,
+            )
+            if (prefs.commitPassphraseWrap(fresh, keystore.encrypt(secret, rewrapped))) {
+                ChangePassphraseOutcome.Success(mediaLeftBehind = 0u)
+            } else {
+                ChangePassphraseOutcome.Failed("failed to persist the new wrap")
+            }
+        } catch (t: Throwable) {
+            ChangePassphraseOutcome.Failed(describe(t))
+        }
+    }
+
+    /**
+     * `PARANOID`: re-encrypt the vault under a key derived from the new
+     * passphrase.
+     *
+     * The passphrase is the key here, so this is a full rewrite of the database
+     * plus every sealed blob. The core does the work; what this function owns
+     * is the ordering that makes a kill survivable:
+     *
+     * 1. Verify the current passphrase — a typo must cost nothing.
+     * 2. Commit the new salt to the *pending* slot, durably, **before** any
+     *    byte moves. It is the only record of what the file would answer to.
+     * 3. Close the session. SQLCipher rekeys in place and an open connection
+     *    would carry on reading pages with the retired key.
+     * 4. Rekey. If the process dies inside it, [unlock] finds the vault opens
+     *    with one salt or the other and finishes or discards accordingly.
+     * 5. Promote the pending salt to active, then reopen.
+     *
+     * `NonCancellable` because steps 2-5 are one indivisible unit from the
+     * user's side. The caller is a ViewModel scope that dies with its screen,
+     * and the route flips as soon as the session closes at step 3 — without
+     * this, the rekey would routinely be cancelled by its own side effect.
+     */
+    private suspend fun rekeyUnderNewPassphrase(
+        current: String,
+        new: String,
+    ): ChangePassphraseOutcome = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+        val kdf = prefs.kdfMaterial()
+            ?: return@withContext ChangePassphraseOutcome.Failed("missing kdf params")
+        val oldKey = try {
+            VaultKey.deriveFromPassphrase(
+                current, kdf.salt, kdf.mCostKib, kdf.tCost, kdf.pCost,
+            ).also { uniffi.transition.vaultVerifyKey(dbPath, it) }
+        } catch (t: Throwable) {
+            return@withContext ChangePassphraseOutcome.WrongPassphrase
+        }
+
+        val fresh = freshKdfMaterial().toPrefs()
+        val newKey = VaultKey.deriveFromPassphrase(
+            new, fresh.salt, fresh.mCostKib, fresh.tCost, fresh.pCost,
+        )
+        if (!prefs.commitPendingKdf(fresh)) {
+            return@withContext ChangePassphraseOutcome.Failed("failed to persist the new salt")
+        }
+
+        _busy.value = true
+        lockRequestedWhileBusy = false
+        session = null
+        try {
+            val report = uniffi.transition.rekeyVault(dbPath, oldKey, newKey)
+            if (!prefs.promotePendingKdf()) {
+                // The bytes have already moved and only the new passphrase opens
+                // them. Refusing to record that would be the data loss, so this
+                // is reported as a failure to persist rather than rolled back —
+                // and unlock's pending-salt fallback still finds the way in.
+                return@withContext ChangePassphraseOutcome.Failed(
+                    "vault re-encrypted but the new salt could not be saved"
+                )
+            }
+            if (!lockRequestedWhileBusy) session = Vault(dbPath, newKey)
+            ChangePassphraseOutcome.Success(mediaLeftBehind = report.blobsUnreadable)
+        } catch (t: Throwable) {
+            // The database never moved: the staged media is unreadable litter
+            // and the pending salt describes a passphrase that was never used.
+            runCatching { uniffi.transition.discardPendingRekey(dbPath) }
+            prefs.clearPendingKdf()
+            if (!lockRequestedWhileBusy) {
+                runCatching {
+                    session = Vault(
+                        dbPath,
+                        VaultKey.deriveFromPassphrase(
+                            current, kdf.salt, kdf.mCostKib, kdf.tCost, kdf.pCost,
+                        ),
+                    )
+                }
+            }
+            ChangePassphraseOutcome.Failed(describe(t))
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    sealed interface ChangePassphraseOutcome {
+        /**
+         * [mediaLeftBehind] counts blobs that could not be decrypted with the
+         * old passphrase and were therefore left where they were. Non-zero
+         * means pre-existing corruption, not something this change caused —
+         * but the user is told, because those files are now the only ones the
+         * retired key would have opened.
+         */
+        data class Success(val mediaLeftBehind: UInt) : ChangePassphraseOutcome
+        data object WrongPassphrase : ChangePassphraseOutcome
+        data object Unchanged : ChangePassphraseOutcome
+        data object NotApplicable : ChangePassphraseOutcome
+        data class Failed(val reason: String) : ChangePassphraseOutcome
     }
 
     // -- unlock --------------------------------------------------------------
@@ -402,11 +641,8 @@ class VaultRepository @Inject constructor(
                 }
                 VaultPrefs.Mode.PARANOID -> {
                     val pass = passphrase ?: return@withContext UnlockOutcome.Failed("passphrase required")
-                    val kdf = prefs.kdfMaterial()
-                        ?: return@withContext UnlockOutcome.Failed("missing kdf params")
-                    VaultKey.deriveFromPassphrase(
-                        pass, kdf.salt, kdf.mCostKib, kdf.tCost, kdf.pCost,
-                    )
+                    resolveParanoidKey(pass)
+                        ?: return@withContext UnlockOutcome.Failed("wrong passphrase")
                 }
             }
             session = Vault(dbPath, key)
@@ -423,6 +659,50 @@ class VaultRepository @Inject constructor(
         } catch (cause: Throwable) {
             UnlockOutcome.Failed(describe(cause))
         }
+    }
+
+    /**
+     * Derive the key that actually opens a paranoid vault, and settle any
+     * passphrase change that a kill interrupted on the way through.
+     *
+     * There are at most two candidate salts: the active one and, while a change
+     * is in flight, the pending one written by [rekeyUnderNewPassphrase] before
+     * it touched a single byte. Which of them opens the database is the answer
+     * to "did the re-encryption land?", and nothing else on disk can say:
+     *
+     * - **Active wins.** The database was never re-encrypted. Whatever media the
+     *   change had already staged is unreadable litter — drop it, and forget the
+     *   passphrase that never came into force.
+     * - **Pending wins.** The database did move and only the media renames were
+     *   outstanding. Replay them, and promote the salt to active.
+     *
+     * Returns null when neither opens the vault, i.e. the passphrase is wrong.
+     * Nothing is settled in that case: a typo must not decide the question.
+     */
+    private fun resolveParanoidKey(passphrase: String): VaultKey? {
+        fun candidate(kdf: VaultPrefs.Kdf): VaultKey? {
+            val key = VaultKey.deriveFromPassphrase(
+                passphrase, kdf.salt, kdf.mCostKib, kdf.tCost, kdf.pCost,
+            )
+            return key.takeIf {
+                runCatching { uniffi.transition.vaultVerifyKey(dbPath, it) }.isSuccess
+            }
+        }
+        val pending = prefs.pendingKdfMaterial()
+
+        prefs.kdfMaterial()?.let(::candidate)?.let { key ->
+            if (pending != null) {
+                runCatching { uniffi.transition.discardPendingRekey(dbPath) }
+                prefs.clearPendingKdf()
+            }
+            return key
+        }
+        pending?.let(::candidate)?.let { key ->
+            runCatching { uniffi.transition.finishPendingRekey(dbPath) }
+            prefs.promotePendingKdf()
+            return key
+        }
+        return null
     }
 
     // -- recovery secret -----------------------------------------------------
@@ -602,6 +882,7 @@ class VaultRepository @Inject constructor(
     }
 
     fun lock() {
+        if (_busy.value) lockRequestedWhileBusy = true
         session = null
     }
 

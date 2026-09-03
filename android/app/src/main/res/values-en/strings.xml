@@ -507,4 +507,77 @@
     <string name="reminders_dream_dialog_title">New dream reminder</string>
     <string name="reminders_dream_edit_dialog_title">Edit reminder</string>
     <string name="reminders_dream_default_label">Record a dream</string>
+
+    <!-- ===== Medications widget ===== -->
+    <string name="meds_widget_description">Your next doses, and two buttons to record one without opening the app.</string>
+    <string name="meds_widget_nothing_due">No dose scheduled.</string>
+    <string name="meds_widget_taken">Taken</string>
+    <string name="meds_widget_taken_at">at…</string>
+    <string name="meds_widget_taken_at_title">Taken at what time?</string>
+    <string name="widget_due_now">now</string>
+    <string name="widget_due_in">in %1$s</string>
+    <string name="widget_due_ago">%1$s ago</string>
+    <string name="widget_minutes">%1$d min</string>
+    <string name="widget_hours">%1$d h</string>
+    <string name="widget_days">%1$d d</string>
+    <string name="meds_widget_config_title">Medications widget</string>
+    <string name="meds_widget_config_rows">How many doses to show</string>
+    <string name="meds_widget_config_hint">This widget reads the same information as your reminder notifications — nothing extra is written outside the vault. It therefore works in paranoid mode too.</string>
+
+    <!-- ===== Notes widget ===== -->
+    <string name="notes_widget_description">Your latest notes, one folder, or a single note — your choice when you add the widget.</string>
+    <string name="notes_widget_locked">Open the app to see your notes.</string>
+    <string name="notes_widget_config_title">Notes widget</string>
+    <string name="notes_widget_config_show">Show my notes on the home screen</string>
+    <string name="notes_widget_config_warning">Whatever the widget shows has to be readable without your password: the title and first line of those notes are copied outside the vault (encrypted, but openable without your passphrase). Nothing is copied while this is off, and everything is erased as soon as the app locks.</string>
+    <string name="notes_widget_config_paranoid">In paranoid mode nothing can be copied outside the vault — the widget stays a plain shortcut. That is what the mode promises.</string>
+    <string name="notes_widget_config_rows">How many notes to show</string>
+    <string name="notes_widget_config_target">What to show</string>
+    <string name="notes_widget_target_recent">Latest notes</string>
+    <string name="notes_widget_target_folder">A folder</string>
+    <string name="notes_widget_target_locked">Open the app, then come back to pick a folder.</string>
+
+    <!-- ===== Module widgets: content ===== -->
+    <string name="widget_content_locked">Open the app to see this module.</string>
+    <string name="widget_appointment_generic">Appointment</string>
+    <string name="widget_bleeding_last">Last bleeding</string>
+    <string name="widget_dream_untitled">Untitled dream</string>
+    <string name="widget_gauge_mood">Mood %1$d</string>
+    <string name="widget_gauge_energy">Energy %1$d</string>
+    <string name="widget_weight_trend">%1$s %2$s over 30 d</string>
+    <string name="widget_config_title">%1$s widget</string>
+    <string name="widget_config_show">Show this module on the home screen</string>
+    <string name="widget_config_warning">Whatever the widget shows has to be readable without your password: these few lines are copied outside the vault (encrypted, but openable without your passphrase). Nothing is copied while this is off, and everything is erased as soon as the app locks.</string>
+    <string name="widget_config_paranoid">In paranoid mode nothing can be copied outside the vault — the widget stays a plain shortcut. That is what the mode promises.</string>
+    <string name="widget_config_rows">How many rows</string>
+    <string name="widget_config_offvault">This widget reads the same information as your reminder notifications — nothing extra is written outside the vault. It therefore works in paranoid mode too.</string>
+
+    <plurals name="widget_photos_count">
+        <item quantity="one">%1$d photo</item>
+        <item quantity="other">%1$d photos</item>
+    </plurals>
+    <plurals name="widget_voice_count">
+        <item quantity="one">%1$d clip</item>
+        <item quantity="other">%1$d clips</item>
+    </plurals>
+
+    <!-- ===== Session reminders (sport) ===== -->
+    <string name="sport_reminder_title">Time to move</string>
+    <string name="reminders_section_sport">Sport</string>
+    <string name="reminders_section_sport_hint">Session reminders. Same as the others: a discreet notification that does not say what it is about.</string>
+    <string name="reminders_no_sport">No session reminders.</string>
+    <string name="reminders_add_sport">Add a session reminder</string>
+    <string name="reminders_sport_dialog_title">New session reminder</string>
+    <string name="reminders_sport_edit_dialog_title">Edit session reminder</string>
+
+    <plurals name="widget_sport_week">
+        <item quantity="one">%1$d session this week</item>
+        <item quantity="other">%1$d sessions this week</item>
+    </plurals>
+    <plurals name="widget_sport_streak">
+        <item quantity="one">%1$d day in a row</item>
+        <item quantity="other">%1$d days in a row</item>
+    </plurals>
+    <string name="widget_sport_minutes">%1$d min of sport</string>
+    <string name="widget_sport_steps">%1$d steps today</string>
 </resources>

@@ -84,6 +84,8 @@
     <string name="module_widget_label_bleeding">Menstruations</string>
     <string name="module_widget_label_photos">Photos</string>
     <string name="module_widget_label_voice">Voix</string>
+    <string name="module_widget_label_dreams">Rêves</string>
+    <string name="module_widget_label_sport">Sport</string>
 
     <!-- ============ Carnet de rêves ============ -->
     <string name="dreams_title">Carnet de rêves</string>
@@ -146,4 +148,82 @@
     <string name="dreams_cd_has_dream">rêve noté</string>
     <string name="dreams_audio_play">Écouter cette note vocale</string>
     <string name="dreams_audio_stop">Arrêter la lecture</string>
+
+    <!-- ============ Sport ============ -->
+    <string name="module_sport">Sport</string>
+    <string name="sport_title">Sport</string>
+    <string name="sport_add">Noter une séance</string>
+    <string name="sport_empty">Aucune séance pour l\'instant. La première ?</string>
+    <string name="sport_session_new">Nouvelle séance</string>
+    <string name="sport_session_edit">Modifier la séance</string>
+    <string name="sport_field_activity">Activité</string>
+    <string name="sport_field_duration">Durée</string>
+    <string name="sport_field_note">Notes</string>
+    <string name="sport_field_when">Date et heure</string>
+    <string name="sport_duration_fmt">%1$s</string>
+    <string name="sport_duration_hm">%1$d h %2$02d</string>
+    <string name="sport_duration_m">%1$d min</string>
+    <string name="sport_no_activity">Sans type</string>
+    <string name="sport_activities_title">Types d\'activité</string>
+    <string name="sport_activities_manage">Gérer les types</string>
+    <string name="sport_activity_new">Nouveau type</string>
+    <string name="sport_activity_name">Nom</string>
+    <string name="sport_activity_kind">Catégorie</string>
+    <string name="sport_kind_cardio">Cardio</string>
+    <string name="sport_kind_strength">Renfo</string>
+    <string name="sport_kind_mobility">Souplesse</string>
+    <string name="sport_kind_other">Autre</string>
+    <string name="sport_activity_archive">Archiver</string>
+    <string name="sport_activity_unarchive">Réactiver</string>
+    <string name="sport_activity_delete_title">Supprimer ce type ?</string>
+    <string name="sport_activity_delete_body">Tes séances sont conservées : elles perdent seulement leur type. Archiver le masque sans rien détacher.</string>
+    <string name="sport_session_delete_title">Supprimer cette séance ?</string>
+    <string name="sport_session_delete_body">Cette séance sera définitivement effacée.</string>
+    <string name="sport_duration_required">Indique une durée.</string>
+
+    <string name="sport_sessions_section">Séances</string>
+    <string name="sport_stat_week_sessions">cette semaine</string>
+    <string name="sport_stat_week_time">de sport</string>
+    <string name="sport_stat_streak">jours d\'affilée</string>
+    <string name="sport_stat_best_streak">Meilleure série : %1$d jours</string>
+    <string name="sport_stat_steps_today">%1$d pas aujourd\'hui sur %2$d</string>
+    <string name="sport_pedometer">Compter mes pas</string>
+    <string name="sport_pedometer_sub">Utilise le capteur de l\'appareil. Rien ne sort du téléphone, et le comptage s\'arrête dès que tu désactives cette option.</string>
+    <string name="sport_steps_none">Aucun pas enregistré ce jour-là.</string>
+    <string name="sport_steps_count">%1$d pas</string>
+
+    <string name="sport_import">Importer</string>
+    <string name="sport_import_title">Importer depuis ta montre</string>
+    <string name="sport_import_empty">Aucune séance trouvée dans ce fichier. Exporte un .gpx ou un .tcx depuis l\'app de ta montre.</string>
+    <string name="sport_import_all_dupes">Ces séances sont déjà enregistrées.</string>
+    <string name="sport_import_confirm">Importer</string>
+    <plurals name="sport_import_found">
+        <item quantity="one">%1$d séance à importer :</item>
+        <item quantity="other">%1$d séances à importer :</item>
+    </plurals>
+    <plurals name="sport_import_skipped">
+        <item quantity="one">%1$d séance déjà enregistrée, ignorée.</item>
+        <item quantity="other">%1$d séances déjà enregistrées, ignorées.</item>
+    </plurals>
+    <plurals name="sport_import_done">
+        <item quantity="one">%1$d séance importée.</item>
+        <item quantity="other">%1$d séances importées.</item>
+    </plurals>
+    <string name="sport_distance_km">%1$.1f km</string>
+    <string name="sport_distance_m">%1$d m</string>
+
+    <string name="sport_hr_title">Fréquence cardiaque</string>
+    <string name="sport_hr_connect">Connecter</string>
+    <string name="sport_hr_disconnect">Déconnecter</string>
+    <string name="sport_hr_idle">Connecte une ceinture, une bague ou ta montre en mode diffusion. Rien ne sort du téléphone.</string>
+    <string name="sport_hr_scanning">Recherche d\'un capteur…</string>
+    <string name="sport_hr_connecting">Connexion à %1$s…</string>
+    <string name="sport_hr_waiting">Connecté. En attente d\'une première mesure.</string>
+    <string name="sport_hr_live">%1$d bpm</string>
+    <string name="sport_hr_bluetooth_off">Le Bluetooth est éteint.</string>
+    <string name="sport_hr_no_permission">Autorisation Bluetooth refusée.</string>
+    <string name="sport_hr_not_found">Aucun capteur trouvé. Vérifie qu\'il diffuse bien sa fréquence cardiaque.</string>
+    <string name="sport_hr_disconnected">Capteur déconnecté.</string>
+    <string name="sport_hr_unsupported">Cet appareil ne gère pas ce type de capteur.</string>
+    <string name="sport_hr_avg">%1$d bpm moy.</string>
 </resources>

@@ -145,6 +145,17 @@ class AlarmScheduler @Inject constructor(
         /** Notification-action broadcast: the user tapped "Pris" on a med
          *  reminder (on phone or, via Wear bridging, on a paired watch). */
         const val ACTION_MARK_TAKEN = "com.douxev.eggshell.MARK_TAKEN"
+        /**
+         * When the dose was actually taken, in epoch ms. Absent means "now",
+         * which is what a notification's « Pris » has always meant.
+         *
+         * The home-screen widget needs the other case: someone who took their
+         * dose at 8h and only reaches their phone at 14h was, until now,
+         * recording 14h. That silently corrupts the one thing the dose log is
+         * for — punctuality — and it does it invisibly, because a wrong
+         * timestamp looks exactly like a right one.
+         */
+        const val EXTRA_TAKEN_AT_MS = "taken_at_ms"
         /** Notification-action broadcast: the user tapped "Passer" (skip) — the
          *  dose was deliberately not taken. Recorded so it can be correlated
          *  with mood, distinct from a silent miss (no log at all). */

@@ -20,7 +20,7 @@ class LabReminderManager @Inject constructor(
     private val prefs = LabReminderPrefs(context)
 
     private fun refreshWidget() {
-        com.douxev.eggshell.widget.EggshellWidgetProvider.broadcastRefresh(context)
+        com.douxev.eggshell.widget.WidgetRefresh.refreshAll(context)
     }
 
     fun list(): List<LabReminderPrefs.Entry> = prefs.all()

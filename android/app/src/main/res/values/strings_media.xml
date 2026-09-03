@@ -94,6 +94,8 @@
     <string name="photos_date_confirm">Ajouter</string>
     <string name="notes_title">Notes</string>
     <string name="notes_add">Nouvelle note</string>
+    <string name="notes_save_failed_title">Note non enregistrée</string>
+    <string name="notes_save_failed_body">Le coffre a refusé l\'écriture : %1$s. Ton texte est toujours là — recopie-le ailleurs si ça se reproduit.</string>
     <string name="notes_untitled">Sans titre</string>
     <string name="notes_empty">Rien ici pour l\'instant. Une première note ?</string>
     <string name="notes_reorder_cd">Déplacer la note</string>

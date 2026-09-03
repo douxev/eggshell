@@ -94,6 +94,8 @@
     <string name="photos_date_confirm">Add</string>
     <string name="notes_title">Notes</string>
     <string name="notes_add">New note</string>
+    <string name="notes_save_failed_title">Note not saved</string>
+    <string name="notes_save_failed_body">The vault refused the write: %1$s. Your text is still here — copy it somewhere else if this keeps happening.</string>
     <string name="notes_untitled">Untitled</string>
     <string name="notes_empty">Nothing here yet. Write a first note?</string>
     <string name="notes_reorder_cd">Move note</string>

@@ -27,7 +27,7 @@ import com.douxev.eggshell.ui.notes.IMAGE_SCHEME
 class NoteExporter @Inject constructor(
     private val notes: NotesRepository,
     @ApplicationContext private val context: Context,
-) {
+) : NoteArchiver {
     private val shareDir: File by lazy {
         File(context.cacheDir, "note_export").apply { mkdirs() }
     }
@@ -39,7 +39,7 @@ class NoteExporter @Inject constructor(
      * previous exports are swept first, and the app's background purge clears
      * the directory when it leaves the foreground.
      */
-    suspend fun exportToCache(noteIds: List<Long>): File = withContext(Dispatchers.IO) {
+    override suspend fun exportToCache(noteIds: List<Long>): File = withContext(Dispatchers.IO) {
         runCatching { shareDir.listFiles()?.forEach { it.delete() } }
         val out = File(shareDir, "notes-${System.currentTimeMillis()}.zip")
 

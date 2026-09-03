@@ -299,6 +299,7 @@ class AppRootViewModel @Inject constructor(
     private val dreamsRepo: com.douxev.eggshell.data.DreamsRepository,
     private val moduleShortcuts: com.douxev.eggshell.modules.ModuleShortcuts,
     private val decoy: com.douxev.eggshell.security.DecoyVerifier,
+    private val widgetMirrors: com.douxev.eggshell.widget.WidgetMirrorUpdater,
 ) : ViewModel() {
 
     enum class Route { Onboarding, Unlock, RecoverySetup, Home }
@@ -324,8 +325,14 @@ class AppRootViewModel @Inject constructor(
         // a session can be dropped while the activity stays started, and that
         // used to leave the app rendering Home with every list empty.
         viewModelScope.launch {
-            repo.unlocked.collect { open ->
-                if (!open && _route.value == Route.Home) _route.value = Route.Unlock
+            // `busy` is the one way the session closes without the user having
+            // to re-authenticate: a passphrase change re-encrypts the database
+            // in place, which cannot be done with a connection open. Flipping
+            // to Unlock there would tear down the screen driving the change.
+            kotlinx.coroutines.flow.combine(repo.unlocked, repo.busy) { open, busy ->
+                open || busy
+            }.collect { usable ->
+                if (!usable && _route.value == Route.Home) _route.value = Route.Unlock
             }
         }
     }
@@ -407,6 +414,15 @@ class AppRootViewModel @Inject constructor(
                 // also catches the end of onboarding, where both the module
                 // selection and the icon choice were just made.
                 runCatching { moduleShortcuts.refresh(decoyActive = decoy.hasDecoyPin) }
+                // Fill the widget content mirror for any instance that opted
+                // in. It is emptied whenever the vault locks, so a real unlock
+                // is the only thing that can put anything back — without this,
+                // an opted-in widget would show its "open the app" line until
+                // the next note was edited.
+                //
+                // Last, and after the orphan sweeps: it reads the vault, and
+                // there is no reason to make the route to Home wait on it.
+                runCatching { widgetMirrors.refresh() }
             }
         }
     }

@@ -24,4 +24,17 @@
              scrim once the platform can do this itself. -->
         <item name="android:navigationBarColor">#80000000</item>
     </style>
+
+    <!-- Host for the widget's time picker: a dialog over whatever is behind it
+         (launcher, lock screen), never a full page of its own. windowIsFloating
+         is deliberately false — the content is a Compose AlertDialog which
+         brings its own window; a floating host under it would draw a second,
+         empty card behind the dialog on some launchers. -->
+    <style name="Theme.Eggshell.Transparent" parent="Theme.Eggshell">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
 </resources>

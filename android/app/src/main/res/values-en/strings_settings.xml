@@ -59,11 +59,25 @@
     <string name="set_module_photos_sub">Your dated timeline, encrypted on the device.</string>
     <string name="set_module_voice">Voice</string>
     <string name="set_module_voice_sub">Your dated audio clips, to hear the change.</string>
+    <string name="set_module_sport">Sport</string>
+    <string name="set_module_sport_sub">Your sessions, steps and streaks. Everything stays on the device.</string>
 
     <!-- ============ Door 2 — Security ============ -->
     <string name="set_sec_intro">Everything stays on your phone. These settings decide what it takes to open the vault — and what a glance over your shoulder can see.</string>
     <string name="set_sec_section_lock">Lock mode</string>
     <string name="set_sec_current_mode_fmt">Current: %1$s</string>
+    <string name="set_sec_section_pass">Password</string>
+    <string name="set_sec_change_pass">Change password</string>
+    <string name="set_sec_change_pass_sub">Replaces the one you type to unlock. The old one stops working immediately.</string>
+    <string name="set_sec_change_pass_confirm">Confirm new password</string>
+    <string name="set_sec_change_pass_warn_paranoid">In paranoid mode your password is the key itself, so the whole vault is re-encrypted. This can take a while depending on how many photos and recordings you have. Do not close the app.</string>
+    <string name="set_sec_change_pass_working">Re-encrypting the vault…</string>
+    <string name="set_sec_change_pass_done">Password changed. The old one no longer works.</string>
+    <string name="set_sec_change_pass_done_partial">Password changed. %1$d media file(s) were already unreadable and were left in place.</string>
+    <string name="set_sec_change_pass_wrong">Wrong current password.</string>
+    <string name="set_sec_change_pass_same">That is already your current password.</string>
+    <string name="set_sec_change_pass_na">This mode does not use a password.</string>
+    <string name="set_sec_change_pass_failed">Failed: %1$s</string>
     <string name="set_sec_section_pins">Access code and decoy PIN</string>
     <string name="set_sec_section_masking">App icon and name</string>
     <string name="set_sec_masking_hint">What your home screen shows. The change takes effect right away.</string>

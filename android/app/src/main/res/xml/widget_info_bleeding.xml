@@ -2,21 +2,32 @@
 <!--
     Widget for the "Menstruations" module.
 
-    No android:configure and no android:previewLayout, for the same reasons the
-    original widget_info.xml documents: an empty configure attribute crashes the
-    launcher on first add, and a previewLayout the launcher can't rasterise can
-    crash the picker. The system default preview is the safe choice.
+    Everything it shows is content that would otherwise exist only inside
+    the encrypted database, so it is drawn from WidgetContentMirror: written
+    only when the user turned this specific widget on, never in paranoid
+    mode, and emptied the moment the vault locks.
 
-    updatePeriodMillis=0 — this widget renders no data, so there is nothing to
-    poll for and no reason to spend the battery.
+    Carries android:configure. The warning the original widget_info.xml records
+    is about an *empty* configure attribute, which crashes the launcher on first
+    add; a declared activity is fine, and per-instance configuration is what
+    lets two widgets of the same module watch different things.
+
+    Still updatePeriodMillis=0. Nothing here changes on a clock — the content is
+    rewritten when the data changes, when the vault unlocks, and, most
+    importantly, when it locks, each pushing a repaint through WidgetRefresh.
+    Polling would wake the device forever to discover nothing.
+
+    No android:previewLayout: one the launcher cannot rasterise can crash the
+    picker, and the system default preview is the safe choice.
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="110dp"
+    android:minWidth="180dp"
     android:minHeight="110dp"
-    android:targetCellWidth="2"
-    android:targetCellHeight="2"
+    android:targetCellWidth="4"
+    android:targetCellHeight="3"
     android:updatePeriodMillis="0"
-    android:initialLayout="@layout/widget_module"
+    android:initialLayout="@layout/widget_content"
+    android:configure="com.douxev.eggshell.widget.WidgetConfigActivity"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:description="@string/module_widget_description"/>

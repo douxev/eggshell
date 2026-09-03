@@ -323,6 +323,14 @@ dependencies {
     implementation(libs.pdfbox.android)
     implementation(libs.tesseract4android)
 
+    // JVM unit tests. No Robolectric and no Compose test rule: the rules worth
+    // pinning here are plain Kotlin (which folder a new note lands in, whether
+    // a blank editor writes anything), and they run in milliseconds without a
+    // device. Anything that needs a real composition — the back gesture
+    // reaching the save — still needs an instrumented test.
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+
     // EXIF stripping on photo import so GPS / camera-model tags don't end up
     // in the encrypted blob (and consequently leak out via share / gallery).
     implementation(libs.androidx.exifinterface)

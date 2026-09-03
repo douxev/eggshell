@@ -15,6 +15,32 @@
     <!-- Media (Phase 5) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
+    <!-- Step counting for the Sport module. Requested only when the user turns
+         the pedometer on, never at install: an app that asks for a body-sensor
+         permission nobody enabled is exactly the surprise this one should not
+         spring. Everything the sensor produces stays in the encrypted vault. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
+
+    <!-- Heart-rate sensors over the standard Bluetooth profile — how a watch is
+         integrated here without Wear OS and without Google Play Services.
+         Requested only when the user asks to connect one.
+
+         neverForLocation on the scan: a BLE scan can be used to infer where
+         someone is, which is why Android ties it to location by default. This
+         app scans for exactly one service UUID and derives nothing about
+         position, and the flag is what says so to the system rather than
+         quietly holding a location capability. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <!-- Pre-Android-12 only: back then a BLE scan required a location
+         permission outright. maxSdkVersion so newer installs never see it. -->
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30"/>
+
     <!--
       Without this, queryIntentServices() for RecognitionService returns an
       empty list on API 30+ and the app cannot see a single third-party
@@ -29,6 +55,12 @@
     </queries>
 
     <uses-feature android:name="android.hardware.microphone" android:required="false"/>
+    <!-- required=false: a phone with no step counter installs and runs fine,
+         it simply cannot offer the pedometer. -->
+    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false"/>
+    <!-- required=false: a phone with no BLE installs and runs fine, it simply
+         cannot connect a heart-rate sensor. -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false"/>
 
     <application
         android:name=".EggshellApplication"
@@ -104,6 +136,45 @@
              Each alias points back to MainActivity but advertises a different
              label + icon. PackageManager.setComponentEnabledSetting toggles
              which one shows up in the launcher. -->
+        <!-- The widget\'s "taken at…" picker. Not exported: only our own
+             PendingIntent starts it, and an exported dialog that records a dose
+             is an action any installed app could trigger.
+
+             showWhenLocked so it can be answered without unlocking the phone —
+             it needs no vault (ReminderReceiver queues the dose when the vault
+             is shut), and requiring an unlock first is exactly the friction
+             that makes the dose get logged at the wrong time. excludeFromRecents
+             so a screenshot of the task list never carries it. -->
+        <activity
+            android:name=".widget.DoseTimeActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Eggshell.Transparent"/>
+
+        <!-- Widget configuration. exported="true" is required: the launcher, a
+             different app, is what starts it via ACTION_APPWIDGET_CONFIGURE.
+             It reads and writes only this widget\'s own row and shows no vault
+             content, so there is nothing here for a caller to harvest. -->
+        <!-- Widget configuration, for every module widget.
+             exported="true" is required: the launcher, a different app, starts
+             it via ACTION_APPWIDGET_CONFIGURE. It reads and writes only the row
+             of the widget being placed and shows no vault content, so there is
+             nothing here for a caller to harvest. -->
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Eggshell.Transparent">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE"/>
+            </intent-filter>
+        </activity>
+
         <activity-alias
             android:name=".alias.NotesAlias"
             android:enabled="false"
@@ -167,10 +238,16 @@
         </receiver>
 
 
-        <!-- Per-module widgets. Each is a door into one module: name, icon and
+        <!-- Per-module widgets. Most are a door into one module: name, icon and
              a way in, and no vault data at all (see ModuleWidgetProvider).
 
-             All nine are disabled as a set by WidgetVisibility while a decoy
+             Traitements is the exception, and a deliberate one: it reads the
+             off-vault reminder mirror that already exists so alarms can fire
+             while the app is locked, and shows what that dose\'s notification
+             already shows. It carries a configuration activity, so it also
+             needs its own <activity> below.
+
+             All ten are disabled as a set by WidgetVisibility while a decoy
              PIN is configured, which pulls them out of the launcher's widget
              picker. Leaving them listed would let anyone holding the phone read
              off the app's module structure from the picker alone — the same
@@ -223,6 +300,30 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info_appointments"/>
+        </receiver>
+
+        <receiver
+            android:name=".widget.SportWidgetProvider"
+            android:exported="true"
+            android:label="@string/module_widget_label_sport">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_sport"/>
+        </receiver>
+
+        <receiver
+            android:name=".widget.DreamsWidgetProvider"
+            android:exported="true"
+            android:label="@string/module_widget_label_dreams">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_dreams"/>
         </receiver>
 
         <receiver

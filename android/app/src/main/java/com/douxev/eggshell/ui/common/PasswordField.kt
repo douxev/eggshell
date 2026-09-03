@@ -22,6 +22,15 @@ import androidx.compose.ui.text.input.VisualTransformation
 import com.douxev.eggshell.R
 
 /**
+ * Shortest passphrase the app will accept, anywhere it accepts one.
+ *
+ * Onboarding and the change-password dialog have to agree: a vault created
+ * under one rule and re-keyed under a looser one would quietly weaken itself,
+ * and under a stricter one would refuse a passphrase it had already issued.
+ */
+const val MIN_PASSPHRASE_LEN = 8
+
+/**
  * Password input with a built-in show/hide toggle.
  *
  * Always sets `KeyboardType.Password` + `flagNoPersonalizedLearning` so the IME

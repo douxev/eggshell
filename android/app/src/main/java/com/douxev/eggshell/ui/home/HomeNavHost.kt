@@ -179,6 +179,7 @@ fun HomeNavHost(
                     onOpenVoice = { nav.navigate(Routes.VOICE) },
                     onOpenNotes = { nav.navigate("notes") },
                     onOpenDreams = { nav.navigate(Routes.DREAMS) },
+                    onOpenSport = { nav.navigate(Routes.SPORT) },
                     onOpenFullJournal = { nav.navigate(Routes.JOURNAL_ADD) },
                     onAddMedication = { nav.navigate(Routes.MED_ADD) },
                     onMoodSaved = { confirmSaved(offerViewJournal = true) },
@@ -400,20 +401,52 @@ fun HomeNavHost(
                     onOpenFolder = { id, label ->
                         nav.navigate("notes?folder=$id&name=" + android.net.Uri.encode(label))
                     },
-                    onOpenNote = { id -> nav.navigate("notes/edit?id=$id") },
-                    onNewNote = { nav.navigate("notes/edit?id=-1") },
+                    onOpenNote = { id -> nav.navigate("notes/edit?id=$id&folder=$folder") },
+                    // The folder travels with the route: a note written inside
+                    // one belongs in it, and the editor has no other way to know.
+                    onNewNote = { nav.navigate("notes/edit?id=-1&folder=$folder") },
                 )
             }
             composable(
                 Routes.NOTE_EDIT,
+                arguments = listOf(
+                    navArgument("id") { type = NavType.LongType; defaultValue = -1L },
+                    navArgument("folder") { type = NavType.LongType; defaultValue = -1L },
+                ),
+            ) { entry ->
+                val id = entry.arguments?.getLong("id") ?: -1L
+                val folder = entry.arguments?.getLong("folder") ?: -1L
+                com.douxev.eggshell.ui.notes.NoteEditorScreen(
+                    noteId = id.takeIf { it >= 0 },
+                    folderId = folder.takeIf { it >= 0 },
+                    onBack = { nav.popBackStack() },
+                )
+            }
+
+            // ---- Sport ----------------------------------------------------
+            composable(Routes.SPORT) {
+                com.douxev.eggshell.ui.sport.SportScreen(
+                    onBack = { nav.popBackStack() },
+                    onAddSession = { nav.navigate(Routes.SPORT_SESSION_NEW) },
+                    onOpenSession = { id -> nav.navigate("sport/session?id=$id") },
+                    onManageActivities = { nav.navigate(Routes.SPORT_ACTIVITIES) },
+                )
+            }
+            composable(
+                Routes.SPORT_SESSION,
                 arguments = listOf(navArgument("id") {
                     type = NavType.LongType
                     defaultValue = -1L
                 }),
             ) { entry ->
                 val id = entry.arguments?.getLong("id") ?: -1L
-                com.douxev.eggshell.ui.notes.NoteEditorScreen(
-                    noteId = id.takeIf { it >= 0 },
+                com.douxev.eggshell.ui.sport.SportSessionEditorScreen(
+                    sessionId = id.takeIf { it >= 0 },
+                    onBack = { nav.popBackStack() },
+                )
+            }
+            composable(Routes.SPORT_ACTIVITIES) {
+                com.douxev.eggshell.ui.sport.SportActivitiesScreen(
                     onBack = { nav.popBackStack() },
                 )
             }
@@ -521,7 +554,11 @@ object Routes {
     const val DREAM_EDIT = "dreams/edit?id={id}&night={night}"
 
     const val NOTES = "notes?folder={folder}&name={name}"
-    const val NOTE_EDIT = "notes/edit?id={id}"
+    const val NOTE_EDIT = "notes/edit?id={id}&folder={folder}"
+    const val SPORT = "sport"
+    const val SPORT_SESSION = "sport/session?id={id}"
+    const val SPORT_SESSION_NEW = "sport/session?id=-1"
+    const val SPORT_ACTIVITIES = "sport/activities"
 
     const val SETTINGS = "settings"
     const val SETTINGS_MODULES = "settings/modules"
@@ -565,6 +602,7 @@ object Routes {
             com.douxev.eggshell.modules.AppModule.Voice -> VOICE
             com.douxev.eggshell.modules.AppModule.Notes -> "notes"
             com.douxev.eggshell.modules.AppModule.Dreams -> DREAMS
+            com.douxev.eggshell.modules.AppModule.Sport -> SPORT
         }
 
     /**
@@ -580,8 +618,9 @@ object Routes {
             com.douxev.eggshell.modules.AppModule.Labs -> HORMONES_ADD
             com.douxev.eggshell.modules.AppModule.Bleeding -> BLEEDING_ADD
             com.douxev.eggshell.modules.AppModule.Appointments -> APPOINTMENTS_ADD
-            com.douxev.eggshell.modules.AppModule.Notes -> "notes/edit?id=-1"
+            com.douxev.eggshell.modules.AppModule.Notes -> "notes/edit?id=-1&folder=-1"
             com.douxev.eggshell.modules.AppModule.Dreams -> dreamEdit(-1L)
+            com.douxev.eggshell.modules.AppModule.Sport -> SPORT_SESSION_NEW
             com.douxev.eggshell.modules.AppModule.Weight,
             com.douxev.eggshell.modules.AppModule.Photos,
             com.douxev.eggshell.modules.AppModule.Voice -> null

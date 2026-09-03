@@ -69,6 +69,9 @@ class HomeViewModel @Inject constructor(
         // frame before the flags flow emits.
         val notes: Boolean = true,
         val dreams: Boolean = true,
+        // Off by default, matching FeaturesPrefs: turning Sport on is what makes
+        // the app ask for the activity-recognition permission.
+        val sport: Boolean = false,
     )
 
     /** A launcher badge. Counters win over dots, and at most two are shown. */
@@ -120,6 +123,7 @@ class HomeViewModel @Inject constructor(
         voice = features.voiceTab.value,
         notes = features.notes.value,
         dreams = features.dreams.value,
+        sport = features.sport.value,
     )
 
     fun refresh() {

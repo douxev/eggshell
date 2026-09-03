@@ -312,6 +312,19 @@ fun RemindersScreen(
                 onDelete = vm::deleteLab,
             )
 
+            categorySection(
+                titleRes = R.string.reminders_section_sport,
+                hintRes = R.string.reminders_section_sport_hint,
+                emptyRes = R.string.reminders_no_sport,
+                addDescriptionRes = R.string.reminders_add_sport,
+                category = LabReminderPrefs.CATEGORY_SPORT,
+                state = state,
+                onAdd = { dialogTarget = LabDialogTarget.New(LabReminderPrefs.CATEGORY_SPORT) },
+                onEdit = { entry -> dialogTarget = LabDialogTarget.Edit(entry) },
+                onTogglePriority = vm::setLabPriority,
+                onDelete = vm::deleteLab,
+            )
+
             // -- Rendez-vous : read-only recap --------------------------------
             item { SectionHeader(stringResource(R.string.reminders_section_appointments)) }
             item { Hint(stringResource(R.string.reminders_section_appointments_hint)) }
@@ -338,6 +351,7 @@ fun RemindersScreen(
                 LabReminderPrefs.CATEGORY_VOICE -> R.string.reminders_voice_edit_dialog_title
                 LabReminderPrefs.CATEGORY_JOURNAL -> R.string.reminders_journal_edit_dialog_title
                 LabReminderPrefs.CATEGORY_DREAM -> R.string.reminders_dream_edit_dialog_title
+                LabReminderPrefs.CATEGORY_SPORT -> R.string.reminders_sport_edit_dialog_title
                 else -> R.string.reminders_lab_edit_dialog_title
             }
             is LabDialogTarget.New -> when (category) {
@@ -345,6 +359,7 @@ fun RemindersScreen(
                 LabReminderPrefs.CATEGORY_VOICE -> R.string.reminders_voice_dialog_title
                 LabReminderPrefs.CATEGORY_JOURNAL -> R.string.reminders_journal_dialog_title
                 LabReminderPrefs.CATEGORY_DREAM -> R.string.reminders_dream_dialog_title
+                LabReminderPrefs.CATEGORY_SPORT -> R.string.reminders_sport_dialog_title
                 else -> R.string.reminders_lab_dialog_title
             }
         }

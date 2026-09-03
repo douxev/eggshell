@@ -73,6 +73,7 @@ class ReminderNotifications @Inject constructor(
                 LabReminderPrefs.CATEGORY_VOICE -> R.string.voice_reminder_title
                 LabReminderPrefs.CATEGORY_JOURNAL -> R.string.journal_reminder_title
                 LabReminderPrefs.CATEGORY_DREAM -> R.string.dream_reminder_title
+                LabReminderPrefs.CATEGORY_SPORT -> R.string.sport_reminder_title
                 else -> R.string.lab_reminder_title
             }
         )

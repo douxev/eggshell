@@ -41,7 +41,7 @@ class ScheduleRepository @Inject constructor(
     }
 
     private fun refreshWidget() {
-        com.douxev.eggshell.widget.EggshellWidgetProvider.broadcastRefresh(context)
+        com.douxev.eggshell.widget.WidgetRefresh.refreshAll(context)
     }
 
     suspend fun listAllActive(): List<DoseSchedule> = withContext(Dispatchers.IO) {

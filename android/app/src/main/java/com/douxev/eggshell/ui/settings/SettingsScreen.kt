@@ -66,6 +66,7 @@ import com.douxev.eggshell.data.VaultRepository
 import com.douxev.eggshell.security.DecoyVerifier
 import com.douxev.eggshell.security.VaultPrefs
 import com.douxev.eggshell.ui.common.EncryptionNoteCard
+import com.douxev.eggshell.ui.common.MIN_PASSPHRASE_LEN
 import com.douxev.eggshell.ui.common.PasswordField
 import com.douxev.eggshell.ui.common.ScreenHeader
 import com.douxev.eggshell.ui.components.CardVariant
@@ -145,6 +146,49 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * True while the vault is being re-encrypted under a new passphrase. The
+     * screen turns this into a modal the user cannot dismiss: in paranoid mode
+     * the work is a full rewrite of the database and every sealed blob, and
+     * walking away mid-way is the one thing that makes it expensive to
+     * recover from.
+     */
+    private val _changingPassphrase = MutableStateFlow(false)
+    val changingPassphrase: StateFlow<Boolean> = _changingPassphrase.asStateFlow()
+
+    /** Whether this vault has a passphrase at all — the section is hidden otherwise. */
+    val usesPassphrase: Boolean
+        get() = vault.currentMode == VaultPrefs.Mode.KEYSTORE_PASSPHRASE ||
+            vault.currentMode == VaultPrefs.Mode.PARANOID
+
+    /**
+     * The outcome of the last passphrase change, as a value rather than as
+     * prose. The screen turns it into copy — a ViewModel holding a
+     * `Resources` would pick the strings once, at call time, and keep showing
+     * them in the previous language after a switch.
+     */
+    private val _passphraseResult =
+        MutableStateFlow<VaultRepository.ChangePassphraseOutcome?>(null)
+    val passphraseResult: StateFlow<VaultRepository.ChangePassphraseOutcome?> =
+        _passphraseResult.asStateFlow()
+
+    fun dismissPassphraseResult() { _passphraseResult.value = null }
+
+    fun changePassphrase(current: String, new: String) {
+        viewModelScope.launch {
+            _changingPassphrase.value = true
+            // Deliberately not cancelled with the screen: the repository runs
+            // the rewrite under NonCancellable, so the only thing a teardown
+            // could lose is this flag, and the modal that reads it.
+            val out = vault.changePassphrase(current, new)
+            _changingPassphrase.value = false
+            _passphraseResult.value = out
+            if (out is VaultRepository.ChangePassphraseOutcome.Success) {
+                _currentMode.value = vault.currentMode
+            }
+        }
+    }
+
     fun changeMode(
         newMode: VaultPrefs.Mode,
         currentPassphrase: String?,
@@ -158,6 +202,8 @@ class SettingsViewModel @Inject constructor(
                     _currentMode.value = vault.currentMode
                     _message.value = "Mode mis à jour."
                 }
+                VaultRepository.ChangeModeOutcome.AlreadyInThisMode ->
+                    _message.value = "C'est déjà ton mode actuel."
                 VaultRepository.ChangeModeOutcome.RequiresRekey ->
                     _message.value = "Le mode parano nécessite une opération de re-chiffrement, à venir dans une future version."
                 is VaultRepository.ChangeModeOutcome.Failed ->
@@ -227,6 +273,9 @@ fun SettingsScreen(
     var exportPass by remember { mutableStateOf("") }
     var importPass by remember { mutableStateOf("") }
     var modeDialog by remember { mutableStateOf<VaultPrefs.Mode?>(null) }
+    var passphraseDialog by remember { mutableStateOf(false) }
+    val changingPassphrase by vm.changingPassphrase.collectAsState()
+    val passphraseResult by vm.passphraseResult.collectAsState()
 
     // Decoy is available in every security mode — when set, the lock screen
     // always presents a PIN keypad and Keystore-only / biometric modes
@@ -285,7 +334,28 @@ fun SettingsScreen(
             }
             items(VaultPrefs.Mode.entries.size) { index ->
                 val m = VaultPrefs.Mode.entries[index]
-                ModeRow(mode = m, selected = m == mode, onClick = { modeDialog = m })
+                ModeRow(
+                    mode = m,
+                    selected = m == mode,
+                    // Tapping the mode you are already in used to open the
+                    // change-mode dialog, which asked for an old and a new
+                    // passphrase and then did nothing with either. Changing a
+                    // passphrase has its own section below; this row only ever
+                    // means "switch".
+                    onClick = { if (m == mode) passphraseDialog = vm.usesPassphrase else modeDialog = m },
+                )
+            }
+
+            // -- Passphrase ---------------------------------------------------
+            if (vm.usesPassphrase) {
+                item { SectionSpacer(stringResource(R.string.set_sec_section_pass)) }
+                item {
+                    ListRow(
+                        title = stringResource(R.string.set_sec_change_pass),
+                        subtitle = stringResource(R.string.set_sec_change_pass_sub),
+                        onClick = { passphraseDialog = true },
+                    )
+                }
             }
 
             // -- Access + decoy PIN pair (available in every mode) ------------
@@ -543,6 +613,50 @@ fun SettingsScreen(
         )
     }
 
+    if (passphraseDialog) {
+        ChangePassphraseDialog(
+            paranoid = mode == VaultPrefs.Mode.PARANOID,
+            onDismiss = { passphraseDialog = false },
+            onConfirm = { current, new ->
+                passphraseDialog = false
+                vm.changePassphrase(current, new)
+            },
+        )
+    }
+
+    // Not dismissable, and no cancel: the rewrite is already running under
+    // NonCancellable in the repository, so a cancel button would only lie.
+    if (changingPassphrase) {
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = { Text(stringResource(R.string.set_sec_change_pass_working)) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Text(
+                        stringResource(R.string.set_sec_change_pass_warn_paranoid),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(start = 12.dp),
+                    )
+                }
+            },
+        )
+    }
+
+    passphraseResult?.let { out ->
+        AlertDialog(
+            onDismissRequest = { vm.dismissPassphraseResult() },
+            confirmButton = {
+                TextButton(onClick = { vm.dismissPassphraseResult() }) { Text("OK") }
+            },
+            text = { Text(passphraseResultCopy(out)) },
+        )
+    }
+
     message?.let {
         AlertDialog(
             onDismissRequest = { vm.dismissMessage() },
@@ -576,6 +690,102 @@ private fun aliasLabel(v: AppAliasManager.Variant): String = stringResource(
         AppAliasManager.Variant.WEATHER -> R.string.alias_weather
     },
 )
+
+/** The last passphrase change, in words. See [SettingsViewModel.passphraseResult]. */
+@Composable
+private fun passphraseResultCopy(out: VaultRepository.ChangePassphraseOutcome): String =
+    when (out) {
+        is VaultRepository.ChangePassphraseOutcome.Success ->
+            if (out.mediaLeftBehind == 0u) stringResource(R.string.set_sec_change_pass_done)
+            else stringResource(
+                R.string.set_sec_change_pass_done_partial, out.mediaLeftBehind.toInt(),
+            )
+        VaultRepository.ChangePassphraseOutcome.WrongPassphrase ->
+            stringResource(R.string.set_sec_change_pass_wrong)
+        VaultRepository.ChangePassphraseOutcome.Unchanged ->
+            stringResource(R.string.set_sec_change_pass_same)
+        VaultRepository.ChangePassphraseOutcome.NotApplicable ->
+            stringResource(R.string.set_sec_change_pass_na)
+        is VaultRepository.ChangePassphraseOutcome.Failed ->
+            stringResource(R.string.set_sec_change_pass_failed, out.reason)
+    }
+
+/**
+ * Current passphrase, new one, and the new one again.
+ *
+ * The confirmation field is not ceremony. In paranoid mode this rewrites the
+ * database under a key derived from what was typed here; a typo that both
+ * fields share is at least a typo the user made twice, and a typo in only one
+ * of them never reaches the vault at all.
+ */
+@Composable
+private fun ChangePassphraseDialog(
+    paranoid: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (current: String, new: String) -> Unit,
+) {
+    var current by remember { mutableStateOf("") }
+    var new by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    val longEnough = new.length >= MIN_PASSPHRASE_LEN
+    val matches = new == confirm
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.set_sec_change_pass)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (paranoid) {
+                    Text(
+                        stringResource(R.string.set_sec_change_pass_warn_paranoid),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                PasswordField(
+                    value = current,
+                    onValueChange = { current = it },
+                    label = stringResource(R.string.settings_current_passphrase),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                PasswordField(
+                    value = new,
+                    onValueChange = { new = it },
+                    label = stringResource(R.string.settings_new_passphrase),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                PasswordField(
+                    value = confirm,
+                    onValueChange = { confirm = it },
+                    label = stringResource(R.string.set_sec_change_pass_confirm),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (new.isNotEmpty() && !longEnough) {
+                    Text(
+                        stringResource(R.string.passphrase_too_short, MIN_PASSPHRASE_LEN),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                } else if (confirm.isNotEmpty() && !matches) {
+                    Text(
+                        stringResource(R.string.passphrase_mismatch),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = current.isNotBlank() && longEnough && matches,
+                onClick = { onConfirm(current, new) },
+            ) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
 
 @Composable
 private fun ChangeModeDialog(

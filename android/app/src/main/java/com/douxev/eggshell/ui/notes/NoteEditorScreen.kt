@@ -63,8 +63,8 @@ import uniffi.transition.NoteImage
 
 @HiltViewModel
 class NoteEditorViewModel @Inject constructor(
-    private val repo: NotesRepository,
-    private val exporter: com.douxev.eggshell.data.NoteExporter,
+    private val repo: com.douxev.eggshell.data.NoteStore,
+    private val exporter: com.douxev.eggshell.data.NoteArchiver,
 ) : ViewModel() {
 
     private val _title = MutableStateFlow("")
@@ -78,6 +78,29 @@ class NoteEditorViewModel @Inject constructor(
 
     /** Null until the note exists in the vault — a brand-new note has no id yet. */
     private var noteId: Long? = null
+
+    /**
+     * The folder the editor was opened from, and therefore where a new note
+     * belongs. Null is the root.
+     *
+     * The editor used not to be told this at all, so every note written from
+     * inside a folder was created at the root: the user went back to the folder
+     * they had just written in and found it empty.
+     */
+    private var folderId: Long? = null
+
+    /**
+     * Why the last save failed, if it did.
+     *
+     * It used to be `runCatching { … }.isSuccess` with the boolean thrown away
+     * at the call site — a note that failed to write left the screen exactly
+     * like one that succeeded, which is how "creating a note does nothing"
+     * could be true without a single visible error.
+     */
+    private val _saveError = MutableStateFlow<String?>(null)
+    val saveError: StateFlow<String?> = _saveError.asStateFlow()
+
+    fun dismissSaveError() { _saveError.value = null }
 
     /**
      * Read or write.
@@ -94,8 +117,9 @@ class NoteEditorViewModel @Inject constructor(
 
     fun setPreview(v: Boolean) { _preview.value = v }
 
-    fun load(id: Long?) {
+    fun load(id: Long?, folder: Long?) {
         noteId = id
+        folderId = folder
         if (id == null) return
         viewModelScope.launch {
             repo.get(id)?.let {
@@ -117,7 +141,8 @@ class NoteEditorViewModel @Inject constructor(
      */
     fun attach(uri: android.net.Uri) {
         viewModelScope.launch {
-            val id = noteId ?: runCatching { repo.create(_title.value, _body.value).id }
+            val id = noteId ?: runCatching { repo.create(_title.value, _body.value, folderId).id }
+                .onFailure { _saveError.value = describe(it) }
                 .getOrNull()?.also { noteId = it } ?: return@launch
             val img = runCatching { repo.attachImage(id, uri) }.getOrNull()
             if (img != null) {
@@ -140,20 +165,34 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
-    /** Returns true when there is something worth keeping. */
+    /**
+     * Persist what is on screen. Returns false only when something was worth
+     * keeping and could not be written — the caller stays put in that case, so
+     * the text is still there to retry or copy out.
+     *
+     * Backing out of an untouched blank editor is still a no-op: opening the
+     * editor and changing your mind should leave nothing behind.
+     */
     suspend fun save(): Boolean {
         val hasContent = _title.value.isNotBlank() || _body.value.isNotBlank() || _images.value.isNotEmpty()
         val id = noteId
-        return when {
-            id != null -> {
-                runCatching { repo.update(id, _title.value, _body.value) }.isSuccess
+        val outcome = when {
+            id != null -> runCatching { repo.update(id, _title.value, _body.value) }
+            hasContent -> runCatching {
+                repo.create(_title.value, _body.value, folderId).also { noteId = it.id }
             }
-            // Never persist an untouched blank note: opening the editor and
-            // backing out should leave no trace in the list.
-            hasContent -> runCatching { repo.create(_title.value, _body.value) }.isSuccess
-            else -> true
+            else -> return true
         }
+        outcome.exceptionOrNull()?.let { _saveError.value = describe(it) }
+        return outcome.isSuccess
     }
+
+    /**
+     * "ClassName: message". A bare `message` is often null or one cryptic word,
+     * and the class name is what makes a user's screenshot diagnosable.
+     */
+    private fun describe(t: Throwable): String =
+        "${t::class.java.simpleName}: ${t.message ?: "no detail"}"
 
     fun delete(onDone: () -> Unit) {
         val id = noteId
@@ -192,6 +231,8 @@ class NoteEditorViewModel @Inject constructor(
 @Composable
 fun NoteEditorScreen(
     noteId: Long?,
+    /** The folder the editor was opened from. A new note is created there. */
+    folderId: Long?,
     onBack: () -> Unit,
     vm: NoteEditorViewModel = hiltViewModel(),
 ) {
@@ -199,12 +240,13 @@ fun NoteEditorScreen(
     val body by vm.body.collectAsState()
     val images by vm.images.collectAsState()
     val preview by vm.preview.collectAsState()
+    val saveError by vm.saveError.collectAsState()
     var confirmDelete by remember { mutableStateOf(false) }
 
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val ctx = androidx.compose.ui.platform.LocalContext.current
 
-    LaunchedEffect(noteId) { vm.load(noteId) }
+    LaunchedEffect(noteId, folderId) { vm.load(noteId, folderId) }
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -212,10 +254,35 @@ fun NoteEditorScreen(
 
     val leave = {
         scope.launch {
-            vm.save()
-            onBack()
+            // Stay put when the write failed: the dialog below explains why,
+            // and the text is still on screen to retry or copy out. Leaving
+            // anyway is how a failed save became indistinguishable from a
+            // successful one.
+            if (vm.save()) onBack()
         }
         Unit
+    }
+
+    // The back gesture and the header arrow must do the same thing.
+    //
+    // Only the arrow used to save. Everything else — the system back button,
+    // the edge swipe, the predictive-back gesture — went straight to the nav
+    // controller's own handler and popped the screen, discarding whatever had
+    // just been typed. On a phone driven by gestures that is every note the
+    // user writes, which is what "creating a note doesn't work" was. The arrow
+    // is also the first item of a scrolling list, so on a long note it is not
+    // even on screen to be tapped.
+    androidx.activity.compose.BackHandler { leave() }
+
+    saveError?.let { reason ->
+        AlertDialog(
+            onDismissRequest = { vm.dismissSaveError() },
+            title = { Text(stringResource(R.string.notes_save_failed_title)) },
+            text = { Text(stringResource(R.string.notes_save_failed_body, reason)) },
+            confirmButton = {
+                TextButton(onClick = { vm.dismissSaveError() }) { Text("OK") }
+            },
+        )
     }
 
     if (confirmDelete) {

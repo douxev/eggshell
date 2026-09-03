@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Bloodtype
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -64,6 +65,7 @@ class FeaturesViewModel @Inject constructor(
     val voiceTab: StateFlow<Boolean> = prefs.voiceTab
     val notes: StateFlow<Boolean> = prefs.notes
     val dreams: StateFlow<Boolean> = prefs.dreams
+    val sport: StateFlow<Boolean> = prefs.sport
     val bleeding: StateFlow<Boolean> = prefs.bleeding
     val appointments: StateFlow<Boolean> = prefs.appointments
 
@@ -75,6 +77,7 @@ class FeaturesViewModel @Inject constructor(
     fun setVoiceTab(v: Boolean) = prefs.setVoiceTab(v).also { syncShortcuts() }
     fun setNotes(v: Boolean) = prefs.setNotes(v).also { syncShortcuts() }
     fun setDreams(v: Boolean) = prefs.setDreams(v).also { syncShortcuts() }
+    fun setSport(v: Boolean) = prefs.setSport(v).also { syncShortcuts() }
     fun setBleeding(v: Boolean) = prefs.setBleeding(v).also { syncShortcuts() }
     fun setAppointments(v: Boolean) = prefs.setAppointments(v).also { syncShortcuts() }
 
@@ -115,6 +118,7 @@ fun FeaturesScreen(
     val voice by vm.voiceTab.collectAsState()
     val notes by vm.notes.collectAsState()
     val dreams by vm.dreams.collectAsState()
+    val sport by vm.sport.collectAsState()
 
     Scaffold(containerColor = MaterialTheme.colorScheme.surface) { padding ->
         LazyColumn(
@@ -246,6 +250,16 @@ fun FeaturesScreen(
                     subtitle = stringResource(R.string.set_module_dreams_sub),
                     checked = dreams,
                     onCheckedChange = vm::setDreams,
+                )
+            }
+            item {
+                ModuleRow(
+                    icon = Icons.Filled.DirectionsRun,
+                    family = ModuleFamily.Other,
+                    title = stringResource(R.string.set_module_sport),
+                    subtitle = stringResource(R.string.set_module_sport_sub),
+                    checked = sport,
+                    onCheckedChange = vm::setSport,
                 )
             }
 

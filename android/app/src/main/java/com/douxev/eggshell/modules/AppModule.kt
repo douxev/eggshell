@@ -48,7 +48,8 @@ enum class AppModule(
     Weight(ModuleBadgePrefs.Module.Weight, R.string.module_weight, R.drawable.ic_module_weight, 6),
     Bleeding(ModuleBadgePrefs.Module.Bleeding, R.string.module_bleeding, R.drawable.ic_module_bleeding, 7),
     Photos(ModuleBadgePrefs.Module.Photos, R.string.module_photos, R.drawable.ic_module_photos, 8),
-    Voice(ModuleBadgePrefs.Module.Voice, R.string.module_voice, R.drawable.ic_module_voice, 9);
+    Voice(ModuleBadgePrefs.Module.Voice, R.string.module_voice, R.drawable.ic_module_voice, 9),
+    Sport(ModuleBadgePrefs.Module.Sport, R.string.module_sport, R.drawable.ic_module_sport, 10);
 
     val id: String get() = badge.key
 
@@ -80,5 +81,6 @@ fun FeaturesPrefs.enabledModules(): List<AppModule> = AppModule.entries.filter {
         AppModule.Bleeding -> bleeding.value
         AppModule.Photos -> photoTab.value
         AppModule.Voice -> voiceTab.value
+        AppModule.Sport -> sport.value
     }
 }.sortedBy { it.rank }

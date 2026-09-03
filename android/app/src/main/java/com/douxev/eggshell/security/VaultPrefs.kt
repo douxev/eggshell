@@ -66,6 +66,88 @@ class VaultPrefs @Inject constructor(@ApplicationContext context: Context) {
         }.apply()
     }
 
+    // -- Passphrase change ----------------------------------------------------
+
+    /**
+     * The KDF material of a passphrase change that is under way.
+     *
+     * In Paranoid mode the passphrase *is* the SQLCipher key, so changing it
+     * rewrites the whole vault. That cannot be made instantaneous, which means
+     * there is a window in which a kill can land — and the salt is the only
+     * thing that says which passphrase the file on disk now answers to.
+     *
+     * So the new salt is written here *before* the rewrite starts, and unlock
+     * tries the active salt first and this one second. Whichever opens the
+     * vault is the truth: the active one means the rewrite never happened, this
+     * one means it did and only the media renames are outstanding.
+     * [VaultRepository] resolves that at the next unlock and clears this slot.
+     */
+    fun pendingKdfMaterial(): Kdf? {
+        val salt = prefs.getString(KEY_PENDING_KDF_SALT, null)
+            ?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return null
+        return Kdf(
+            salt = salt,
+            mCostKib = prefs.getInt(KEY_PENDING_KDF_M, 0).toUInt(),
+            tCost = prefs.getInt(KEY_PENDING_KDF_T, 0).toUInt(),
+            pCost = prefs.getInt(KEY_PENDING_KDF_P, 0).toUInt(),
+        )
+    }
+
+    /**
+     * `commit`, not `apply`: the whole point of this slot is to be on disk
+     * before the rewrite it describes begins. An async write that the rewrite
+     * outran would leave a vault only an unrecorded salt could open.
+     */
+    fun commitPendingKdf(material: Kdf): Boolean =
+        prefs.edit()
+            .putString(KEY_PENDING_KDF_SALT, Base64.encodeToString(material.salt, Base64.NO_WRAP))
+            .putInt(KEY_PENDING_KDF_M, material.mCostKib.toInt())
+            .putInt(KEY_PENDING_KDF_T, material.tCost.toInt())
+            .putInt(KEY_PENDING_KDF_P, material.pCost.toInt())
+            .commit()
+
+    /** The rewrite landed: the pending salt becomes the active one, in one edit. */
+    fun promotePendingKdf(): Boolean {
+        val pending = pendingKdfMaterial() ?: return false
+        return prefs.edit()
+            .putString(KEY_KDF_SALT, Base64.encodeToString(pending.salt, Base64.NO_WRAP))
+            .putInt(KEY_KDF_M, pending.mCostKib.toInt())
+            .putInt(KEY_KDF_T, pending.tCost.toInt())
+            .putInt(KEY_KDF_P, pending.pCost.toInt())
+            .remove(KEY_PENDING_KDF_SALT)
+            .remove(KEY_PENDING_KDF_M)
+            .remove(KEY_PENDING_KDF_T)
+            .remove(KEY_PENDING_KDF_P)
+            .commit()
+    }
+
+    /** The rewrite never happened: forget the passphrase that was never used. */
+    fun clearPendingKdf(): Boolean =
+        prefs.edit()
+            .remove(KEY_PENDING_KDF_SALT)
+            .remove(KEY_PENDING_KDF_M)
+            .remove(KEY_PENDING_KDF_T)
+            .remove(KEY_PENDING_KDF_P)
+            .commit()
+
+    /**
+     * Replace the passphrase wrap of a KEYSTORE_PASSPHRASE vault: new salt and
+     * new wrapped key, one edit, durable.
+     *
+     * They must move together. The wrapped blob can only be opened by the KEK
+     * the salt derives — committing one without the other locks the user out of
+     * their own vault, which is the failure this whole file keeps guarding
+     * against.
+     */
+    fun commitPassphraseWrap(material: Kdf, wrapped: ByteArray): Boolean =
+        prefs.edit()
+            .putString(KEY_KDF_SALT, Base64.encodeToString(material.salt, Base64.NO_WRAP))
+            .putInt(KEY_KDF_M, material.mCostKib.toInt())
+            .putInt(KEY_KDF_T, material.tCost.toInt())
+            .putInt(KEY_KDF_P, material.pCost.toInt())
+            .putString(KEY_WRAPPED, Base64.encodeToString(wrapped, Base64.NO_WRAP))
+            .commit()
+
     /**
      * Returns the Keystore-wrapped master key. Null in Paranoid mode (where
      * the key is re-derived from the passphrase at every cold start).
@@ -269,6 +351,11 @@ class VaultPrefs @Inject constructor(@ApplicationContext context: Context) {
         private const val KEY_KDF_T = "kdf_t_cost"
         private const val KEY_KDF_P = "kdf_p_cost"
         private const val KEY_WRAPPED = "wrapped_key"
+
+        private const val KEY_PENDING_KDF_SALT = "pending_kdf_salt"
+        private const val KEY_PENDING_KDF_M = "pending_kdf_m_cost_kib"
+        private const val KEY_PENDING_KDF_T = "pending_kdf_t_cost"
+        private const val KEY_PENDING_KDF_P = "pending_kdf_p_cost"
 
         private const val KEY_RECOVERY_WRAPPED = "recovery_wrapped"
         private const val KEY_RECOVERY_SALT = "recovery_salt"

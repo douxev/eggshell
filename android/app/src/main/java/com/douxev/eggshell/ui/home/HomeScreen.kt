@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Bloodtype
@@ -114,6 +115,7 @@ fun HomeScreen(
     onOpenVoice: () -> Unit,
     onOpenNotes: () -> Unit,
     onOpenDreams: () -> Unit,
+    onOpenSport: () -> Unit,
     onOpenFullJournal: () -> Unit,
     onAddMedication: () -> Unit,
     onMoodSaved: () -> Unit,
@@ -203,6 +205,7 @@ fun HomeScreen(
                     ModuleBadgePrefs.Module.Voice -> onOpenVoice()
                     ModuleBadgePrefs.Module.Notes -> onOpenNotes()
                     ModuleBadgePrefs.Module.Dreams -> onOpenDreams()
+                    ModuleBadgePrefs.Module.Sport -> onOpenSport()
                 }
             },
         )
@@ -645,6 +648,7 @@ private fun LauncherGrid(
         if (m.voice) add(LauncherTile(ModuleBadgePrefs.Module.Voice, R.string.module_voice, Icons.Filled.GraphicEq, Family.Evolution))
         if (m.notes) add(LauncherTile(ModuleBadgePrefs.Module.Notes, R.string.module_notes, Icons.Filled.Description, Family.Other))
         if (m.dreams) add(LauncherTile(ModuleBadgePrefs.Module.Dreams, R.string.module_dreams, Icons.Filled.Bedtime, Family.Other))
+        if (m.sport) add(LauncherTile(ModuleBadgePrefs.Module.Sport, R.string.module_sport, Icons.Filled.DirectionsRun, Family.Other))
     }
     // A fixed 4-column grid inside an already-scrolling column: laid out by
     // hand rather than with LazyVerticalGrid, which cannot nest in a scroll.

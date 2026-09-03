@@ -541,4 +541,77 @@
     <string name="reminders_dream_dialog_title">Nouveau rappel de rêve</string>
     <string name="reminders_dream_edit_dialog_title">Modifier le rappel</string>
     <string name="reminders_dream_default_label">Noter un rêve</string>
+
+    <!-- ===== Widget Traitements ===== -->
+    <string name="meds_widget_description">Tes prochaines prises, et deux boutons pour en noter une sans ouvrir l\'app.</string>
+    <string name="meds_widget_nothing_due">Aucune prise programmée.</string>
+    <string name="meds_widget_taken">Pris</string>
+    <string name="meds_widget_taken_at">à…</string>
+    <string name="meds_widget_taken_at_title">Prise à quelle heure ?</string>
+    <string name="widget_due_now">maintenant</string>
+    <string name="widget_due_in">dans %1$s</string>
+    <string name="widget_due_ago">il y a %1$s</string>
+    <string name="widget_minutes">%1$d min</string>
+    <string name="widget_hours">%1$d h</string>
+    <string name="widget_days">%1$d j</string>
+    <string name="meds_widget_config_title">Widget Traitements</string>
+    <string name="meds_widget_config_rows">Nombre de prises affichées</string>
+    <string name="meds_widget_config_hint">Ce widget lit les mêmes informations que tes notifications de rappel — rien de plus n\'est écrit en dehors du coffre. Il fonctionne donc aussi en mode parano.</string>
+
+    <!-- ===== Widget Notes ===== -->
+    <string name="notes_widget_description">Tes dernières notes, un dossier, ou une note précise — au choix à l\'installation du widget.</string>
+    <string name="notes_widget_locked">Ouvre l\'app pour voir tes notes.</string>
+    <string name="notes_widget_config_title">Widget Notes</string>
+    <string name="notes_widget_config_show">Afficher mes notes sur l\'écran d\'accueil</string>
+    <string name="notes_widget_config_warning">Ce que le widget affiche doit être lisible sans ton mot de passe : le titre et la première ligne des notes concernées sont recopiés hors du coffre (chiffrés, mais ouvrables sans ta phrase secrète). Rien n\'est recopié tant que cette option est désactivée, et tout est effacé dès que l\'app se verrouille.</string>
+    <string name="notes_widget_config_paranoid">En mode parano, rien ne peut être recopié hors du coffre — le widget reste un simple raccourci. C\'est la promesse de ce mode.</string>
+    <string name="notes_widget_config_rows">Nombre de notes affichées</string>
+    <string name="notes_widget_config_target">Quoi afficher</string>
+    <string name="notes_widget_target_recent">Dernières notes</string>
+    <string name="notes_widget_target_folder">Un dossier</string>
+    <string name="notes_widget_target_locked">Ouvre l\'app puis reviens pour choisir un dossier.</string>
+
+    <!-- ===== Widgets de module : contenu ===== -->
+    <string name="widget_content_locked">Ouvre l\'app pour voir ce module.</string>
+    <string name="widget_appointment_generic">Rendez-vous</string>
+    <string name="widget_bleeding_last">Dernier saignement</string>
+    <string name="widget_dream_untitled">Rêve sans titre</string>
+    <string name="widget_gauge_mood">Humeur %1$d</string>
+    <string name="widget_gauge_energy">Énergie %1$d</string>
+    <string name="widget_weight_trend">%1$s %2$s sur 30 j</string>
+    <string name="widget_config_title">Widget %1$s</string>
+    <string name="widget_config_show">Afficher ce module sur l\'écran d\'accueil</string>
+    <string name="widget_config_warning">Ce que le widget affiche doit être lisible sans ton mot de passe : ces quelques lignes sont recopiées hors du coffre (chiffrées, mais ouvrables sans ta phrase secrète). Rien n\'est recopié tant que cette option est désactivée, et tout est effacé dès que l\'app se verrouille.</string>
+    <string name="widget_config_paranoid">En mode parano, rien ne peut être recopié hors du coffre — le widget reste un simple raccourci. C\'est la promesse de ce mode.</string>
+    <string name="widget_config_rows">Nombre de lignes</string>
+    <string name="widget_config_offvault">Ce widget lit les mêmes informations que tes notifications de rappel — rien de plus n\'est écrit en dehors du coffre. Il fonctionne donc aussi en mode parano.</string>
+
+    <plurals name="widget_photos_count">
+        <item quantity="one">%1$d photo</item>
+        <item quantity="other">%1$d photos</item>
+    </plurals>
+    <plurals name="widget_voice_count">
+        <item quantity="one">%1$d extrait</item>
+        <item quantity="other">%1$d extraits</item>
+    </plurals>
+
+    <!-- ===== Rappels de séance (sport) ===== -->
+    <string name="sport_reminder_title">C\'est l\'heure</string>
+    <string name="reminders_section_sport">Sport</string>
+    <string name="reminders_section_sport_hint">Rappels de séance. Même fonctionnement que les autres : une notification discrète, sans dire de quoi il s\'agit.</string>
+    <string name="reminders_no_sport">Aucun rappel de séance.</string>
+    <string name="reminders_add_sport">Ajouter un rappel de séance</string>
+    <string name="reminders_sport_dialog_title">Nouveau rappel de séance</string>
+    <string name="reminders_sport_edit_dialog_title">Modifier le rappel de séance</string>
+
+    <plurals name="widget_sport_week">
+        <item quantity="one">%1$d séance cette semaine</item>
+        <item quantity="other">%1$d séances cette semaine</item>
+    </plurals>
+    <plurals name="widget_sport_streak">
+        <item quantity="one">%1$d jour d\'affilée</item>
+        <item quantity="other">%1$d jours d\'affilée</item>
+    </plurals>
+    <string name="widget_sport_minutes">%1$d min de sport</string>
+    <string name="widget_sport_steps">%1$d pas aujourd\'hui</string>
 </resources>
