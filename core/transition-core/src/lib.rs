@@ -14,6 +14,7 @@ pub mod insights;
 pub mod notes;
 pub mod photos;
 pub mod settings;
+pub mod sport;
 pub mod vault;
 pub mod voice;
 

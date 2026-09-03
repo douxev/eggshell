@@ -32,6 +32,10 @@ pub use transition_core::notes::{
 };
 pub use transition_core::photos::{NewPhotoRecord, PhotoRecord};
 pub use transition_core::voice::{NewVoiceClip, VoiceClip};
+pub use transition_core::vault::RekeyReport;
+pub use transition_core::sport::{
+    NewSportActivity, NewSportSession, SportActivity, SportSession, StepDay,
+};
 
 uniffi::include_scaffolding!("transition");
 
@@ -78,6 +82,22 @@ fn import_encrypted(
 ) -> Result<ImportedVault, TransitionError> {
     let imported = core_vault::import_encrypted(bundle, passphrase, target_db_path)?;
     Ok(ImportedVault { master_key: imported.master_key })
+}
+
+fn rekey_vault(
+    db_path: String,
+    old_key: Arc<VaultKey>,
+    new_key: Arc<VaultKey>,
+) -> Result<RekeyReport, TransitionError> {
+    core_vault::rekey_vault(db_path, &old_key.inner, &new_key.inner)
+}
+
+fn finish_pending_rekey(db_path: String) -> Result<u32, TransitionError> {
+    core_vault::finish_pending_rekey(db_path)
+}
+
+fn discard_pending_rekey(db_path: String) -> Result<u32, TransitionError> {
+    core_vault::discard_pending_rekey(db_path)
 }
 
 #[derive(Clone, Debug)]
@@ -718,4 +738,111 @@ impl Vault {
     pub fn export_encrypted(&self, passphrase: String) -> Result<Vec<u8>, TransitionError> {
         self.inner.export_encrypted(passphrase)
     }
+
+    // -- Sport ---------------------------------------------------------------
+
+    pub fn add_sport_activity(
+        &self,
+        activity: NewSportActivity,
+        now_ms: i64,
+    ) -> Result<SportActivity, TransitionError> {
+        self.inner.add_sport_activity(activity, now_ms)
+    }
+
+    pub fn list_sport_activities(
+        &self,
+        include_archived: bool,
+    ) -> Result<Vec<SportActivity>, TransitionError> {
+        self.inner.list_sport_activities(include_archived)
+    }
+
+    pub fn update_sport_activity(
+        &self,
+        id: i64,
+        activity: NewSportActivity,
+    ) -> Result<(), TransitionError> {
+        self.inner.update_sport_activity(id, activity)
+    }
+
+    pub fn set_sport_activity_archived(
+        &self,
+        id: i64,
+        archived: bool,
+    ) -> Result<(), TransitionError> {
+        self.inner.set_sport_activity_archived(id, archived)
+    }
+
+    pub fn delete_sport_activity(&self, id: i64) -> Result<(), TransitionError> {
+        self.inner.delete_sport_activity(id)
+    }
+
+    pub fn add_sport_session(
+        &self,
+        session: NewSportSession,
+    ) -> Result<SportSession, TransitionError> {
+        self.inner.add_sport_session(session)
+    }
+
+    pub fn list_sport_sessions(
+        &self,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<SportSession>, TransitionError> {
+        self.inner.list_sport_sessions(offset, limit)
+    }
+
+    pub fn list_sport_sessions_between(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<Vec<SportSession>, TransitionError> {
+        self.inner.list_sport_sessions_between(from_ms, to_ms)
+    }
+
+    pub fn get_sport_session(&self, id: i64) -> Result<Option<SportSession>, TransitionError> {
+        self.inner.get_sport_session(id)
+    }
+
+    pub fn update_sport_session(
+        &self,
+        id: i64,
+        session: NewSportSession,
+    ) -> Result<SportSession, TransitionError> {
+        self.inner.update_sport_session(id, session)
+    }
+
+    pub fn delete_sport_session(&self, id: i64) -> Result<(), TransitionError> {
+        self.inner.delete_sport_session(id)
+    }
+
+    pub fn record_steps(
+        &self,
+        day_key: String,
+        steps: i64,
+        now_ms: i64,
+    ) -> Result<(), TransitionError> {
+        self.inner.record_steps(day_key, steps, now_ms)
+    }
+
+    pub fn set_steps(
+        &self,
+        day_key: String,
+        steps: i64,
+        now_ms: i64,
+    ) -> Result<(), TransitionError> {
+        self.inner.set_steps(day_key, steps, now_ms)
+    }
+
+    pub fn list_step_days(
+        &self,
+        from_key: String,
+        to_key: String,
+    ) -> Result<Vec<StepDay>, TransitionError> {
+        self.inner.list_step_days(from_key, to_key)
+    }
+
+    pub fn get_step_day(&self, day_key: String) -> Result<Option<StepDay>, TransitionError> {
+        self.inner.get_step_day(day_key)
+    }
+
 }

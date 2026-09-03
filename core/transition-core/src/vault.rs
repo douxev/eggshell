@@ -93,6 +93,20 @@ const SETTINGS_DIR: &str = "settings";
 const NOTE_IMAGES_DIR: &str = "note_images";
 const DREAM_AUDIO_DIR: &str = "dream_audio";
 
+/// Every directory holding file-key-sealed blobs. A passphrase change has to
+/// re-seal all of them, so the list lives in one place rather than being
+/// spelled out again at each call site — a directory missing from one copy is
+/// a set of photos that silently stops opening.
+const BLOB_DIRS: [&str; 5] =
+    [PHOTOS_DIR, VOICE_DIR, SETTINGS_DIR, NOTE_IMAGES_DIR, DREAM_AUDIO_DIR];
+
+/// Extension of a blob that has been re-sealed under the new key while its
+/// original is still in place. Deliberately neither `.bin` nor `.tmp`: both
+/// orphan sweeps on the native side delete those on sight, at the very first
+/// unlock, which is exactly when a rekey interrupted by a kill is waiting to
+/// be finished.
+const REKEY_STAGING_EXT: &str = "rekey";
+
 /// Deletes a path when it goes out of scope, however that happens.
 ///
 /// The snapshot is a complete SQLCipher copy of the vault. It used to be
@@ -969,6 +983,118 @@ impl Vault {
         crate::settings::delete(&*self.db()?, &key)
     }
 
+    // -- Sport (delegates to crate::sport) -----------------------------------
+
+    pub fn add_sport_activity(
+        &self,
+        activity: crate::sport::NewSportActivity,
+        now_ms: i64,
+    ) -> Result<crate::sport::SportActivity, TransitionError> {
+        crate::sport::add_activity(&*self.db()?, activity, now_ms)
+    }
+
+    pub fn list_sport_activities(
+        &self,
+        include_archived: bool,
+    ) -> Result<Vec<crate::sport::SportActivity>, TransitionError> {
+        crate::sport::list_activities(&*self.db()?, include_archived)
+    }
+
+    pub fn update_sport_activity(
+        &self,
+        id: i64,
+        activity: crate::sport::NewSportActivity,
+    ) -> Result<(), TransitionError> {
+        crate::sport::update_activity(&*self.db()?, id, activity)
+    }
+
+    pub fn set_sport_activity_archived(
+        &self,
+        id: i64,
+        archived: bool,
+    ) -> Result<(), TransitionError> {
+        crate::sport::set_activity_archived(&*self.db()?, id, archived)
+    }
+
+    pub fn delete_sport_activity(&self, id: i64) -> Result<(), TransitionError> {
+        crate::sport::delete_activity(&*self.db()?, id)
+    }
+
+    pub fn add_sport_session(
+        &self,
+        session: crate::sport::NewSportSession,
+    ) -> Result<crate::sport::SportSession, TransitionError> {
+        crate::sport::add_session(&*self.db()?, session)
+    }
+
+    pub fn list_sport_sessions(
+        &self,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<crate::sport::SportSession>, TransitionError> {
+        crate::sport::list_sessions(&*self.db()?, offset, limit)
+    }
+
+    pub fn list_sport_sessions_between(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<Vec<crate::sport::SportSession>, TransitionError> {
+        crate::sport::list_sessions_between(&*self.db()?, from_ms, to_ms)
+    }
+
+    pub fn get_sport_session(
+        &self,
+        id: i64,
+    ) -> Result<Option<crate::sport::SportSession>, TransitionError> {
+        crate::sport::get_session(&*self.db()?, id)
+    }
+
+    pub fn update_sport_session(
+        &self,
+        id: i64,
+        session: crate::sport::NewSportSession,
+    ) -> Result<crate::sport::SportSession, TransitionError> {
+        crate::sport::update_session(&*self.db()?, id, session)
+    }
+
+    pub fn delete_sport_session(&self, id: i64) -> Result<(), TransitionError> {
+        crate::sport::delete_session(&*self.db()?, id)
+    }
+
+    pub fn record_steps(
+        &self,
+        day_key: String,
+        steps: i64,
+        now_ms: i64,
+    ) -> Result<(), TransitionError> {
+        crate::sport::record_steps(&*self.db()?, &day_key, steps, now_ms)
+    }
+
+    pub fn set_steps(
+        &self,
+        day_key: String,
+        steps: i64,
+        now_ms: i64,
+    ) -> Result<(), TransitionError> {
+        crate::sport::set_steps(&*self.db()?, &day_key, steps, now_ms)
+    }
+
+    pub fn list_step_days(
+        &self,
+        from_key: String,
+        to_key: String,
+    ) -> Result<Vec<crate::sport::StepDay>, TransitionError> {
+        crate::sport::list_step_days(&*self.db()?, &from_key, &to_key)
+    }
+
+    pub fn get_step_day(
+        &self,
+        day_key: String,
+    ) -> Result<Option<crate::sport::StepDay>, TransitionError> {
+        crate::sport::get_step_day(&*self.db()?, &day_key)
+    }
+
     // -- Generic blob encryption (for photos, voice clips, etc.) -------------
 
     pub fn encrypt_blob(&self, plaintext: Vec<u8>) -> Result<Vec<u8>, TransitionError> {
@@ -1107,6 +1233,201 @@ fn io_kind(e: &std::io::Error) -> String {
     // Only the kind, not the path. The path lives inside the app sandbox
     // anyway, but we keep the FFI surface uniformly tag-shaped.
     format!("{:?}", e.kind())
+}
+
+/// What a passphrase change actually moved.
+///
+/// Returned rather than swallowed because the two numbers answer different
+/// questions: `blobs_resealed` says the media followed the new key, and
+/// `blobs_unreadable` is the only signal that some of it did not — see
+/// [`rekey_vault`] for why those files are left alone rather than deleted.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RekeyReport {
+    pub blobs_resealed: u32,
+    pub blobs_unreadable: u32,
+}
+
+/// Move a whole vault — database and media — from `old_key` to `new_key`.
+///
+/// This is what a passphrase change needs in the paranoid mode, where the
+/// passphrase *is* the key: nothing is wrapped, so a new passphrase means
+/// every encrypted byte on disk has to be rewritten. (In the keystore modes
+/// the master key is merely wrapped by the passphrase, and re-wrapping is all
+/// it takes — those never come here.)
+///
+/// The vault must be closed: SQLCipher rekeys the file in place, and another
+/// open connection would keep reading pages under the old key.
+///
+/// # Order, and why
+///
+/// The steps are arranged so that every point a kill can land in leaves a
+/// vault that one of the two passphrases opens completely:
+///
+/// 1. Verify `old_key` first, so a typo costs nothing.
+/// 2. Re-seal each blob **next to** its original, as `<name>.rekey`. The
+///    originals are still the live copies at this point.
+/// 3. `PRAGMA rekey` the database. Atomic inside SQLCipher's journal.
+/// 4. Rename the staged blobs over the originals.
+///
+/// Killed before or during 3, the database is still under `old_key` and the
+/// staged files are ignorable leftovers — [`discard_pending_rekey`] sweeps
+/// them. Killed during 4, the database is under `new_key` and the remaining
+/// renames are replayable — that is [`finish_pending_rekey`]. The caller
+/// distinguishes the two cases by which key opens the database, so it must
+/// persist the new KDF salt *before* calling this and be able to fall back to
+/// the old one.
+///
+/// A blob that will not decrypt under `old_key` is left exactly where it is
+/// and counted in [`RekeyReport::blobs_unreadable`]. It was already lost
+/// before this call — re-sealing garbage would only make the loss permanent,
+/// and refusing to continue would trap the user in a passphrase they may be
+/// changing precisely because it is compromised.
+pub fn rekey_vault(
+    db_path: String,
+    old_key: &VaultKey,
+    new_key: &VaultKey,
+) -> Result<RekeyReport, TransitionError> {
+    let path = Path::new(&db_path);
+    // `Database::rekey` opens without CREATE, so a missing file would surface
+    // as a bare sqlite error. Say what actually happened instead.
+    if !path.is_file() {
+        return Err(TransitionError::Database("vault database missing".into()));
+    }
+    // Cheap, and the only step that can still be undone by walking away.
+    Database::verify_key(path, &old_key.inner)?;
+
+    let base = blob_base(path)?;
+    let old_file_key = old_key.inner.derive_subkey(FILE_KEY_INFO);
+    let new_file_key = new_key.inner.derive_subkey(FILE_KEY_INFO);
+
+    let mut report = RekeyReport { blobs_resealed: 0, blobs_unreadable: 0 };
+    for dir in BLOB_DIRS {
+        stage_resealed_blobs(&base.join(dir), &old_file_key, &new_file_key, &mut report)?;
+    }
+
+    Database::rekey(path, &old_key.inner, &new_key.inner)?;
+
+    promote_staged_blobs(&base)?;
+    Ok(report)
+}
+
+/// Finish a rekey that was interrupted after the database had been re-encrypted
+/// but before the media caught up: rename every `*.rekey` over its `*.bin`.
+///
+/// Idempotent — a blob whose rename already landed has no staged file left, so
+/// replaying this only completes what is outstanding. Returns how many files
+/// were moved.
+pub fn finish_pending_rekey(db_path: String) -> Result<u32, TransitionError> {
+    promote_staged_blobs(&blob_base(Path::new(&db_path))?)
+}
+
+/// Throw away the staging left by a rekey that never reached the database.
+///
+/// The originals are untouched and still the live copies, so this only removes
+/// files nothing can read. Returns how many were removed.
+pub fn discard_pending_rekey(db_path: String) -> Result<u32, TransitionError> {
+    let base = blob_base(Path::new(&db_path))?;
+    let mut removed = 0u32;
+    for dir in BLOB_DIRS {
+        for staged in staged_files(&base.join(dir))? {
+            std::fs::remove_file(&staged)
+                .map_err(|e| TransitionError::Database(format!("drop staged blob: {}", io_kind(&e))))?;
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
+/// The directory the blob stores sit under: the vault database's own parent,
+/// which is the layout both platforms already use.
+fn blob_base(db_path: &Path) -> Result<&Path, TransitionError> {
+    db_path
+        .parent()
+        .ok_or_else(|| TransitionError::Database("vault path has no parent".into()))
+}
+
+/// Re-seal every `*.bin` in `dir` under `new_file_key`, writing the result
+/// beside it as `*.rekey`. The original is left alone.
+fn stage_resealed_blobs(
+    dir: &Path,
+    old_file_key: &MasterKey,
+    new_file_key: &MasterKey,
+    report: &mut RekeyReport,
+) -> Result<(), TransitionError> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        // No directory means no media of that kind — a normal, empty vault.
+        Err(_) => return Ok(()),
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("bin") {
+            continue;
+        }
+        let ciphertext = std::fs::read(&path)
+            .map_err(|e| TransitionError::Database(format!("read blob: {}", io_kind(&e))))?;
+        let plain = match EncryptedBlob::from_slice(&ciphertext)
+            .and_then(|blob| decrypt(old_file_key, &blob))
+        {
+            Ok(p) => p,
+            // Already unreadable before we got here. Leave the bytes in place.
+            Err(_) => {
+                report.blobs_unreadable += 1;
+                continue;
+            }
+        };
+        let resealed = encrypt(new_file_key, &plain)?.to_vec();
+        let staged = path.with_extension(REKEY_STAGING_EXT);
+        write_durably(&staged, &resealed)?;
+        report.blobs_resealed += 1;
+    }
+    Ok(())
+}
+
+/// Rename every staged blob over its original, across all the blob stores.
+fn promote_staged_blobs(base: &Path) -> Result<u32, TransitionError> {
+    let mut promoted = 0u32;
+    for dir in BLOB_DIRS {
+        for staged in staged_files(&base.join(dir))? {
+            let final_path = staged.with_extension("bin");
+            std::fs::rename(&staged, &final_path).map_err(|e| {
+                TransitionError::Database(format!("promote staged blob: {}", io_kind(&e)))
+            })?;
+            promoted += 1;
+        }
+    }
+    Ok(promoted)
+}
+
+/// Collect `<dir>/*.rekey`. A missing directory is not an error — it just has
+/// nothing staged.
+fn staged_files(dir: &Path) -> Result<Vec<std::path::PathBuf>, TransitionError> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let mut out: Vec<_> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some(REKEY_STAGING_EXT))
+        .collect();
+    // Deterministic order, so an interrupted promote resumes predictably.
+    out.sort();
+    Ok(out)
+}
+
+/// Write and fsync before returning. A staged blob that is only in the page
+/// cache when the process dies would be renamed over a perfectly good original
+/// at the next unlock, turning a crash into data loss.
+fn write_durably(path: &Path, bytes: &[u8]) -> Result<(), TransitionError> {
+    use std::io::Write;
+    let mut f = std::fs::File::create(path)
+        .map_err(|e| TransitionError::Database(format!("stage blob: {}", io_kind(&e))))?;
+    f.write_all(bytes)
+        .map_err(|e| TransitionError::Database(format!("stage blob: {}", io_kind(&e))))?;
+    f.sync_all()
+        .map_err(|e| TransitionError::Database(format!("stage blob: {}", io_kind(&e))))?;
+    Ok(())
 }
 
 /// Restore a vault from an exported `.transition.enc` bundle.
@@ -1487,6 +1808,231 @@ mod tests {
             VaultKey::derive_from_passphrase("paranoid-pw".into(), salt, TEST_M_COST, TEST_T_COST, TEST_P_COST)
                 .unwrap();
         Vault::verify_key(path.to_string_lossy().into_owned(), &key2).unwrap();
+    }
+
+    // -- Passphrase change (paranoid mode) ----------------------------------
+
+    /// A vault in its own directory, so a test that sweeps whole blob stores
+    /// cannot reach another test's media. The shared-`/tmp` shape used by the
+    /// backup tests is fine for reads; it is not fine for a rekey.
+    struct IsolatedVault {
+        _dir: tempfile::TempDir,
+        db_path: String,
+        base: std::path::PathBuf,
+    }
+
+    impl IsolatedVault {
+        fn new() -> Self {
+            let dir = tempfile::tempdir().unwrap();
+            let base = dir.path().to_path_buf();
+            let db_path = base.join("vault.db").to_string_lossy().into_owned();
+            Self { _dir: dir, db_path, base }
+        }
+
+        fn blob(&self, dir: &str, name: &str) -> std::path::PathBuf {
+            self.base.join(dir).join(name)
+        }
+    }
+
+    fn paranoid_key(passphrase: &str, salt: &[u8]) -> VaultKey {
+        VaultKey::derive_from_passphrase(
+            passphrase.into(),
+            salt.to_vec(),
+            TEST_M_COST,
+            TEST_T_COST,
+            TEST_P_COST,
+        )
+        .unwrap()
+    }
+
+    /// Fill a vault with one row and one sealed media file, then close it.
+    fn seed_vault(v: &IsolatedVault, key: &VaultKey, plaintext: &[u8]) {
+        let vault = Vault::open(v.db_path.clone(), key).unwrap();
+        vault
+            .add_journal_entry(crate::journal::NewJournalEntry {
+                at_ms: 1_700_000_000_000,
+                mood: Some(4),
+                dysphoria: None,
+                euphoria: None,
+                libido: None,
+                energy: None,
+                free_text: Some("avant le changement".into()),
+                side_effects: None,
+            })
+            .unwrap();
+        std::fs::create_dir_all(v.base.join(PHOTOS_DIR)).unwrap();
+        std::fs::write(
+            v.blob(PHOTOS_DIR, "aaa.bin"),
+            vault.encrypt_blob(plaintext.to_vec()).unwrap(),
+        )
+        .unwrap();
+    }
+
+    /// The bug this whole path exists for: after a paranoid-mode passphrase
+    /// change, the old passphrase opened the vault and the new one did not.
+    ///
+    /// Every assertion here is made against a freshly opened vault, which is
+    /// exactly what a restart is — nothing is carried over in memory.
+    #[test]
+    fn changing_the_paranoid_passphrase_retires_the_old_one() {
+        let v = IsolatedVault::new();
+        let old_salt = vec![1u8; SALT_LEN];
+        let new_salt = vec![2u8; SALT_LEN];
+        let old_key = paranoid_key("ancien-mot-de-passe", &old_salt);
+        seed_vault(&v, &old_key, b"une photo");
+
+        let new_key = paranoid_key("nouveau-mot-de-passe", &new_salt);
+        let report = rekey_vault(v.db_path.clone(), &old_key, &new_key).unwrap();
+        assert_eq!(report.blobs_resealed, 1);
+        assert_eq!(report.blobs_unreadable, 0);
+
+        // The old passphrase is gone, not merely deprioritised.
+        let stale = paranoid_key("ancien-mot-de-passe", &old_salt);
+        assert!(
+            matches!(Vault::verify_key(v.db_path.clone(), &stale), Err(TransitionError::WrongKey)),
+            "the old passphrase must stop opening the vault",
+        );
+
+        // The new one opens it, with the data and the media intact.
+        let reopened = paranoid_key("nouveau-mot-de-passe", &new_salt);
+        let vault = Vault::open(v.db_path.clone(), &reopened).unwrap();
+        assert_eq!(vault.list_journal_entries(0, 10).unwrap().len(), 1);
+        let media = std::fs::read(v.blob(PHOTOS_DIR, "aaa.bin")).unwrap();
+        assert_eq!(vault.decrypt_blob(media).unwrap(), b"une photo");
+        // No staging survives a clean run.
+        assert!(!v.blob(PHOTOS_DIR, "aaa.rekey").exists());
+    }
+
+    /// A typo in the current passphrase must be a typed refusal that changes
+    /// nothing — not a half-rekeyed vault.
+    #[test]
+    fn rekey_refuses_a_wrong_current_passphrase_and_touches_nothing() {
+        let v = IsolatedVault::new();
+        let salt = vec![1u8; SALT_LEN];
+        let old_key = paranoid_key("le-bon", &salt);
+        seed_vault(&v, &old_key, b"une photo");
+
+        let wrong = paranoid_key("pas-le-bon", &salt);
+        let new_key = paranoid_key("le-nouveau", &vec![2u8; SALT_LEN]);
+        assert!(matches!(
+            rekey_vault(v.db_path.clone(), &wrong, &new_key),
+            Err(TransitionError::WrongKey),
+        ));
+
+        let vault = Vault::open(v.db_path.clone(), &paranoid_key("le-bon", &salt)).unwrap();
+        assert_eq!(vault.list_journal_entries(0, 10).unwrap().len(), 1);
+        let media = std::fs::read(v.blob(PHOTOS_DIR, "aaa.bin")).unwrap();
+        assert_eq!(vault.decrypt_blob(media).unwrap(), b"une photo");
+    }
+
+    /// Killed between the database rekey and the media renames: the new
+    /// passphrase already opens the database, so the staged blobs are the
+    /// current ones and the renames must be replayed.
+    #[test]
+    fn a_rekey_interrupted_after_the_database_is_finishable() {
+        let v = IsolatedVault::new();
+        let old_salt = vec![1u8; SALT_LEN];
+        let new_salt = vec![2u8; SALT_LEN];
+        let old_key = paranoid_key("ancien", &old_salt);
+        seed_vault(&v, &old_key, b"une photo");
+        let new_key = paranoid_key("nouveau", &new_salt);
+
+        // Replay rekey_vault's steps 2 and 3, stopping short of the promote.
+        let mut report = RekeyReport { blobs_resealed: 0, blobs_unreadable: 0 };
+        stage_resealed_blobs(
+            &v.base.join(PHOTOS_DIR),
+            &old_key.inner.derive_subkey(FILE_KEY_INFO),
+            &new_key.inner.derive_subkey(FILE_KEY_INFO),
+            &mut report,
+        )
+        .unwrap();
+        Database::rekey(Path::new(&v.db_path), &old_key.inner, &new_key.inner).unwrap();
+        assert!(v.blob(PHOTOS_DIR, "aaa.rekey").exists(), "staging must survive the kill");
+
+        assert_eq!(finish_pending_rekey(v.db_path.clone()).unwrap(), 1);
+
+        let vault = Vault::open(v.db_path.clone(), &paranoid_key("nouveau", &new_salt)).unwrap();
+        let media = std::fs::read(v.blob(PHOTOS_DIR, "aaa.bin")).unwrap();
+        assert_eq!(vault.decrypt_blob(media).unwrap(), b"une photo");
+        assert!(!v.blob(PHOTOS_DIR, "aaa.rekey").exists());
+    }
+
+    /// Killed before the database rekey: the old passphrase still opens
+    /// everything, and the staging is inert litter to be swept.
+    #[test]
+    fn a_rekey_interrupted_before_the_database_is_discardable() {
+        let v = IsolatedVault::new();
+        let old_salt = vec![1u8; SALT_LEN];
+        let old_key = paranoid_key("ancien", &old_salt);
+        seed_vault(&v, &old_key, b"une photo");
+        let new_key = paranoid_key("nouveau", &vec![2u8; SALT_LEN]);
+
+        let mut report = RekeyReport { blobs_resealed: 0, blobs_unreadable: 0 };
+        stage_resealed_blobs(
+            &v.base.join(PHOTOS_DIR),
+            &old_key.inner.derive_subkey(FILE_KEY_INFO),
+            &new_key.inner.derive_subkey(FILE_KEY_INFO),
+            &mut report,
+        )
+        .unwrap();
+
+        assert_eq!(discard_pending_rekey(v.db_path.clone()).unwrap(), 1);
+        assert!(!v.blob(PHOTOS_DIR, "aaa.rekey").exists());
+
+        let vault = Vault::open(v.db_path.clone(), &paranoid_key("ancien", &old_salt)).unwrap();
+        let media = std::fs::read(v.blob(PHOTOS_DIR, "aaa.bin")).unwrap();
+        assert_eq!(vault.decrypt_blob(media).unwrap(), b"une photo");
+    }
+
+    /// Media that was already unreadable must not block the change — someone
+    /// changing their passphrase may be doing it because the old one leaked.
+    #[test]
+    fn an_unreadable_blob_is_counted_not_fatal() {
+        let v = IsolatedVault::new();
+        let old_salt = vec![1u8; SALT_LEN];
+        let old_key = paranoid_key("ancien", &old_salt);
+        seed_vault(&v, &old_key, b"une photo");
+        std::fs::write(v.blob(PHOTOS_DIR, "corrupt.bin"), b"not a sealed blob at all").unwrap();
+
+        let new_key = paranoid_key("nouveau", &vec![2u8; SALT_LEN]);
+        let report = rekey_vault(v.db_path.clone(), &old_key, &new_key).unwrap();
+        assert_eq!(report.blobs_resealed, 1);
+        assert_eq!(report.blobs_unreadable, 1);
+        // Left in place rather than deleted: it is evidence, not garbage.
+        assert!(v.blob(PHOTOS_DIR, "corrupt.bin").exists());
+    }
+
+    /// Every blob store has to move, not just the two the backup format was
+    /// first written for.
+    #[test]
+    fn a_rekey_reseals_every_blob_store() {
+        let v = IsolatedVault::new();
+        let old_salt = vec![1u8; SALT_LEN];
+        let new_salt = vec![2u8; SALT_LEN];
+        let old_key = paranoid_key("ancien", &old_salt);
+        seed_vault(&v, &old_key, b"une photo");
+
+        {
+            let vault = Vault::open(v.db_path.clone(), &old_key).unwrap();
+            for dir in [VOICE_DIR, SETTINGS_DIR, NOTE_IMAGES_DIR, DREAM_AUDIO_DIR] {
+                std::fs::create_dir_all(v.base.join(dir)).unwrap();
+                std::fs::write(
+                    v.blob(dir, "x.bin"),
+                    vault.encrypt_blob(dir.as_bytes().to_vec()).unwrap(),
+                )
+                .unwrap();
+            }
+        }
+
+        let new_key = paranoid_key("nouveau", &new_salt);
+        let report = rekey_vault(v.db_path.clone(), &old_key, &new_key).unwrap();
+        assert_eq!(report.blobs_resealed, BLOB_DIRS.len() as u32);
+
+        let vault = Vault::open(v.db_path.clone(), &paranoid_key("nouveau", &new_salt)).unwrap();
+        for dir in [VOICE_DIR, SETTINGS_DIR, NOTE_IMAGES_DIR, DREAM_AUDIO_DIR] {
+            let media = std::fs::read(v.blob(dir, "x.bin")).unwrap();
+            assert_eq!(vault.decrypt_blob(media).unwrap(), dir.as_bytes());
+        }
     }
 
     #[test]
@@ -2073,7 +2619,10 @@ mod tests {
                 guard
                     .conn()
                     .execute_batch(
-                        "DROP TABLE IF EXISTS note_images;\n                         DROP TABLE IF EXISTS notes;\n                         DROP TABLE IF EXISTS note_folders;\n                         DROP TABLE IF EXISTS dream_audio;\n                         DROP TABLE IF EXISTS dream_tag_links;\n                         DROP TABLE IF EXISTS dream_tags;\n                         DROP TABLE IF EXISTS dreams;\n                         DELETE FROM metric_definitions WHERE domain = \"dreams\";",
+                        "DROP TABLE IF EXISTS sport_step_days;
+                         DROP TABLE IF EXISTS sport_sessions;
+                         DROP TABLE IF EXISTS sport_activities;
+                         DROP TABLE IF EXISTS note_images;\n                         DROP TABLE IF EXISTS notes;\n                         DROP TABLE IF EXISTS note_folders;\n                         DROP TABLE IF EXISTS dream_audio;\n                         DROP TABLE IF EXISTS dream_tag_links;\n                         DROP TABLE IF EXISTS dream_tags;\n                         DROP TABLE IF EXISTS dreams;\n                         DELETE FROM metric_definitions WHERE domain = \"dreams\";",
                     )
                     .unwrap();
                 guard.conn().pragma_update(None, "user_version", 13).unwrap();
@@ -2109,6 +2658,129 @@ mod tests {
             )
             .unwrap();
         assert_eq!(s.label.as_deref(), Some("après restauration"));
+    }
+
+    /// Sport data must survive an export/import, and a backup taken *before*
+    /// the sport module existed must still restore.
+    ///
+    /// The first half is the trap rule 4 of the no-data-loss checklist names:
+    /// rows ride inside the DB snapshot whether or not anyone remembered them,
+    /// so this passing proves nothing about a *new blob directory* — sport has
+    /// none, which is exactly why it does not need one. The second half is the
+    /// one that could actually break: an old bundle carries a schema-16
+    /// database, and opening it has to run migration 17 rather than refuse.
+    #[test]
+    fn sport_data_survives_a_backup_round_trip() {
+        let path = fresh_db_path();
+        let key = VaultKey::random();
+        let bundle = {
+            let vault = Vault::open(path.to_string_lossy().into_owned(), &key).unwrap();
+            let activity = vault
+                .add_sport_activity(
+                    crate::sport::NewSportActivity {
+                        name: "Course".into(),
+                        kind: "cardio".into(),
+                        color: Some(0xFF00FF),
+                    },
+                    1_700_000_000_000,
+                )
+                .unwrap();
+            vault
+                .add_sport_session(crate::sport::NewSportSession {
+                    activity_id: Some(activity.id),
+                    started_ms: 1_700_000_000_000,
+                    duration_s: 2_700,
+                    free_text: Some("30 min tranquille".into()),
+                    distance_m: Some(5_000.0),
+                    avg_hr: Some(148),
+                    max_hr: Some(176),
+                    source: "manual".into(),
+                })
+                .unwrap();
+            vault.record_steps("2026-09-03".into(), 8_421, 1).unwrap();
+            vault.export_encrypted("pp".into()).unwrap()
+        };
+
+        let restore_path = fresh_db_path();
+        let imported =
+            import_encrypted(bundle, "pp".into(), restore_path.to_string_lossy().into_owned())
+                .unwrap();
+        let restored = Vault::open(
+            restore_path.to_string_lossy().into_owned(),
+            &VaultKey::from_raw(imported.master_key).unwrap(),
+        )
+        .unwrap();
+
+        let sessions = restored.list_sport_sessions(0, 10).unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].duration_s, 2_700);
+        assert_eq!(sessions[0].free_text.as_deref(), Some("30 min tranquille"));
+        assert_eq!(sessions[0].distance_m, Some(5_000.0));
+        assert_eq!(sessions[0].avg_hr, Some(148));
+        assert_eq!(restored.list_sport_activities(false).unwrap().len(), 1);
+        assert_eq!(
+            restored.get_step_day("2026-09-03".into()).unwrap().unwrap().steps,
+            8_421,
+        );
+    }
+
+    /// A bundle exported by the release before sport existed must restore, and
+    /// the module must work on top of it.
+    #[test]
+    fn a_pre_sport_backup_restores_and_gains_the_sport_tables() {
+        let path = fresh_db_path();
+        let key = VaultKey::random();
+        let bundle = {
+            let vault = Vault::open(path.to_string_lossy().into_owned(), &key).unwrap();
+            vault
+                .add_journal_entry(crate::journal::NewJournalEntry {
+                    at_ms: 1_700_000_000_000,
+                    mood: Some(3),
+                    dysphoria: None,
+                    euphoria: None,
+                    libido: None,
+                    energy: None,
+                    free_text: Some("avant le module sport".into()),
+                    side_effects: None,
+                })
+                .unwrap();
+            // Rewind to schema 16: drop what migration 17 created, exactly as a
+            // database written by the previous release would look.
+            {
+                let guard = vault.db().unwrap();
+                guard
+                    .conn()
+                    .execute_batch(
+                        "DROP TABLE IF EXISTS sport_step_days;
+                         DROP TABLE IF EXISTS sport_sessions;
+                         DROP TABLE IF EXISTS sport_activities;",
+                    )
+                    .unwrap();
+                guard.conn().pragma_update(None, "user_version", 16).unwrap();
+            }
+            vault.export_encrypted("pp".into()).unwrap()
+        };
+
+        let restore_path = fresh_db_path();
+        let imported =
+            import_encrypted(bundle, "pp".into(), restore_path.to_string_lossy().into_owned())
+                .unwrap();
+        let restored = Vault::open(
+            restore_path.to_string_lossy().into_owned(),
+            &VaultKey::from_raw(imported.master_key).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(restored.schema_version().unwrap(), crate::db::CURRENT_SCHEMA_VERSION);
+        // The old data is there…
+        assert_eq!(restored.list_journal_entries(0, 10).unwrap().len(), 1);
+        // …and the new module works on top of it rather than needing a fresh vault.
+        assert!(restored.list_sport_sessions(0, 10).unwrap().is_empty());
+        restored.record_steps("2026-09-03".into(), 500, 1).unwrap();
+        assert_eq!(
+            restored.get_step_day("2026-09-03".into()).unwrap().unwrap().steps,
+            500,
+        );
     }
 
     #[test]

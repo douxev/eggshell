@@ -15,7 +15,7 @@ use crate::TransitionError;
 use crate::crypto::MasterKey;
 
 /// Latest schema version this build of `transition-core` understands.
-pub const CURRENT_SCHEMA_VERSION: u32 = 16;
+pub const CURRENT_SCHEMA_VERSION: u32 = 17;
 
 pub struct Database {
     conn: Connection,
@@ -59,13 +59,41 @@ impl Database {
                 .map(|_| ())
                 .map_err(map_sql)
         };
-        attempt().map_err(|e| match e {
-            // SQLITE_NOTADB (26) is SQLCipher's answer to a key that does not
-            // decrypt. sanitize_db_err has already flattened it to a string by
-            // this point, so match on that rather than re-plumbing every layer.
-            TransitionError::Database(ref msg) if msg.contains("26") => TransitionError::WrongKey,
-            other => other,
-        })
+        attempt().map_err(as_wrong_key)
+    }
+
+    /// Re-encrypt every page of the database under `new_key`.
+    ///
+    /// `PRAGMA rekey` rewrites the whole file inside SQLCipher's own journalled
+    /// transaction, so a process kill part-way through rolls back to `old_key`
+    /// rather than leaving a file that neither key opens. That guarantee is
+    /// what lets the caller treat this as a single atomic step.
+    ///
+    /// Opened without `SQLITE_OPEN_CREATE` on purpose: rekeying a path that
+    /// holds no database would otherwise mint an empty one under the new key
+    /// and report success, i.e. silently swap the user's vault for nothing.
+    pub fn rekey(
+        path: &Path,
+        old_key: &MasterKey,
+        new_key: &MasterKey,
+    ) -> Result<(), TransitionError> {
+        let attempt = || -> Result<(), TransitionError> {
+            let conn = Connection::open_with_flags(
+                path,
+                OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            )
+            .map_err(map_sql)?;
+            set_key(&conn, old_key.expose())?;
+            let pragma = format!("PRAGMA rekey = \"x'{}'\"", key_literal(new_key.expose()));
+            conn.execute_batch(&pragma).map_err(map_sql)?;
+            // Prove the new key reads the file before we tell the caller the
+            // swap happened — everything downstream (promoting the staged
+            // blobs, persisting the new salt) is irreversible.
+            conn.query_row("SELECT count(*) FROM sqlite_schema", [], |r| r.get::<_, i64>(0))
+                .map(|_| ())
+                .map_err(map_sql)
+        };
+        attempt().map_err(as_wrong_key)
     }
 
     /// Borrow the underlying connection. Other modules in `transition-core`
@@ -109,22 +137,39 @@ impl Database {
     }
 }
 
+/// SQLITE_NOTADB (26) is SQLCipher's answer to a key that does not decrypt.
+/// `sanitize_db_err` has already flattened it to a string by the time it gets
+/// here, so match on that rather than re-plumbing every layer — callers need
+/// to tell "wrong passphrase" from "your vault is damaged", which are very
+/// different things to say to someone about their medical records.
+fn as_wrong_key(e: TransitionError) -> TransitionError {
+    match e {
+        TransitionError::Database(ref msg) if msg.contains("26") => TransitionError::WrongKey,
+        other => other,
+    }
+}
+
 fn enable_foreign_keys(conn: &Connection) -> Result<(), TransitionError> {
     // SQLite ships with foreign keys OFF by default — we rely on cascades for
     // dose_events when a medication is deleted, so opt in for every connection.
     conn.execute_batch("PRAGMA foreign_keys = ON;").map_err(map_sql)
 }
 
-fn set_key(conn: &Connection, key: &[u8; crate::crypto::KEY_LEN]) -> Result<(), TransitionError> {
-    // SQLCipher accepts `x'<hex>'` literals for raw-key mode, which bypasses
-    // its own PBKDF2 derivation — we already use Argon2id so a second KDF
-    // would only burn time.
+/// Hex-encode a raw key for SQLCipher's `x'…'` literal syntax.
+///
+/// Raw-key mode bypasses SQLCipher's own PBKDF2 derivation — we already use
+/// Argon2id, so a second KDF would only burn time.
+fn key_literal(key: &[u8; crate::crypto::KEY_LEN]) -> String {
     let mut hex = String::with_capacity(2 * key.len());
     for byte in key {
         use std::fmt::Write;
         let _ = write!(hex, "{byte:02x}");
     }
-    let pragma = format!("PRAGMA key = \"x'{hex}'\"");
+    hex
+}
+
+fn set_key(conn: &Connection, key: &[u8; crate::crypto::KEY_LEN]) -> Result<(), TransitionError> {
+    let pragma = format!("PRAGMA key = \"x'{}'\"", key_literal(key));
     conn.execute_batch(&pragma).map_err(map_sql)?;
     // Touch the schema once so SQLCipher decrypts the first page now rather
     // than on the first user query — fails fast if the key is wrong.
@@ -197,6 +242,10 @@ fn apply_migration(tx: &rusqlite::Transaction, version: u32) -> Result<(), Trans
         }
         16 => {
             tx.execute_batch(include_str!("migrations/0016_dreams.sql"))
+                .map_err(map_sql)?;
+        }
+        17 => {
+            tx.execute_batch(include_str!("migrations/0017_sport.sql"))
                 .map_err(map_sql)?;
         }
         v => {

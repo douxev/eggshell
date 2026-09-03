@@ -25,6 +25,27 @@ namespace transition {
     // fail with "file is not in database").
     [Throws=TransitionError]
     ImportedVault import_encrypted(bytes bundle, string passphrase, string target_db_path);
+
+    // Move a closed vault — database and sealed media — from one key to
+    // another. This is what a paranoid-mode passphrase change costs, since
+    // there the passphrase *is* the key and nothing is merely wrapped.
+    //
+    // The caller must persist the new KDF salt BEFORE calling this and be
+    // able to fall back to the old one: a kill part-way through leaves the
+    // vault openable by exactly one of the two, and which one says whether to
+    // call finish_pending_rekey or discard_pending_rekey.
+    [Throws=TransitionError]
+    RekeyReport rekey_vault(string db_path, VaultKey old_key, VaultKey new_key);
+
+    // Replay the media renames of a rekey that was interrupted after the
+    // database had already moved. Idempotent. Returns how many files moved.
+    [Throws=TransitionError]
+    u32 finish_pending_rekey(string db_path);
+
+    // Drop the staging of a rekey that never reached the database. The
+    // originals are untouched. Returns how many files were removed.
+    [Throws=TransitionError]
+    u32 discard_pending_rekey(string db_path);
 };
 
 [Error]
@@ -41,11 +62,68 @@ dictionary ImportedVault {
     bytes master_key;
 };
 
+dictionary RekeyReport {
+    u32 blobs_resealed;
+    u32 blobs_unreadable;
+};
+
 dictionary FreshKdfMaterial {
     bytes salt;
     u32 m_cost_kib;
     u32 t_cost;
     u32 p_cost;
+};
+
+// -- Sport --------------------------------------------------------------------
+
+dictionary SportActivity {
+    i64 id;
+    string name;
+    string kind;
+    i64? color;
+    boolean archived;
+    i64 created_ms;
+};
+
+dictionary NewSportActivity {
+    string name;
+    string kind;
+    i64? color;
+};
+
+dictionary SportSession {
+    i64 id;
+    // Null once the activity type it referred to was deleted. The session
+    // itself is never deleted by that.
+    i64? activity_id;
+    i64 started_ms;
+    i64 duration_s;
+    string? free_text;
+    // Metres. Null for anything with no distance to speak of.
+    f64? distance_m;
+    // Beats per minute, when a sensor was connected for the session.
+    i64? avg_hr;
+    i64? max_hr;
+    string source;
+};
+
+dictionary NewSportSession {
+    i64? activity_id;
+    i64 started_ms;
+    i64 duration_s;
+    string? free_text;
+    f64? distance_m;
+    i64? avg_hr;
+    i64? max_hr;
+    string source;
+};
+
+dictionary StepDay {
+    // 'YYYY-MM-DD' in the device's local time. Built on the native side, which
+    // is the only one that knows the user's timezone.
+    string day_key;
+    i64 steps;
+    i64 updated_ms;
 };
 
 // -- Medication --------------------------------------------------------------
@@ -442,6 +520,64 @@ interface Vault {
     // Backup
     [Throws=TransitionError]
     bytes export_encrypted(string passphrase);
+    // -- Sport ---------------------------------------------------------------
+
+    [Throws=TransitionError]
+    SportActivity add_sport_activity(NewSportActivity activity, i64 now_ms);
+
+    [Throws=TransitionError]
+    sequence<SportActivity> list_sport_activities(boolean include_archived);
+
+    [Throws=TransitionError]
+    void update_sport_activity(i64 id, NewSportActivity activity);
+
+    [Throws=TransitionError]
+    void set_sport_activity_archived(i64 id, boolean archived);
+
+    // Deleting an activity type does NOT delete its sessions: they survive with
+    // a null activity_id. Months of training history is not something tidying a
+    // dropdown gets to erase.
+    [Throws=TransitionError]
+    void delete_sport_activity(i64 id);
+
+    [Throws=TransitionError]
+    SportSession add_sport_session(NewSportSession session);
+
+    [Throws=TransitionError]
+    sequence<SportSession> list_sport_sessions(i64 offset, i64 limit);
+
+    // Half-open [from_ms, to_ms), so two adjacent windows never both count the
+    // session sitting on their boundary.
+    [Throws=TransitionError]
+    sequence<SportSession> list_sport_sessions_between(i64 from_ms, i64 to_ms);
+
+    [Throws=TransitionError]
+    SportSession? get_sport_session(i64 id);
+
+    [Throws=TransitionError]
+    SportSession update_sport_session(i64 id, NewSportSession session);
+
+    [Throws=TransitionError]
+    void delete_sport_session(i64 id);
+
+    // Records a day's running total, keeping the LARGER of stored and incoming.
+    // The hardware step counter resets on reboot, and the first read after one
+    // would otherwise wipe the day.
+    [Throws=TransitionError]
+    void record_steps(string day_key, i64 steps, i64 now_ms);
+
+    // Overwrites outright. The escape hatch record_steps deliberately refuses,
+    // so a day can still be corrected downward on purpose.
+    [Throws=TransitionError]
+    void set_steps(string day_key, i64 steps, i64 now_ms);
+
+    // Inclusive at both ends: these are day labels, not instants.
+    [Throws=TransitionError]
+    sequence<StepDay> list_step_days(string from_key, string to_key);
+
+    [Throws=TransitionError]
+    StepDay? get_step_day(string day_key);
+
 };
 
 dictionary HormoneMeasurement {
