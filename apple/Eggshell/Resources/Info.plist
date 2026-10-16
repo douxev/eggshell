@@ -70,6 +70,11 @@
     <!-- Santé (HealthKit), read only. Asked for only when the user turns on
          « Importer depuis Santé (Apple) » in the Sport module — and that switch
          exists only when EggshellHealthKitEnabled below is true. -->
+    <!-- Required by App Store validation as soon as the HealthKit entitlement
+         is present, even for an app that only reads. eggshell never writes to
+         Santé, and the string says so. -->
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>eggshell n’écrit rien dans Santé : il lit seulement, à votre demande, vos entraînements, vos pas, votre fréquence cardiaque et vos distances pour les ajouter au module Sport. Rien ne quitte votre téléphone.</string>
     <key>NSHealthShareUsageDescription</key>
     <string>Lire vos entraînements, vos pas, votre fréquence cardiaque et vos distances de marche, de course et de vélo pour les ajouter à votre module Sport. Ces données restent sur votre téléphone, dans votre coffre chiffré, et ne sont jamais envoyées ailleurs.</string>
     <!-- Gate for every HealthKit control. True since the App ID carries the
