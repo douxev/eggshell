@@ -18,6 +18,37 @@ func vaultVerifyKey(dbPath: String, key: VaultKey) throws            // validati
 func importEncrypted(bundle: Data, passphrase: String, targetDbPath: String) throws -> ImportedVault
 ```
 
+## Changement de phrase secrète (fonctions libres, contrat 0.0.9)
+
+```swift
+func rekeyVault(dbPath: String, oldKey: VaultKey, newKey: VaultKey) throws -> RekeyReport
+func finishPendingRekey(dbPath: String) throws -> UInt32     // rejoue les renommages média d'un rekey interrompu
+func discardPendingRekey(dbPath: String) throws -> UInt32    // jette le staging d'un rekey qui n'a jamais atteint la base
+```
+
+`RekeyReport{blobsResealed:UInt32, blobsUnreadable:UInt32}`. Le coffre doit être
+**fermé** (aucun `Vault` vivant) et le nouveau sel persisté *avant* l'appel —
+voir `VaultManager.rekeyParanoid` / `resolveParanoidKey`.
+
+## Import `.fit` (fonction libre, contrat 0.0.10)
+
+```swift
+func parseFitWorkouts(data: Data) -> [FitWorkout]
+```
+
+Décode un fichier Garmin `.fit` dans le cœur Rust (crate `fitparser`, MIT),
+pour les deux apps. Ne lève jamais : un fichier qui n'est pas une activité FIT
+rend une liste vide, comme les parseurs GPX/TCX natifs. Les points GPS,
+identifiants d'appareil et profil utilisateur du fichier ne sont jamais lus.
+
+`FitWorkout` : `startedMs: Int64`, `durationS: Int64` (temps chronométré,
+pauses exclues), `distanceM: Double?`, `sport: String?` (nom FIT, affiné par le
+sous-sport : « trail running »), `title: String?` (nom du profil de sport de la
+montre), `avgHr: Int64?`, `maxHr: Int64?` (null hors 20–250 bpm).
+
+Le format est reconnu à son en-tête (`.FIT` aux octets 8–11), pas à son nom :
+voir `WorkoutFileParser.isFit` / `parseAny`.
+
 ## VaultKey (classe)
 
 ```swift
@@ -85,6 +116,23 @@ vault.addVoiceClip(clip: NewVoiceClip) throws -> VoiceClip
 vault.listVoiceClips(offset: Int64, limit: Int64) throws -> [VoiceClip]
 vault.deleteVoiceClip(id: String) throws
 
+// Sport (schéma 17, contrat 0.0.9)
+vault.addSportActivity(activity: NewSportActivity, nowMs: Int64) throws -> SportActivity
+vault.listSportActivities(includeArchived: Bool) throws -> [SportActivity]
+vault.updateSportActivity(id: Int64, activity: NewSportActivity) throws
+vault.setSportActivityArchived(id: Int64, archived: Bool) throws
+vault.deleteSportActivity(id: Int64) throws                          // les séances survivent, activityId = nil
+vault.addSportSession(session: NewSportSession) throws -> SportSession
+vault.listSportSessions(offset: Int64, limit: Int64) throws -> [SportSession]
+vault.listSportSessionsBetween(fromMs: Int64, toMs: Int64) throws -> [SportSession]   // [from, to)
+vault.getSportSession(id: Int64) throws -> SportSession?
+vault.updateSportSession(id: Int64, session: NewSportSession) throws -> SportSession
+vault.deleteSportSession(id: Int64) throws
+vault.recordSteps(dayKey: String, steps: Int64, nowMs: Int64) throws   // garde le max
+vault.setSteps(dayKey: String, steps: Int64, nowMs: Int64) throws      // écrase
+vault.listStepDays(fromKey: String, toKey: String) throws -> [StepDay] // bornes incluses
+vault.getStepDay(dayKey: String) throws -> StepDay?
+
 // Blobs (photos/audio) + backup
 vault.encryptBlob(plaintext: Data) throws -> Data                   // nonce(12) || AES-256-GCM, file-key HKDF
 vault.decryptBlob(ciphertext: Data) throws -> Data
@@ -102,7 +150,10 @@ vault.exportEncrypted(passphrase: String) throws -> Data            // bundle .t
 `JournalEntry / NewJournalEntry{atMs, mood:UInt32?, dysphoria:UInt32?, euphoria:UInt32?, libido:UInt32?, energy:UInt32?, freeText:String?, sideEffects:String?}` ·
 `HormoneMeasurement / NewHormoneMeasurement{atMs, hormone, value:Double, unit, labName:String?, notes:String?}` ·
 `PhotoRecord / NewPhotoRecord{atMs, category:String?, filePath, notes:String?}` ·
-`VoiceClip / NewVoiceClip{id:String, atMs, durationMs, filePath, pitchHz:Int32?}`
+`VoiceClip / NewVoiceClip{id:String, atMs, durationMs, filePath, pitchHz:Int32?}` ·
+`SportActivity{id, name, kind, color:Int64?, archived:Bool, createdMs}` · `NewSportActivity{name, kind, color:Int64?}` ·
+`SportSession / NewSportSession{activityId:Int64?, startedMs, durationS, freeText:String?, distanceM:Double?, avgHr:Int64?, maxHr:Int64?, source}` ·
+`StepDay{dayKey:String ("YYYY-MM-DD" local), steps:Int64, updatedMs}`
 
 ## Erreurs
 

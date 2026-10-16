@@ -36,6 +36,7 @@ pub use transition_core::vault::RekeyReport;
 pub use transition_core::sport::{
     NewSportActivity, NewSportSession, SportActivity, SportSession, StepDay,
 };
+pub use transition_core::fit::FitWorkout;
 
 uniffi::include_scaffolding!("transition");
 
@@ -90,6 +91,10 @@ fn rekey_vault(
     new_key: Arc<VaultKey>,
 ) -> Result<RekeyReport, TransitionError> {
     core_vault::rekey_vault(db_path, &old_key.inner, &new_key.inner)
+}
+
+fn parse_fit_workouts(data: Vec<u8>) -> Vec<FitWorkout> {
+    transition_core::fit::parse_fit_workouts(&data)
 }
 
 fn finish_pending_rekey(db_path: String) -> Result<u32, TransitionError> {

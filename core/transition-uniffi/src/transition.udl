@@ -46,6 +46,12 @@ namespace transition {
     // originals are untouched. Returns how many files were removed.
     [Throws=TransitionError]
     u32 discard_pending_rekey(string db_path);
+
+    // The workouts in a Garmin `.fit` file, decoded once here for both apps.
+    // Never throws: a file that is not a FIT activity holds no workouts, the
+    // same contract as the platforms' own GPX/TCX parsers. GPS points, device
+    // ids and the user profile in the file are never read out.
+    sequence<FitWorkout> parse_fit_workouts(bytes data);
 };
 
 [Error]
@@ -116,6 +122,23 @@ dictionary NewSportSession {
     i64? avg_hr;
     i64? max_hr;
     string source;
+};
+
+// One workout read out of a `.fit` file — the shape the GPX/TCX importers
+// produce on each platform, plus heart rate.
+dictionary FitWorkout {
+    i64 started_ms;
+    // Timer time (pauses excluded), elapsed time when the timer is absent.
+    i64 duration_s;
+    f64? distance_m;
+    // FIT sport name, refined by its sub-sport ("trail running"), for matching
+    // the user's own activity types. Never stored as is.
+    string? sport;
+    // The watch's sport profile name, used as the session note.
+    string? title;
+    // Beats per minute, null when absent or implausible.
+    i64? avg_hr;
+    i64? max_hr;
 };
 
 dictionary StepDay {

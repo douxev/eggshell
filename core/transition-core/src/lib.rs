@@ -5,6 +5,7 @@ pub mod bleeding;
 pub mod crypto;
 pub mod db;
 pub mod dose_schedule;
+pub mod fit;
 pub mod hormones;
 pub mod journal;
 pub mod medication;
