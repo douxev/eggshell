@@ -20,14 +20,15 @@
 </header>
 
 <main>
-  <p class="meta">Privacy policy — last updated: 30 May 2026</p>
+  <p class="meta">Privacy policy — last updated: 16 October 2026</p>
 
   <h2>In one sentence</h2>
   <p>
     <strong>eggshell does not collect any data.</strong> Everything you record
     in the app — medications, doses, hormone values, journal, photos, voice
-    clips, reminders — stays encrypted on your phone and is never sent,
-    shared or stored anywhere else.
+    clips, reminders, workouts and steps — stays encrypted on your phone and is
+    never sent, shared or stored anywhere else. That includes data you choose
+    to import from Health Connect (Android) or Apple Health (iPhone).
   </p>
 
   <h2>Who publishes this app</h2>
@@ -41,6 +42,7 @@
   <h2>What the app never does</h2>
   <ul>
     <li>No server connection. The app does not even request the Internet permission: it technically <em>cannot</em> send anything off-device.</li>
+    <li>No location: the app never reads your position, and GPS tracks in imported watch files are only used to compute a distance, then discarded.</li>
     <li>No advertising, no trackers (no Google Analytics, no Crashlytics, no Sentry, no Firebase).</li>
     <li>No account, no user identifier.</li>
     <li>No automatic cloud backup (Google Drive, iCloud: explicitly disabled in the app's manifest).</li>
@@ -55,7 +57,7 @@
     folder. The encryption key is either:
   </p>
   <ul>
-    <li>randomly generated and protected by the Android <strong>Keystore</strong> of your phone (default mode);</li>
+    <li>randomly generated and protected by your phone's Android <strong>Keystore</strong> or iOS <strong>Keychain</strong> (default mode);</li>
     <li>derived from a <strong>passphrase</strong> you choose (Argon2id);</li>
     <li>or both (mixed mode, or "Paranoid" mode where the key is never persisted).</li>
   </ul>
@@ -66,16 +68,55 @@
 
   <h2>Android permissions and why</h2>
   <ul>
-    <li><code>POST_NOTIFICATIONS</code> — show medication and lab reminders.</li>
+    <li><code>POST_NOTIFICATIONS</code> — show medication, lab and session reminders.</li>
     <li><code>SCHEDULE_EXACT_ALARM</code> / <code>USE_EXACT_ALARM</code> — fire reminders at the exact time you scheduled (clinically relevant for HRT regimens).</li>
     <li><code>RECEIVE_BOOT_COMPLETED</code> — re-schedule reminders after a phone reboot.</li>
-    <li><code>USE_BIOMETRIC</code> — use your fingerprint / face unlock to open the vault, if you opted in.</li>
-    <li><code>CAMERA</code> — only if you choose to use the photo timeline. Capture happens in-app, the photo is encrypted immediately and never written to the system gallery.</li>
-    <li><code>RECORD_AUDIO</code> — only if you choose to use voice tracking. Same: in-app capture, immediate encryption, never in system files.</li>
+    <li><code>USE_BIOMETRIC</code> / <code>USE_FINGERPRINT</code> — use your fingerprint / face unlock to open the vault, if you opted in.</li>
+    <li><code>RECORD_AUDIO</code> — only if you choose to record a voice note. In-app capture, immediate encryption, never in system files.</li>
+    <li><code>ACTIVITY_RECOGNITION</code> — only if you turn on « Compter mes pas » in the Sport module: it gives access to the phone's hardware step counter. Only daily totals are kept, in the encrypted vault.</li>
+    <li><code>BLUETOOTH_SCAN</code> / <code>BLUETOOTH_CONNECT</code> — only when you connect a heart-rate strap or watch during a session. The scan only looks for heart-rate sensors and is declared as not used for location (<code>neverForLocation</code>).</li>
+    <li><code>ACCESS_FINE_LOCATION</code> — requested only on Android 11 and older, where the system requires it for any Bluetooth scan. The app never reads your position.</li>
+    <li><code>android.permission.health.READ_EXERCISE</code>, <code>READ_STEPS</code>, <code>READ_HEART_RATE</code>, <code>READ_DISTANCE</code> — Health Connect read access, only if you turn it on (see below).</li>
+    <li><code>FOREGROUND_SERVICE</code>, <code>WAKE_LOCK</code>, <code>ACCESS_NETWORK_STATE</code> — added by the Android libraries that schedule background work (WorkManager, used to read your steps). <code>ACCESS_NETWORK_STATE</code> only tells whether a connection exists; the app does not use it and cannot send anything.</li>
   </ul>
   <p>
-    No network-related permission (<code>INTERNET</code>,
-    <code>ACCESS_NETWORK_STATE</code>) is requested.
+    Photos are picked through the system photo picker, which needs no
+    permission: the app only sees the images you hand it, and encrypts them
+    immediately.
+  </p>
+  <p>
+    The <code>INTERNET</code> permission is not requested.
+  </p>
+
+  <h2>iPhone permissions and why</h2>
+  <ul>
+    <li><strong>Face ID</strong> — unlock the vault, if you opted in.</li>
+    <li><strong>Camera, Photos</strong> — take or pick a progress photo, and save to your library a photo you export yourself.</li>
+    <li><strong>Microphone, speech recognition</strong> — record a voice note and transcribe it on the device.</li>
+    <li><strong>Motion &amp; Fitness</strong> — count your steps, if you turn the pedometer on.</li>
+    <li><strong>Bluetooth</strong> — connect a heart-rate strap or watch during a session.</li>
+    <li><strong>Health</strong> — read your workouts, steps, heart rate and distances, if you turn the import on (see below). The app writes nothing to Health.</li>
+  </ul>
+
+  <h2>Health Connect (Android) and Apple Health (iPhone)</h2>
+  <p>
+    The Sport module can import what your watch or another app recorded in
+    Health Connect (Android) or the Health app (iPhone). This is
+    <strong>off by default</strong>: it only starts if you turn on
+    « Importer depuis Health Connect » or « Importer depuis Santé (Apple) » in
+    the Sport module's settings and grant access in the system dialog.
+  </p>
+  <ul>
+    <li><strong>What is read</strong>, read-only: your exercise sessions (type, start time, duration), your daily step totals, your heart rate during sessions, and the distance of each session.</li>
+    <li><strong>Why</strong>: to fill your sport log and step calendar in eggshell. For each session only the average and the maximum heart rate are kept, never the series of readings; no route and no position is read.</li>
+    <li><strong>Where it goes</strong>: only into the app's encrypted vault, on your phone. Nothing is sent to a server, to iCloud or to any third party, and nothing is written to Health Connect or Health.</li>
+    <li><strong>What it is never used for</strong>: no advertising, no analytics, no sale, no sharing, no insurance, employment or credit decisions.</li>
+    <li><strong>To stop</strong>: turn the import off in the Sport module (on Android, Health Connect access is then revoked), or remove access in Health Connect or in Health. Sessions already imported stay in your vault until you delete them.</li>
+  </ul>
+  <p>
+    The use of information received from Health Connect adheres to the Health
+    Connect Permissions policy, including the Limited Use requirements.
+    HealthKit data is handled according to Apple's rules for health data.
   </p>
 
   <h2>Third-party libraries</h2>
@@ -84,7 +125,9 @@
   </p>
   <ul>
     <li><strong>SQLCipher</strong> — database encryption.</li>
-    <li><strong>ML Kit Text Recognition (<em>bundled</em> variant)</strong> — text recognition on lab-result PDFs for automatic import. The model ships inside the app; it does not contact any Google server and does not depend on Google Play Services.</li>
+    <li><strong>Tesseract and PdfBox</strong> — reading lab-result PDFs for automatic import. The text-recognition model ships inside the app and contacts no server.</li>
+    <li><strong>Health Connect (AndroidX)</strong> — the official library to read Health Connect, only if you turn the import on.</li>
+    <li><strong>fitparser</strong> — reading <code>.fit</code> files exported by a watch, inside the app.</li>
     <li><strong>Android Keystore</strong> — secure master-key management.</li>
     <li><strong>Jetpack Compose, Material 3, AndroidX</strong> — standard Android UI / resource libraries.</li>
   </ul>
