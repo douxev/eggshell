@@ -72,13 +72,13 @@
          exists only when EggshellHealthKitEnabled below is true. -->
     <key>NSHealthShareUsageDescription</key>
     <string>Lire vos entraînements, vos pas, votre fréquence cardiaque et vos distances de marche, de course et de vélo pour les ajouter à votre module Sport. Ces données restent sur votre téléphone, dans votre coffre chiffré, et ne sont jamais envoyées ailleurs.</string>
-    <!-- HealthKit is parked: the App Store provisioning profile (fastlane
-         match) has no HealthKit capability, and signing with the HealthKit
-         entitlement would fail. While this is false, every HealthKit control
-         stays hidden, so a build without the entitlement never offers a
-         feature that cannot work. To turn it on, follow apple/HEALTHKIT-ENABLE.md. -->
+    <!-- Gate for every HealthKit control. True since the App ID carries the
+         HealthKit capability and project.yml signs with
+         Eggshell-HealthKit.entitlements. Set it back to false only together with
+         those two (a build without the entitlement must never offer a feature
+         that cannot work) — see apple/HEALTHKIT-ENABLE.md. -->
     <key>EggshellHealthKitEnabled</key>
-    <false/>
+    <true/>
     <!-- bluetooth-central: a heart-rate sensor connected for a session keeps
          sending while the screen is locked — the phone is in a pocket for the
          whole workout, and without this mode iOS suspended the app and the
