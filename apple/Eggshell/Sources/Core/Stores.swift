@@ -29,6 +29,11 @@ final class FeaturesStore: ObservableObject {
     /// someone has moved the switch themselves, so one default covers a fresh
     /// install and an updated one.
     @Published var dreams: Bool { didSet { d.set(dreams, forKey: "dreams") } }
+    /// Sport — off by default, unlike Notes and Rêves. Turning it on is what
+    /// leads to the Motion and Bluetooth prompts, and an app that asks for a
+    /// body-sensor permission nobody enabled is exactly the surprise this one
+    /// should not spring. Mirrors android feature `sport`.
+    @Published var sport: Bool { didSet { d.set(sport, forKey: "sport") } }
 
     /// A value that changes whenever any module toggle does.
     ///
@@ -39,7 +44,7 @@ final class FeaturesStore: ObservableObject {
     /// visible, and the app icon's long-press menu is the most visible place it
     /// could possibly remain.
     var enabledSignature: String {
-        [medications, journal, hormones, weight, photos, voice, bleeding, appointments, notes, dreams]
+        [medications, journal, hormones, weight, photos, voice, bleeding, appointments, notes, dreams, sport]
             .map { $0 ? "1" : "0" }
             .joined()
     }
@@ -61,6 +66,7 @@ final class FeaturesStore: ObservableObject {
         appointments = Self.read(d, "appointments", true)
         notes        = Self.read(d, "notes", true)
         dreams       = Self.read(d, "dreams", true)
+        sport        = Self.read(d, "sport", false)
     }
 }
 

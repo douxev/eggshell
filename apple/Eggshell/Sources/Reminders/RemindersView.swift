@@ -87,6 +87,10 @@ struct RemindersView: View {
     @State private var contentMode: NotifContentMode = NotifPrefs.contentMode
 
     @State private var labEditor: LabEditorTarget?
+    /// Per-schedule « Prioritaire » set from this screen. Read back from
+    /// `NotifPrefs` when absent, so a schedule nobody touched shows the global
+    /// default it actually follows.
+    @State private var medPriority: [Int64: Bool] = [:]
     @State private var confirmPause: DoseSchedule?
     @State private var editingSchedule: ScheduleEditTarget?
 
@@ -126,6 +130,11 @@ struct RemindersView: View {
                         hint: "Un rappel pour noter ton humeur du jour.",
                         addLabel: "Ajouter un rappel journal")
                     labSection(
+                        kind: LabReminderKind.sport,
+                        title: "SPORT",
+                        hint: "Rappels de séance. Même fonctionnement que les autres : une notification discrète, sans dire de quoi il s'agit.",
+                        addLabel: "Ajouter un rappel de séance")
+                    labSection(
                         kind: LabReminderKind.dream,
                         title: "RÊVES",
                         hint: "Un rappel au réveil : le souvenir d’un rêve s’efface en quelques minutes, donc l’heure fait tout.",
@@ -148,7 +157,7 @@ struct RemindersView: View {
             LabReminderEditor(target: target) { saved in
                 labReminders.upsert(saved)
                 labEditor = nil
-                Task { await NotificationManager.scheduleLabReminders(labReminders.items) }
+                labReminders.refresh()
             } onCancel: {
                 labEditor = nil
             }
@@ -206,6 +215,18 @@ struct RemindersView: View {
                             }
                             .buttonStyle(.plain)
                         }
+                        // Per schedule, as Android's list does: one treatment
+                        // can warrant a banner and a sound when the others do
+                        // not.
+                        Toggle(isOn: medPriorityBinding(schedule.id)) {
+                            Text("Prioritaire")
+                                .font(EggFont.bodyS)
+                                .foregroundStyle(palette.onSurfaceVariant)
+                        }
+                        .tint(palette.primary)
+                        .padding(.leading, ListRowView.separatorInset)
+                        .padding(.trailing, Metrics.screenMargin)
+                        .padding(.bottom, Spacing.s)
                         if index != vm.schedules.count - 1 {
                             Rectangle()
                                 .fill(palette.outlineVariant)
@@ -216,6 +237,16 @@ struct RemindersView: View {
                 }
             }
         }
+    }
+
+    private func medPriorityBinding(_ scheduleId: Int64) -> Binding<Bool> {
+        Binding(
+            get: { medPriority[scheduleId] ?? NotifPrefs.isMedPriority(scheduleId) },
+            set: { value in
+                medPriority[scheduleId] = value
+                NotifPrefs.setMedPriority(value, for: scheduleId)
+                Task { await app.refreshNotifications() }
+            })
     }
 
     private func medIcon(_ schedule: DoseSchedule) -> String {
@@ -262,9 +293,7 @@ struct RemindersView: View {
                                 action: { labEditor = .edit(reminder) })
                             Button {
                                 labReminders.delete(id: reminder.id)
-                                Task {
-                                    await NotificationManager.scheduleLabReminders(labReminders.items)
-                                }
+                                labReminders.refresh()
                             } label: {
                                 Image(systemName: "trash")
                                     .font(.system(size: 15))
@@ -289,8 +318,7 @@ struct RemindersView: View {
     }
 
     private func intervalLabel(_ reminder: LabReminder) -> String {
-        let suffix = reminder.enabled ? "" : " · désactivé"
-        return "Tous les \(max(1, reminder.intervalDays)) j" + suffix
+        reminder.cadenceLabel
     }
 
     // MARK: - Alias par traitement
@@ -332,7 +360,7 @@ struct RemindersView: View {
                     Text("Rappels prioritaires")
                         .font(.eggBody)
                         .foregroundStyle(palette.onSurface)
-                    Text("Notification proéminente (bannière, son) plutôt que silencieuse.")
+                    Text("Notification proéminente (bannière, son) plutôt que silencieuse. Par défaut pour chaque rappel ; « Prioritaire » sur un rappel l'emporte.")
                         .font(EggFont.bodyS)
                         .foregroundStyle(palette.onSurfaceVariant)
                         .fixedSize(horizontal: false, vertical: true)
@@ -438,7 +466,9 @@ private struct AliasField: View {
 
 // MARK: - Lab reminder editor
 
-private enum LabEditorTarget: Identifiable {
+/// Shared with the sport module's own reminder screen, which is the same
+/// store through a second door.
+enum LabEditorTarget: Identifiable {
     case new(kind: String)
     case edit(LabReminder)
 
@@ -450,16 +480,29 @@ private enum LabEditorTarget: Identifiable {
     }
 }
 
-/// Create or edit a lab / photo / voice / journal reminder.
-private struct LabReminderEditor: View {
+/// Create or edit a lab / photo / voice / journal / dream / sport reminder.
+///
+/// Two cadences, as on Android: every N days (a blood test, a progress photo)
+/// or every day at a set time (a training session, the moment after waking).
+struct LabReminderEditor: View {
     @Environment(\.palette) private var palette
     let target: LabEditorTarget
     let onSave: (LabReminder) -> Void
     let onCancel: () -> Void
 
+    private enum Cadence: Hashable { case interval, daily }
+
     @State private var label: String
+    @State private var cadence: Cadence
     @State private var daysStr: String
+    @State private var time: Date
     @State private var enabled: Bool
+    @State private var priority: Bool
+    /// What the reminder had before this sheet opened. Kept unless the toggle
+    /// is actually moved, so opening and saving a reminder that follows the
+    /// global default does not quietly pin it to today's value of that default.
+    private let storedPriority: Bool?
+    private let shownPriority: Bool
 
     init(target: LabEditorTarget, onSave: @escaping (LabReminder) -> Void, onCancel: @escaping () -> Void) {
         self.target = target
@@ -468,13 +511,31 @@ private struct LabReminderEditor: View {
         switch target {
         case .new(let kind):
             _label = State(initialValue: LabReminderKind.label(kind))
-            _daysStr = State(initialValue: "90")
+            _cadence = State(initialValue: .interval)
+            _daysStr = State(initialValue: String(LabReminderKind.defaultIntervalDays(kind)))
+            _time = State(initialValue: Self.time(hour: 9, minute: 0))
             _enabled = State(initialValue: true)
+            storedPriority = nil
+            shownPriority = NotifPrefs.highPriority
+            _priority = State(initialValue: NotifPrefs.highPriority)
         case .edit(let saved):
             _label = State(initialValue: saved.label)
-            _daysStr = State(initialValue: String(saved.intervalDays))
+            _cadence = State(initialValue: saved.isDaily ? .daily : .interval)
+            // A daily reminder keeps 1 in intervalDays; switching it back to
+            // « tous les N jours » should not offer « 1 » as if it were a choice.
+            _daysStr = State(initialValue: saved.isDaily
+                             ? String(LabReminderKind.defaultIntervalDays(saved.kind))
+                             : String(saved.intervalDays))
+            _time = State(initialValue: Self.time(hour: saved.dailyHour ?? 9, minute: saved.dailyMinute ?? 0))
             _enabled = State(initialValue: saved.enabled)
+            storedPriority = saved.highPriority
+            shownPriority = saved.isPriority
+            _priority = State(initialValue: saved.isPriority)
         }
+    }
+
+    private static func time(hour: Int, minute: Int) -> Date {
+        Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: Date()) ?? Date()
     }
 
     private var kind: String {
@@ -485,8 +546,11 @@ private struct LabReminderEditor: View {
     }
 
     private var canSave: Bool {
-        !label.trimmingCharacters(in: .whitespaces).isEmpty
-            && (Int(daysStr).map { $0 > 0 } ?? false)
+        guard !label.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        switch cadence {
+        case .interval: return Int(daysStr).map { $0 > 0 } ?? false
+        case .daily:    return true
+        }
     }
 
     var body: some View {
@@ -496,14 +560,26 @@ private struct LabReminderEditor: View {
                     TextField("Libellé", text: $label)
                 }
                 Section("Fréquence") {
-                    HStack {
-                        Text("Tous les")
-                        TextField("90", text: $daysStr)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                        Text("jours")
+                    Picker("Fréquence", selection: $cadence) {
+                        Text("Tous les N jours").tag(Cadence.interval)
+                        Text("Chaque jour").tag(Cadence.daily)
+                    }
+                    .pickerStyle(.segmented)
+                    switch cadence {
+                    case .interval:
+                        HStack {
+                            Text("Tous les")
+                            TextField("7", text: $daysStr)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                            Text("jours")
+                        }
+                    case .daily:
+                        DatePicker("À", selection: $time, displayedComponents: .hourAndMinute)
+                            .environment(\.locale, Locale(identifier: "fr_FR"))
                     }
                     Toggle("Activé", isOn: $enabled).tint(palette.primary)
+                    Toggle("Prioritaire", isOn: $priority).tint(palette.primary)
                 }
             }
             .navigationTitle(title)
@@ -529,20 +605,28 @@ private struct LabReminderEditor: View {
     }
 
     private func save() {
-        let days = max(1, Int(daysStr) ?? 1)
         let trimmed = label.trimmingCharacters(in: .whitespaces)
-        let next = Calendar.current.date(byAdding: .day, value: days, to: Date()) ?? Date()
-        let nextMs = Int64(next.timeIntervalSince1970 * 1000)
-        let saved: LabReminder
+        let id: String
         switch target {
-        case .new:
-            saved = LabReminder(
-                id: UUID().uuidString, kind: kind, label: trimmed,
-                intervalDays: days, nextDueMs: nextMs, enabled: enabled)
-        case .edit(let existing):
-            saved = LabReminder(
-                id: existing.id, kind: existing.kind, label: trimmed,
-                intervalDays: days, nextDueMs: nextMs, enabled: enabled)
+        case .new:                id = UUID().uuidString
+        case .edit(let existing): id = existing.id
+        }
+        var saved = LabReminder(
+            id: id, kind: kind, label: trimmed,
+            intervalDays: 1, nextDueMs: 0, enabled: enabled)
+        saved.highPriority = priority == shownPriority ? storedPriority : priority
+        switch cadence {
+        case .interval:
+            let days = max(1, Int(daysStr) ?? 1)
+            saved.intervalDays = days
+            let next = Calendar.current.date(byAdding: .day, value: days, to: Date()) ?? Date()
+            saved.nextDueMs = Int64(next.timeIntervalSince1970 * 1000)
+        case .daily:
+            let parts = Calendar.current.dateComponents([.hour, .minute], from: time)
+            saved.dailyHour = parts.hour ?? 9
+            saved.dailyMinute = parts.minute ?? 0
+            // intervalDays stays 1: an older build reading this sees "every day".
+            saved.nextDueMs = Int64(saved.nextOccurrence(after: Date()).timeIntervalSince1970 * 1000)
         }
         onSave(saved)
     }

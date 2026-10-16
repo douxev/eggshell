@@ -25,6 +25,10 @@ func describe(_ error: Error) -> String {
     case VaultError.missingPassphrase: return "Phrase secrète requise."
     case VaultError.paranoidRequiresRekey:
         return "Le mode paranoïaque n'est pas disponible pour un import ou un changement de mode."
+    case VaultError.staleRecovery:
+        return "Cette clé de récupération était la bonne, mais elle ouvrait l'ancienne clé du coffre, retirée quand ta phrase secrète a changé. Elle a été supprimée : utilise ta phrase secrète, puis définis une nouvelle clé dans Réglages › Sécurité."
+    case VaultError.rekeyUnfinished:
+        return "Le dernier changement de phrase secrète n'est pas tout à fait terminé. Verrouille l'app et rouvre-la, puis réessaie."
     default: return (error as NSError).localizedDescription
     }
 }

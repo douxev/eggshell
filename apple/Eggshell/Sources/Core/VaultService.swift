@@ -293,6 +293,64 @@ actor VaultService {
     }
     func deleteVoiceClip(_ id: String) throws { try vault.deleteVoiceClip(id: id) }
 
+    // MARK: Sport
+    //
+    // Sessions, the activity catalogue and daily step totals. The rules live
+    // in the core (`transition-core/src/sport.rs`); step days are keyed
+    // `YYYY-MM-DD` in local time, built by the caller because only this side
+    // knows the device timezone.
+
+    @discardableResult
+    func addSportActivity(_ a: NewSportActivity, nowMs: Int64 = Time.nowMs()) throws -> SportActivity {
+        try vault.addSportActivity(activity: a, nowMs: nowMs)
+    }
+    func listSportActivities(includeArchived: Bool = false) throws -> [SportActivity] {
+        try vault.listSportActivities(includeArchived: includeArchived)
+    }
+    func updateSportActivity(_ id: Int64, _ a: NewSportActivity) throws {
+        try vault.updateSportActivity(id: id, activity: a)
+    }
+    func setSportActivityArchived(_ id: Int64, _ archived: Bool) throws {
+        try vault.setSportActivityArchived(id: id, archived: archived)
+    }
+    /// Deleting a type does NOT delete its sessions: they survive with a nil
+    /// activity id. Months of training history is not something tidying a
+    /// dropdown gets to erase.
+    func deleteSportActivity(_ id: Int64) throws { try vault.deleteSportActivity(id: id) }
+
+    @discardableResult
+    func addSportSession(_ s: NewSportSession) throws -> SportSession {
+        try vault.addSportSession(session: s)
+    }
+    func listSportSessions(offset: Int64 = 0, limit: Int64 = 100) throws -> [SportSession] {
+        try vault.listSportSessions(offset: offset, limit: limit)
+    }
+    /// Half-open `[fromMs, toMs)`, so adjacent windows never double-count.
+    func listSportSessionsBetween(fromMs: Int64, toMs: Int64) throws -> [SportSession] {
+        try vault.listSportSessionsBetween(fromMs: fromMs, toMs: toMs)
+    }
+    func getSportSession(_ id: Int64) throws -> SportSession? { try vault.getSportSession(id: id) }
+    @discardableResult
+    func updateSportSession(_ id: Int64, _ s: NewSportSession) throws -> SportSession {
+        try vault.updateSportSession(id: id, session: s)
+    }
+    func deleteSportSession(_ id: Int64) throws { try vault.deleteSportSession(id: id) }
+
+    /// Keeps the larger of stored and incoming, so a stale sensor answer can
+    /// never erase a day's walking.
+    func recordSteps(dayKey: String, steps: Int64, nowMs: Int64 = Time.nowMs()) throws {
+        try vault.recordSteps(dayKey: dayKey, steps: steps, nowMs: nowMs)
+    }
+    /// Overwrites outright — the only way to correct a day downward.
+    func setSteps(dayKey: String, steps: Int64, nowMs: Int64 = Time.nowMs()) throws {
+        try vault.setSteps(dayKey: dayKey, steps: steps, nowMs: nowMs)
+    }
+    /// Inclusive at both ends: these are day labels, not instants.
+    func listStepDays(fromKey: String, toKey: String) throws -> [StepDay] {
+        try vault.listStepDays(fromKey: fromKey, toKey: toKey)
+    }
+    func getStepDay(dayKey: String) throws -> StepDay? { try vault.getStepDay(dayKey: dayKey) }
+
     // MARK: Settings (in-vault key/value)
     /// The only *encrypted* preference store the app has. An absent key reads
     /// nil; the empty string is a value, so clear a field with `deleteSetting`.

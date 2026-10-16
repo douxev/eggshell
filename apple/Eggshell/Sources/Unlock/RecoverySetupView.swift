@@ -245,6 +245,9 @@ struct RecoverySetupView: View {
             confirmation = ""
             currentPassphrase = ""
             if let onDone { onDone() } else { app.recoverySetupFinished() }
+        } catch VaultError.rekeyUnfinished {
+            // Not the passphrase's fault: say what actually blocks it.
+            self.error = describe(VaultError.rekeyUnfinished)
         } catch {
             self.error = needsPassphrase
                 ? "On n'a pas réussi à enregistrer cette clé. Vérifie ta phrase secrète actuelle."

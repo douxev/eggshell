@@ -5,6 +5,110 @@
 > Android : ~20 100 lignes Kotlin/Compose · iOS : ~5 200 lignes SwiftUI · cœur Rust partagé via uniffi.
 
 
+## 0-ter. Delta 2.3.2 → 2.4.0 (mis à jour le 2026-09-04)
+
+> `MARKETING_VERSION` passe à 2.4.0, en phase avec Android (versionCode 23).
+> Contrat de bindings `TransitionCoreInfo.bindingsContract` 0.0.8 → **0.0.9**
+> (tables sport du schéma 17, `rekeyVault` et ses deux compléments).
+
+| Fonctionnalité 2.4.0 | Android | iOS |
+|---|---|---|
+| Module Sport : séances, catalogue de types, tableau de bord (semaine, série) | ✅ | ✅ `Sport/SportView.swift`, `SportSessionEditorView.swift`, `SportActivitiesView.swift`, `SportStore.swift` |
+| Podomètre : totaux quotidiens + calendrier des pas + objectif | ✅ capteur `TYPE_STEP_COUNTER` | ✅ `Sport/StepCounter.swift` sur Core Motion (`CMPedometer`, 7 jours d'historique relus à chaque ouverture) |
+| Import `.gpx` / `.tcx` exporté par la montre, avec prévisualisation et doublons | ✅ | ✅ `Sport/WorkoutFile.swift` (`XMLParser`, entités externes désactivées), règles de rapprochement identiques |
+| Fréquence cardiaque en direct sur le profil Bluetooth standard (0x180D) | ✅ | ✅ `Sport/HeartRateMonitor.swift` sur Core Bluetooth, parseur 0x2A37 octet pour octet identique |
+| Rappels de séance depuis le module | ✅ `CATEGORY_SPORT` | ✅ `LabReminderKind.sport`, `Sport/SportRemindersView.swift`, section « Sport » du hub ; « tous les N jours » (7 par défaut pour le sport) ou « chaque jour à HH:MM » |
+| Changer de phrase secrète (re-wrap, ou rekey complet en mode paranoïaque, reprise après interruption) | ✅ | ✅ `VaultManager.rewrapPassphrase` / `rekeyParanoid` / `resolveParanoidKey`, section « Phrase secrète » de `AdvancedSettingsView`, fenêtre `AppState.busy` |
+| Grouper les rappels de traitement (fenêtre de 15 min, « Tout pris » / « Plus tard » / « Tout passer ») | ✅ | ✅ `NotifPrefs.groupMedReminders`, `NotificationManager.clusterOccurrences`, catégorie `DOSE_GROUP_REMINDER`, interrupteur dans Réglages › Rappels |
+| Widgets de module avec contenu, thème de l'app | ✅ 10 providers | ❌ toujours **bloqué** hors dépôt (cible WidgetKit, App Group, profil — voir §0bis) |
+| Widget Poids supprimé | ✅ | — (jamais existé sur iOS) |
+
+### Ce qui diffère volontairement
+
+- **Rappels non médicamenteux** : `LabReminder` a maintenant les deux
+  cadences d'Android (« tous les N jours », « chaque jour à HH:MM »), par
+  champs optionnels `dailyHour`/`dailyMinute` — les rappels déjà enregistrés
+  se décodent à l'identique, sans migration. Un rappel quotidien est un seul
+  déclencheur répétitif ; un rappel « tous les N jours » est ré-armé à chaque
+  déverrouillage et à chaque retour au premier plan
+  (`LabReminderStore.refresh`), avec ses 3 prochaines occurrences en attente.
+  Avant, il ne sonnait qu'une fois, puis était re-tiré « dans une minute » à
+  chaque modification. Le titre de notification est le même qu'Android
+  (« C'est l'heure »).
+- **Priorité par rappel** (Android `PriorityPrefs`) : « Prioritaire » par
+  planning de traitement (interrupteur sur chaque ligne de Réglages ›
+  Rappels, `NotifPrefs.setMedPriority`) et par rappel analyse/photo/voix/
+  journal/rêve/sport (éditeur, `LabReminder.highPriority`). Sans valeur
+  propre, un rappel suit le réglage global « Rappels prioritaires », qui
+  reste le défaut ; les données existantes n'ont pas de valeur propre et se
+  comportent comme avant. Un groupe est prioritaire si l'un de ses membres
+  l'est (comme Android). Limite iOS : « prioritaire » = niveau
+  `.timeSensitive`, ramené par le système à `.active` (bannière + son) sans
+  l'entitlement Time Sensitive, que l'app n'a pas (il casserait la
+  signature comme HealthKit) ; non prioritaire = `.passive` (centre de
+  notifications seulement). Le passage à travers un mode Concentration n'est
+  donc pas disponible. L'éditeur de planning (`Medication/AddScheduleView`)
+  n'a pas encore l'interrupteur : il est sur la ligne du hub.
+- **Rappels de traitement groupés** : iOS fusionne au moment de la
+  planification (les notifications sont pré-planifiées, l'app ne tourne pas
+  quand elles sonnent). Règle commune aux deux plateformes : triées par heure,
+  un groupe commence au premier rappel non placé et prend tous ceux dus moins
+  de 15 min après lui ; il sonne à l'heure du premier ; un même planning n'y
+  figure qu'une fois. Option activée, chaque rappel de traitement prend ce
+  format, même seul (« Traitement à prendre »). Les occurrences fusionnées sont
+  des dates concrètes (les 16 occurrences déjà pré-planifiées par planning),
+  jamais des déclencheurs répétitifs, et tout est recalculé à chaque
+  re-planification. Toutes les notifications de traitement partagent un
+  `threadIdentifier`, option activée ou non. « Plus tard » re-présente le
+  rappel 30 min après (comme `SNOOZE_MS` d'Android), groupé ou seul : la
+  catégorie d'un rappel seul a maintenant « Pris », « Plus tard », « Passer ».
+  Un report par planning (`snooze-sched-<id>`), retiré si le planning
+  disparaît ou est suspendu. iOS n'a pas de sauvegarde des réglages : l'option
+  n'est donc exportée nulle part.
+- **Santé (HealthKit), en lecture seule** : `Sport/HealthKitImporter.swift`,
+  mêmes règles que l'import Health Connect d'Android (source `"health"`,
+  doublon = même milliseconde, ou ±60 s d'une séance non manuelle ; pas au max ;
+  FC 20–300). **Garé** derrière `EggshellHealthKitEnabled` = false dans
+  Info.plist tant que le profil App Store n'a pas la capacité HealthKit — voir
+  `apple/HEALTHKIT-ENABLE.md`. Particularité iOS : un jour de pas corrigé à la
+  main dans la dernière semaine n'est pas relevé par l'import.
+- **Pas en direct** : tant que l'écran Sport est affiché et le podomètre
+  activé, `CMPedometer.startUpdates` depuis minuit ; « pas aujourd'hui » et la
+  case du jour montrent le plus grand du coffre et du capteur. Rien n'est
+  écrit pas à pas : la synchro au chargement et au déverrouillage reste
+  l'unique écrivain.
+- **Clé de récupération en mode paranoïaque** : iOS permet d'en définir une
+  (elle enveloppe la clé dérivée de la phrase), Android non. Un changement de
+  phrase la rend caduque : elle est donc retirée, Réglages le dit, l'écran de
+  déverrouillage cesse de la proposer, et une clé caduque saisie correctement
+  n'est plus comptée comme un échec vers l'effacement automatique.
+- **Échec tardif d'un rekey paranoïaque** : iOS ne suppose plus que « erreur =
+  rien n'a bougé ». Il demande à la base laquelle des deux clés l'ouvre avant
+  de jeter quoi que ce soit (`VaultManager.settleFailedRekey`). **À reporter
+  côté Android** : `VaultRepository.rekeyUnderNewPassphrase` a encore le catch
+  qui jette le staging et le sel en attente même si la base a déjà changé de
+  clé, et `resolveParanoidKey` y promeut le sel même quand le rejeu des
+  renommages a échoué.
+- **Podomètre** : iOS relit les sept derniers jours à chaque ouverture du
+  module (Core Motion garde une semaine), là où Android ne crédite que le
+  jour courant depuis un compteur cumulatif. Le coffre garde le max dans les
+  deux cas, donc rien ne peut redescendre.
+- **Permissions** : `NSMotionUsageDescription` et
+  `NSBluetoothAlwaysUsageDescription` sont ajoutées à `Info.plist` ; les deux
+  ne sont demandées qu'après une action explicite (interrupteur podomètre,
+  bouton « Connecter »), jamais à l'ouverture du module.
+
+### À vérifier au premier build CI
+
+Pas de build iOS local. En plus de `swiftc -parse`, les fichiers sans vue
+peuvent être vérifiés sous Linux avec `swiftc -typecheck`, contre les bindings
+générés depuis `transition.udl` par `core/target/debug/uniffi-bindgen`
+(mode UDL, sans compiler le cœur) et de petits modules de remplacement pour
+les frameworks Apple. Les vues SwiftUI restent réservées à la CI.
+Points sensibles : `HeartRateMonitor` (délégués Core Bluetooth `nonisolated`
+sur une classe `@MainActor`), `SportView.fileImporter` avec `[.item]`,
+`AppState.changePassphrase` (fermeture puis réouverture de la session).
+
 ## 0-bis. Delta 2.1.0 → 2.3.1 (mis à jour le 2026-08-08)
 
 > `MARKETING_VERSION` passe à 2.3.1, en phase avec Android.

@@ -225,6 +225,15 @@ final class UnlockViewModel: ObservableObject {
             refreshFailures()
             recoverySecret = ""
             app?.unlocked(session: session)
+        } catch VaultError.staleRecovery {
+            // The secret was right; the wrap was retired by a passphrase
+            // change and has just been removed. Not a failed attempt — it must
+            // not walk anyone toward the auto-wipe — and no longer a way in, so
+            // the route goes and the passphrase is what is left.
+            self.error = describe(VaultError.staleRecovery)
+            self.recoverySecret = ""
+            recoveryReachable = false
+            step = mode.needsPassphrase ? .passphrase : (mode.needsBiometric ? .biometric : .passphrase)
         } catch {
             handleFailure()
             self.error = "Cette clé de récupération ne correspond pas."

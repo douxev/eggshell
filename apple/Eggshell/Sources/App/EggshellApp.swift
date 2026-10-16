@@ -13,6 +13,7 @@ struct EggshellApp: App {
     @StateObject private var whatsNew = WhatsNewStore()
     @StateObject private var labReminders = LabReminderStore()
     @StateObject private var dreamsStore = DreamsStore()
+    @StateObject private var sportPrefs = SportPrefs()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -29,6 +30,7 @@ struct EggshellApp: App {
             .environmentObject(whatsNew)
             .environmentObject(labReminders)
             .environmentObject(dreamsStore)
+            .environmentObject(sportPrefs)
             .task {
                 NotificationCoordinator.shared.configure()
                 await app.bootstrap()

@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import TransitionCore
+import UIKit
 
 enum AppRoute: Equatable {
     case launching
@@ -23,6 +24,21 @@ final class AppState: ObservableObject {
     @Published var route: AppRoute = .launching
     @Published private(set) var session: VaultService?
 
+    /// True while the vault is deliberately closed for maintenance the user
+    /// asked for — today, a paranoid-mode passphrase change, which re-encrypts
+    /// the database in place and therefore cannot run with a connection open.
+    ///
+    /// Elsewhere "no session" means "the user must re-authenticate", which is
+    /// right for every other way a session ends and wrong for this one: it
+    /// would tear down the very screen that is driving the operation.
+    @Published private(set) var busy = false
+
+    /// Set when something asked to lock while `busy`. The vault was already
+    /// closed, so `lock()` had nothing to do — but the request must still be
+    /// honoured, or backgrounding the phone mid-rekey would end with the vault
+    /// re-opened behind a lock screen the user never passed.
+    private var lockRequestedWhileBusy = false
+
     let manager = VaultManager()
 
     init() { Self.shared = self }
@@ -40,6 +56,20 @@ final class AppState: ObservableObject {
 
     func unlocked(session: VaultService) {
         self.session = session
+        // Fire-and-forget, after the session exists and without holding up
+        // the route: step totals, Santé imports and reminder dates are
+        // conveniences, the unlock is not. The step and Santé syncs write to
+        // the vault, so only this path — a real unlock — reaches them; the
+        // decoy never does. Reminder dates live outside the vault and are also
+        // re-armed on return to the foreground (see LabReminderStore).
+        Task {
+            await StepCounter.syncAfterUnlock(session: session)
+            // After the pedometer, so the two step writers never interleave —
+            // the vault keeps the max either way. A no-op unless the build
+            // carries HealthKit and the user turned the import on.
+            await HealthKitImporter.syncAfterUnlock(session: session)
+        }
+        LabReminderStore.shared?.refresh()
         Task {
             // Decided before the route is set, not after: routing to .home and
             // correcting it a hop later mounts the whole shell, loads it, and
@@ -112,13 +142,115 @@ final class AppState: ObservableObject {
 
     /// Lock on background / manual lock. Drops the in-memory vault handle.
     func lock() {
+        if busy {
+            lockRequestedWhileBusy = true
+            return
+        }
         session = nil
         if route == .home { route = .unlock }
+    }
+
+    /// Replace the passphrase that opens the vault, keeping every byte of data.
+    ///
+    /// Two passphrase modes, two entirely different jobs — see
+    /// `VaultManager.rewrapPassphrase` and `VaultManager.rekeyParanoid`. The
+    /// paranoid path is the one this method exists for: the session has to be
+    /// closed before the rewrite and reopened after it, and a lock requested in
+    /// between must win over the reopen.
+    ///
+    /// The session is closed by the manager, through `closeSession`, and only
+    /// once the current passphrase has been verified. Closing it first used to
+    /// mean a typo in « phrase actuelle » ended with the reopen failing too —
+    /// the user thrown out to the lock screen for a spelling mistake.
+    func changePassphrase(current: String, new: String) async -> VaultManager.ChangePassphraseOutcome {
+        guard let mode = await manager.currentMode else { return .failed("coffre non initialisé") }
+        switch mode {
+        case .keystorePassphrase:
+            return await manager.rewrapPassphrase(current: current, new: new)
+        case .paranoid:
+            // A full re-encryption can outlast the few seconds iOS grants a
+            // backgrounded app. Ask for more, so switching apps mid-way does
+            // not freeze the rewrite half done — the order stays kill-safe
+            // either way, this only makes the kill less likely.
+            let grace = BackgroundGrace(name: "eggshell.passphrase-rekey")
+            defer { grace.end() }
+
+            let outcome = await manager.rekeyParanoid(current: current, new: new) { [weak self] in
+                guard let self else { return }
+                self.lockRequestedWhileBusy = false
+                self.busy = true
+                // SQLCipher rekeys in place, and an open handle would carry
+                // on reading pages with the retired key.
+                self.session = nil
+            }
+            // Never closed: a typo, nothing to change, or a refusal before any
+            // byte moved. The session the user was working in is untouched.
+            guard busy else { return outcome }
+
+            // Which passphrase the file answers to now. `undetermined` tries
+            // both: the manager's resolution settles the change with
+            // whichever one opens it.
+            let candidates: [String]
+            switch outcome {
+            case .success:  candidates = [new]
+            case .failed:   candidates = [current]
+            default:        candidates = [new, current]
+            }
+            // Still `busy` while reopening, so a lock requested during the
+            // reopen is recorded rather than lost.
+            var reopened: VaultService?
+            if !lockRequestedWhileBusy {
+                for passphrase in candidates {
+                    if let s = try? await manager.unlock(passphrase: passphrase) {
+                        reopened = s
+                        break
+                    }
+                }
+            }
+            busy = false
+            if let reopened, !lockRequestedWhileBusy {
+                session = reopened
+            } else {
+                // Either a lock was asked for while busy, or nothing reopened
+                // the vault; the unlock screen's two-salt resolution is the
+                // way back in.
+                lockRequestedWhileBusy = false
+                lock()
+            }
+            return outcome
+        case .keystoreOnly, .keystoreBiometric:
+            return .notApplicable
+        }
     }
 
     func wipe() async {
         await manager.wipeEverything()
         session = nil
         route = .onboarding
+    }
+}
+
+/// A background-task assertion around work that must not be frozen half way.
+///
+/// iOS suspends a backgrounded app within seconds unless it asks for time.
+/// `end()` is idempotent: it runs from `defer` when the work finishes, or from
+/// the expiration handler when iOS runs out of patience — and it must run in
+/// the latter case, or iOS kills the app for overstaying instead of merely
+/// suspending it.
+@MainActor
+private final class BackgroundGrace {
+    private var id: UIBackgroundTaskIdentifier = .invalid
+
+    init(name: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            // Delivered on the main thread.
+            MainActor.assumeIsolated { self?.end() }
+        }
+    }
+
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }

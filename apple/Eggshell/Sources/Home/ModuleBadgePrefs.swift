@@ -2,7 +2,7 @@ import Foundation
 
 /// The openable tiles of the launcher, in reading order (§6.1.6, §7.2).
 enum LauncherModule: String, CaseIterable, Hashable {
-    case meds, appointments, journal, bleeding, labs, weight, photos, voice, notes, dreams
+    case meds, appointments, journal, bleeding, labs, weight, photos, voice, notes, dreams, sport
 }
 
 /// When each launcher module was last opened.

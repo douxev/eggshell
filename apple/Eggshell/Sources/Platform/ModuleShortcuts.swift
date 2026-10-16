@@ -16,6 +16,7 @@ enum AppModule: String, CaseIterable {
     case bleeding
     case photos
     case voice
+    case sport
 
     var title: String {
         switch self {
@@ -29,6 +30,7 @@ enum AppModule: String, CaseIterable {
         case .bleeding: return "Menstruations"
         case .photos: return "Photos"
         case .voice: return "Voix"
+        case .sport: return "Sport"
         }
     }
 
@@ -45,6 +47,7 @@ enum AppModule: String, CaseIterable {
         case .bleeding: return "drop.fill"
         case .photos: return "camera.fill"
         case .voice: return "waveform"
+        case .sport: return "figure.run"
         }
     }
 
@@ -68,6 +71,7 @@ enum AppModule: String, CaseIterable {
         case .bleeding: return features.bleeding
         case .photos: return features.photos
         case .voice: return features.voice
+        case .sport: return features.sport
         }
     }
 }

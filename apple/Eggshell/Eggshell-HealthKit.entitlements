@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- PARKED. Not referenced by project.yml yet: the App Store profile that
+         fastlane match installs has no HealthKit capability, and signing with
+         this file today would fail. Same keychain group as Eggshell.entitlements,
+         plus read access to HealthKit. Switch CODE_SIGN_ENTITLEMENTS to this
+         file only after following apple/HEALTHKIT-ENABLE.md. -->
+    <key>keychain-access-groups</key>
+    <array>
+        <string>$(AppIdentifierPrefix)com.douxev.eggshell</string>
+    </array>
+    <key>com.apple.developer.healthkit</key>
+    <true/>
+    <!-- Empty: no clinical health records, only the regular HealthKit types. -->
+    <key>com.apple.developer.healthkit.access</key>
+    <array/>
+</dict>
+</plist>

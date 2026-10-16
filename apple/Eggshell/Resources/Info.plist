@@ -60,6 +60,35 @@
     <string>Importer des photos de suivi depuis votre photothèque.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>Enregistrer une photo déchiffrée dans votre photothèque.</string>
+    <!-- Sport module. Both are asked for only after the user turned the
+         feature on: the pedometer switch is what leads to the Motion prompt,
+         and « Connecter » on the session editor to the Bluetooth one. -->
+    <key>NSMotionUsageDescription</key>
+    <string>Compter vos pas quotidiens avec le capteur de l’appareil. Rien ne quitte le téléphone.</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Lire la fréquence cardiaque d’une ceinture, d’une bague ou de votre montre pendant une séance de sport. Rien ne quitte le téléphone.</string>
+    <!-- Santé (HealthKit), read only. Asked for only when the user turns on
+         « Importer depuis Santé (Apple) » in the Sport module — and that switch
+         exists only when EggshellHealthKitEnabled below is true. -->
+    <key>NSHealthShareUsageDescription</key>
+    <string>Lire vos entraînements, vos pas, votre fréquence cardiaque et vos distances de marche, de course et de vélo pour les ajouter à votre module Sport. Ces données restent sur votre téléphone, dans votre coffre chiffré, et ne sont jamais envoyées ailleurs.</string>
+    <!-- HealthKit is parked: the App Store provisioning profile (fastlane
+         match) has no HealthKit capability, and signing with the HealthKit
+         entitlement would fail. While this is false, every HealthKit control
+         stays hidden, so a build without the entitlement never offers a
+         feature that cannot work. To turn it on, follow apple/HEALTHKIT-ENABLE.md. -->
+    <key>EggshellHealthKitEnabled</key>
+    <false/>
+    <!-- bluetooth-central: a heart-rate sensor connected for a session keeps
+         sending while the screen is locked — the phone is in a pocket for the
+         whole workout, and without this mode iOS suspended the app and the
+         readings stopped at the first screen lock. Nothing else runs in the
+         background because of it: the app only holds a connection the user
+         opened from the session editor. -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>bluetooth-central</string>
+    </array>
 
     <!-- Export compliance.
          The app protects only its own local data with standard, published

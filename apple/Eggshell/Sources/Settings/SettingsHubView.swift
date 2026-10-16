@@ -25,6 +25,7 @@ struct SettingsHubView: View {
 
     @State private var showWhatsNew = false
     @State private var contentMode: NotifContentMode = NotifPrefs.contentMode
+    @State private var groupMedReminders: Bool = NotifPrefs.groupMedReminders
 
     var body: some View {
         ScrollView {
@@ -149,6 +150,23 @@ struct SettingsHubView: View {
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .padding(.top, 14)
                 .accessibilityLabel("Aperçu de l'écran verrouillé. \(Self.preview(contentMode))")
+
+                // Next to the content mode because it is the same question —
+                // what a reminder looks like — and because the grouped body
+                // names medications only when the mode above allows it.
+                Toggle(isOn: groupBinding) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Grouper les rappels de traitement")
+                            .font(.eggBody)
+                            .foregroundStyle(palette.onSurface)
+                        Text("Les traitements prévus au même moment arrivent dans une seule notification.")
+                            .font(EggFont.bodyS)
+                            .foregroundStyle(palette.onSurfaceVariant)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .tint(palette.primary)
+                .padding(.top, 14)
             }
 
             ListGroup {
@@ -160,6 +178,18 @@ struct SettingsHubView: View {
                     action: { router.push(.reminders) })
             }
         }
+    }
+
+    /// Persisted, then every pending medication reminder is rebuilt: merged
+    /// requests have to appear (or disappear) now, not at the next dose.
+    private var groupBinding: Binding<Bool> {
+        Binding(
+            get: { groupMedReminders },
+            set: { newValue in
+                groupMedReminders = newValue
+                NotifPrefs.groupMedReminders = newValue
+                Task { await app.refreshNotifications() }
+            })
     }
 
     private static func chipLabel(_ mode: NotifContentMode) -> String {
@@ -246,15 +276,16 @@ struct SettingsHubView: View {
 extension FeaturesStore {
     /// The denominator of « N activés sur M ». Counted from the same list as
     /// `enabledCount`, never typed: the two drifted apart the last time a
-    /// module was added. « Carnet de rêves » is excluded because it cannot be
-    /// switched — counting it would claim one more module than the app has.
-    static var togglableCount: Int { 9 }
+    /// module was added — and again when Rêves became switchable while this
+    /// still said it could not be.
+    static var togglableCount: Int { FeaturesStore().toggles.count }
 
     /// « N activés sur M » — the door's subtitle has to be counted, not typed.
     /// Lives here rather than in `Core/Stores.swift` so the store stays a store.
-    var enabledCount: Int {
-        [medications, journal, hormones, weight, photos, voice, bleeding, appointments, notes]
-            .filter { $0 }
-            .count
+    var enabledCount: Int { toggles.filter { $0 }.count }
+
+    /// Every module switch the Modules screen shows, in its order.
+    private var toggles: [Bool] {
+        [medications, appointments, journal, bleeding, hormones, weight, photos, voice, notes, dreams, sport]
     }
 }

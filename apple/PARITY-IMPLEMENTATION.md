@@ -90,3 +90,78 @@ Contrat de bindings : `TransitionCoreInfo.bindingsContract` 0.0.7 → **0.0.8**
   catalogue `Catalog.swift` aligné byte-for-byte sur Android.
 
 Toujours valable : validation finale = build CI macOS (aucun toolchain local).
+
+## Lot 2026-09-04 — sport, rappels de séance, phrase secrète (2.4.0)
+
+Parité refaite dans la foulée du lot Android 2.4.0. Contrat de bindings
+0.0.8 → **0.0.9** (voir CORE_API.md). Côté Swift, tout est nouveau ou additif :
+
+- **Module Sport** (`Sources/Sport/`, ~1 400 lignes) : `SportStore` (prefs,
+  `SportStats` à règles identiques à Android, formats), `StepCounter`
+  (Core Motion), `WorkoutFile` (parseur GPX/TCX + `WatchImporter`),
+  `HeartRateMonitor` (Core Bluetooth, parseur 0x2A37), `SportView` (tableau
+  de bord, calendrier de pas sur `MonthGrid`, trois portes, séances),
+  `SportSessionEditorView`, `SportActivitiesView` (podomètre + objectif +
+  catalogue), `SportRemindersView`.
+- **Câblage** : `Route` (4 cas), `FeaturesStore.sport` (off par défaut),
+  `FeaturesView`, tuile « Sport » sur l'accueil, `LauncherModule.sport`,
+  `AppModule.sport` (quick action), `LabReminderKind.sport` + titre de
+  notification, section « Sport » du hub des rappels, `SportPrefs` en
+  environnement, `Info.plist` (Motion, Bluetooth).
+- **Phrase secrète** : `VaultPrefs` (slot KDF « pending », re-wrap atomique),
+  `VaultManager.rewrapPassphrase` / `rekeyParanoid` / `resolveParanoidKey`,
+  `AppState.changePassphrase` + fenêtre `busy` (un verrouillage demandé
+  pendant le rechiffrement gagne sur la réouverture), section « Phrase
+  secrète » de `AdvancedSettingsView`.
+- `WhatsNewCatalog` : entrée 23.
+
+Toujours valable : validation finale = build CI macOS (aucun toolchain local ;
+`swiftc -parse` a été passé sur chaque fichier touché).
+
+## Lot 2026-10-16 — corrections de la relecture 2.4.0 (iOS)
+
+- **Rekey paranoïaque sans perte possible** : `VaultManager.rekeyParanoid`
+  vérifie la phrase actuelle *avant* de fermer la session (une faute de
+  frappe rend `.wrongPassphrase`, session intacte) ; la fermeture passe par un
+  rappel `closeSession` fourni par `AppState`. Sur erreur, `settleFailedRekey`
+  essaie la nouvelle clé puis l'ancienne sur la base : la nouvelle ouvre →
+  rejeu des renommages, promotion du sel seulement si le rejeu a réussi ;
+  l'ancienne ouvre → seulement alors staging et sel en attente sont jetés ;
+  aucune → rien n'est touché (`.undetermined`). `resolveParanoidKey` ne promeut
+  plus le sel si `finishPendingRekey` a échoué. `commitPendingKdf` relit ce
+  qu'il a écrit. Réouverture après rekey toujours sous `busy`. Tâche de fond
+  `UIApplication.beginBackgroundTask` autour du rekey.
+- **Clé de récupération** : retirée quand un rekey paranoïaque la rend
+  caduque (`recoveryNeedsRenewal`, message dans Réglages › Sécurité) ;
+  `unlockWithRecovery` distingue « secret faux » de « enveloppe caduque »
+  (`VaultError.staleRecovery`, non compté par le limiteur) ;
+  `setRecoverySecret` refuse tant qu'un rekey a des renommages en attente.
+- **Rappels non médicamenteux** : `LabReminderStore.rearmOverdue` /
+  `refresh()` (déverrouillage réel, retour au premier plan, chaque
+  modification) ; plus de re-tir « maintenant + 1 min » ; variante quotidienne
+  HH:MM additive ; 7 jours par défaut pour un rappel de séance ;
+  `LabReminder.cadenceLabel` partagé par les deux écrans.
+- **Crochet podomètre** : `AppState.unlocked` lance
+  `StepCounter.syncAfterUnlock(session:)` sans attendre (déverrouillage réel
+  uniquement).
+- **Rappels de traitement groupés** (option, désactivée par défaut) :
+  `NotifPrefs.groupMedReminders` ; `NotificationManager.reschedule` calcule les
+  mêmes occurrences puis les fusionne (`clusterOccurrences`, fenêtre ancrée de
+  15 min) en requêtes `sched-group-N` ; catégorie `DOSE_GROUP_REMINDER`
+  (« Tout pris », « Plus tard », « Tout passer ») câblée dans
+  `NotificationCoordinator` sur la même file `PendingDoseStore` ; rappels
+  reportés en `snooze-group-…`, retirés si un de leurs plannings disparaît ;
+  `threadIdentifier` commun à toutes les notifications de traitement.
+
+## Lot 2026-10-16 (suite) — Santé, priorité par rappel, « Plus tard », pas en direct
+
+- `Sport/HealthKitImporter.swift` (lecture seule, garé : `EggshellHealthKitEnabled`
+  = false, `Eggshell-HealthKit.entitlements` non référencé, procédure dans
+  `HEALTHKIT-ENABLE.md`) ; interrupteur dans `SportActivitiesView`,
+  `SportPrefs.healthImport` / `healthLastSync`, `SportStore.sourceHealth` ;
+  synchro au déverrouillage (après le podomètre) et au chargement de Sport.
+- « Plus tard » sur les rappels de traitement seuls (`SNOOZE`, 30 min).
+- Priorité par rappel : `NotifPrefs.medPriorityOverride/setMedPriority/isMedPriority`,
+  `LabReminder.highPriority` (optionnel, additif).
+- Pas en direct sur l'écran Sport (`SportViewModel.startLiveSteps`).
+

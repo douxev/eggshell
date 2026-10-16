@@ -53,7 +53,9 @@ enum NotifPrefs {
     private static let d = UserDefaults(suiteName: "com.douxev.eggshell.notif") ?? .standard
     private static let keyMode = "content_mode"
     private static let keyHighPriority = "high_priority"
+    private static let keyGroupMeds = "group_med_reminders"
     private static func aliasKey(_ medId: Int64) -> String { "alias_\(medId)" }
+    private static func medPriorityKey(_ scheduleId: Int64) -> String { "priority_med_\(scheduleId)" }
 
     /// Global "what does a medication reminder show?" mode.
     static var contentMode: NotifContentMode {
@@ -62,9 +64,43 @@ enum NotifPrefs {
     }
 
     /// When on, reminders fire as heads-up (time-sensitive); off = passive shade.
+    /// The default for every reminder that has no priority of its own.
     static var highPriority: Bool {
         get { d.bool(forKey: keyHighPriority) }
         set { d.set(newValue, forKey: keyHighPriority) }
+    }
+
+    // MARK: Per-reminder priority (android PriorityPrefs)
+    //
+    // Three states, not two: an explicit « Prioritaire » on or off for one
+    // medication schedule, or nothing — in which case the global switch above
+    // decides. Nothing stored is what every schedule had before this existed,
+    // so they all keep following the global switch exactly as they did.
+
+    /// The schedule's own choice, or nil when it follows `highPriority`.
+    static func medPriorityOverride(_ scheduleId: Int64) -> Bool? {
+        d.object(forKey: medPriorityKey(scheduleId)) as? Bool
+    }
+
+    /// Set, or with nil forget, a schedule's own priority.
+    static func setMedPriority(_ value: Bool?, for scheduleId: Int64) {
+        if let value { d.set(value, forKey: medPriorityKey(scheduleId)) }
+        else { d.removeObject(forKey: medPriorityKey(scheduleId)) }
+    }
+
+    /// What a reminder for this schedule actually uses.
+    static func isMedPriority(_ scheduleId: Int64) -> Bool {
+        medPriorityOverride(scheduleId) ?? highPriority
+    }
+
+    /// « Grouper les rappels de traitement »: medication reminders due within
+    /// the same 15 minutes arrive as one notification (see
+    /// `NotificationManager.reschedule`). Off by default — an unset key reads
+    /// false — so nothing changes for anyone who has not asked for it.
+    /// Mirrors android `group_med_reminders`.
+    static var groupMedReminders: Bool {
+        get { d.bool(forKey: keyGroupMeds) }
+        set { d.set(newValue, forKey: keyGroupMeds) }
     }
 
     /// The decoy alias for a medication, or nil when none/blank.

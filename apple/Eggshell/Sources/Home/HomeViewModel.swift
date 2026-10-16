@@ -137,6 +137,8 @@ final class HomeViewModel: ObservableObject {
             if r.kind == LabReminderKind.photo && !features.photos { continue }
             if r.kind == LabReminderKind.voice && !features.voice { continue }
             if r.kind == LabReminderKind.journal && !features.journal { continue }
+            if r.kind == LabReminderKind.dream && !features.dreams { continue }
+            if r.kind == LabReminderKind.sport && !features.sport { continue }
             upcoming.append((r.label, r.nextDueMs))
         }
         upcoming.sort { $0.1 < $1.1 }

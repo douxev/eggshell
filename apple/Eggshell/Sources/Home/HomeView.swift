@@ -194,6 +194,7 @@ struct HomeView: View {
         case .voice:        return .voice
         case .notes:        return .notes
         case .dreams:       return .dreams
+        case .sport:        return .sport
         }
     }
 
@@ -591,6 +592,10 @@ private struct LauncherGrid: View {
         if features.dreams {
             all.append(LauncherSpec(module: .dreams, label: "Rêves",
                                     systemImage: "moon.stars.fill", family: .other))
+        }
+        if features.sport {
+            all.append(LauncherSpec(module: .sport, label: "Sport",
+                                    systemImage: "figure.run", family: .other))
         }
         return all
     }

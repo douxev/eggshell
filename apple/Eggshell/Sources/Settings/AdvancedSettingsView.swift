@@ -15,6 +15,7 @@ final class AdvancedSettingsViewModel: ObservableObject {
     @Published var exporting = false
     @Published var restoring = false
     @Published var changingMode = false
+    @Published var changingPassphrase = false
     @Published var savingPins = false
     @Published var error: String?
     @Published var info: String?
@@ -87,6 +88,40 @@ final class AdvancedSettingsViewModel: ObservableObject {
         }
     }
 
+    /// Replace the passphrase, keeping every byte of data. In paranoid mode
+    /// this re-encrypts the whole vault, which is why the button says so and
+    /// why the screen stays put while `app.busy` is true.
+    func changePassphrase(_ app: AppState, current: String, new: String) async {
+        changingPassphrase = true
+        error = nil
+        info = nil
+        defer { changingPassphrase = false }
+        switch await app.changePassphrase(current: current, new: new) {
+        case .success(let done):
+            var lines = ["Phrase secrète changée."]
+            if done.mediaPending {
+                lines.append("Quelques médias finissent d'être rechiffrés : ce sera terminé au prochain déverrouillage, rien n'est perdu d'ici là.")
+            }
+            if done.mediaLeftBehind > 0 {
+                lines.append("\(done.mediaLeftBehind) fichier(s) média n'ont pas pu être rechiffrés et ont été laissés tels quels : ils étaient déjà illisibles avec l'ancienne phrase.")
+            }
+            if done.recoveryDropped {
+                lines.append("Ta clé de récupération ouvrait l'ancienne clé du coffre : elle a été retirée. Définis-en une nouvelle ci-dessous.")
+            }
+            info = lines.joined(separator: " ")
+        case .undetermined(let reason):
+            error = "Le changement n'a pas pu être confirmé (\(reason)). Rien n'a été effacé : si l'app se verrouille, essaie ta nouvelle phrase secrète, puis l'ancienne."
+        case .wrongPassphrase:
+            error = "La phrase secrète actuelle est incorrecte."
+        case .unchanged:
+            info = "C'est déjà ta phrase secrète."
+        case .notApplicable:
+            error = "Ce mode de verrouillage n'a pas de phrase secrète."
+        case .failed(let reason):
+            error = "Le changement a échoué : \(reason)"
+        }
+    }
+
     /// Store the access / decoy pair. Argon2id runs twice, so it goes off the
     /// main actor — on an older phone this is a visible second.
     func savePins(access: String, decoy: String) async {
@@ -124,6 +159,7 @@ struct AdvancedSettingsView: View {
     @State private var showImporter = false
     @State private var pendingBundleURL: URL?
     @State private var hasRecovery = false
+    @State private var recoveryNeedsRenewal = false
     @State private var showRecoverySheet = false
     @State private var restoreBundlePass = ""
     @State private var restoreMode: SecurityMode = .keystoreOnly
@@ -133,6 +169,11 @@ struct AdvancedSettingsView: View {
     @State private var targetMode: SecurityMode = .keystoreBiometric
     @State private var currentPass = ""
     @State private var newPass = ""
+
+    // Changer de phrase secrète.
+    @State private var changeCurrent = ""
+    @State private var changeNew = ""
+    @State private var changeConfirm = ""
 
     // PIN pair
     @State private var accessPin = ""
@@ -155,6 +196,9 @@ struct AdvancedSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 lockModeSection
+                if currentMode?.needsPassphrase == true {
+                    passphraseSection
+                }
                 recoverySection
                 pinSection
                 maskingSection
@@ -249,8 +293,63 @@ struct AdvancedSettingsView: View {
     }
 
     private var currentModeLabel: String {
-        let prefs = VaultPrefs()
-        return prefs.modeRaw.flatMap(SecurityMode.init(rawValue:))?.title ?? "non configuré"
+        currentMode?.title ?? "non configuré"
+    }
+
+    private var currentMode: SecurityMode? {
+        VaultPrefs().modeRaw.flatMap(SecurityMode.init(rawValue:))
+    }
+
+    // MARK: - Changer de phrase secrète
+
+    /// This used to not exist: the only route to it was the mode picker, and
+    /// picking the mode you are already in changed nothing while reporting
+    /// success. The two passphrase modes need entirely different work — a new
+    /// wrap of the same key, or a full re-encryption of the vault — and the
+    /// button says which one the user is about to get.
+    private var passphraseSection: some View {
+        let paranoid = currentMode == .paranoid
+        let canSubmit = !vm.changingPassphrase && !app.busy
+            && !changeCurrent.isEmpty && !changeNew.isEmpty && changeNew == changeConfirm
+        return EggCard(variant: .low, spacing: Spacing.m) {
+            MicroLabel("PHRASE SECRÈTE")
+            Text(paranoid
+                 ? "En mode paranoïaque, ta phrase secrète est la clé elle-même : en changer rechiffre toute la base et tous tes médias. Ça peut prendre un moment, et l'app reste ouvrable par l'une ou l'autre phrase si elle est interrompue en route."
+                 : "Une nouvelle phrase secrète ré-enveloppe la même clé. Rien ne bouge sur le disque.")
+                .font(EggFont.bodyS)
+                .foregroundStyle(palette.onSurfaceVariant)
+                .fixedSize(horizontal: false, vertical: true)
+
+            secure("Phrase secrète actuelle", text: $changeCurrent)
+            secure("Nouvelle phrase secrète", text: $changeNew)
+            secure("Confirmer la nouvelle phrase", text: $changeConfirm)
+            if !changeConfirm.isEmpty && changeNew != changeConfirm {
+                Text("Les deux phrases ne correspondent pas.")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.error)
+            }
+
+            filled(
+                vm.changingPassphrase
+                    ? (paranoid ? "Rechiffrement en cours…" : "Changement…")
+                    : "Changer la phrase secrète",
+                enabled: canSubmit
+            ) {
+                let current = changeCurrent
+                let new = changeNew
+                Task {
+                    await vm.changePassphrase(app, current: current, new: new)
+                    if vm.error == nil {
+                        changeCurrent = ""
+                        changeNew = ""
+                        changeConfirm = ""
+                    }
+                    // A paranoid change can retire the recovery key; the card
+                    // below must stop claiming one is set.
+                    await refreshRecoveryState()
+                }
+            }
+        }
     }
 
     // MARK: - Code d'accès et PIN de leurre
@@ -268,20 +367,33 @@ struct AdvancedSettingsView: View {
                 .font(EggFont.bodyS)
                 .foregroundStyle(palette.onSurfaceVariant)
                 .fixedSize(horizontal: false, vertical: true)
+            // Said out loud rather than left to the absence of a key: someone
+            // who set one would otherwise go on believing it still works.
+            if recoveryNeedsRenewal {
+                Text("Ta clé de récupération a été retirée quand ta phrase secrète a changé : elle ouvrait l'ancienne clé du coffre, plus celle-ci. Définis-en une nouvelle.")
+                    .font(EggFont.bodyS)
+                    .foregroundStyle(palette.error)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             filled(hasRecovery ? "Remplacer la clé" : "Définir une clé", enabled: true) {
                 showRecoverySheet = true
             }
         }
-        .task { hasRecovery = await app.manager.hasRecoverySecret }
+        .task { await refreshRecoveryState() }
         .sheet(isPresented: $showRecoverySheet) {
             NavigationStack {
                 RecoverySetupView(dismissible: true) {
                     showRecoverySheet = false
-                    Task { hasRecovery = await app.manager.hasRecoverySecret }
+                    Task { await refreshRecoveryState() }
                 }
             }
         }
+    }
+
+    private func refreshRecoveryState() async {
+        hasRecovery = await app.manager.hasRecoverySecret
+        recoveryNeedsRenewal = await app.manager.recoveryNeedsRenewal
     }
 
     private var pinSection: some View {

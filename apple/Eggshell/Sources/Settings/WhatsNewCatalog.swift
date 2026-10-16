@@ -14,7 +14,7 @@ enum WhatsNewCatalog {
     /// a version-14 entry was already in the list, so the 2.0.0 notes could
     /// never surface on their own — anyone who had seen the sheet at 13 was
     /// already past the gate.
-    static let latestVersion: Int = 21
+    static let latestVersion: Int = 24
 
     struct Release: Identifiable {
         var id: Int { version }
@@ -25,6 +25,19 @@ enum WhatsNewCatalog {
 
     /// Releases, newest first.
     static let releases: [Release] = [
+        // 3.0.0. The 2.4.0 notes (version 23) never shipped on iOS — that
+        // version became this one — so they are folded in here.
+        Release(
+            version: 24,
+            title: "Quoi de neuf",
+            highlights: [
+                "Sport — tes séances, tes types d'activité, une montre ou une ceinture cardio en Bluetooth standard avec un chrono, et l'import des fichiers .fit, .gpx ou .tcx de ta montre. Désactivé par défaut : active-le dans Réglages › Modules.",
+                "Podomètre — tes pas se comptent sur la semaine écoulée à chaque ouverture de l'app, bougent en direct sur l'écran Sport, et chaque jour se corrige d'un appui. Le mois se résume sous le calendrier.",
+                "Rappels — les traitements prévus au même moment peuvent arriver dans une seule notification (Réglages, sous le contenu des notifications). « Plus tard » sur chaque rappel, une priorité réglable rappel par rappel, et des rappels « chaque jour à telle heure ».",
+                "Changer de phrase secrète — depuis Réglages › Sécurité, y compris en mode paranoïaque où tout est rechiffré, sans rien perdre si l'app est interrompue en route.",
+                "Corrigé — les rappels « tous les N jours » ne sonnaient qu'une fois : ils sont maintenant reprogrammés à chaque ouverture de l'app.",
+            ]
+        ),
         Release(
             version: 21,
             title: "Quoi de neuf",

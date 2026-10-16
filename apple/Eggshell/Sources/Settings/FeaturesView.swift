@@ -112,6 +112,11 @@ struct FeaturesView: View {
                 subtitle: "Tes rêves, avec tags, notes vocales et curseurs de sommeil.",
                 systemImage: "moon.stars.fill",
                 binding: $features.dreams),
+            ModuleRow(
+                title: "Sport",
+                subtitle: "Tes séances, tes pas et tes séries. Tout reste sur l'appareil.",
+                systemImage: "figure.run",
+                binding: $features.sport),
         ]
     }
 
