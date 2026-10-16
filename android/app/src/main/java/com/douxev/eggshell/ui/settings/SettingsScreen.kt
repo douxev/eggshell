@@ -197,20 +197,23 @@ class SettingsViewModel @Inject constructor(
         biometricCopy: VaultRepository.BiometricCopy?,
     ) {
         viewModelScope.launch {
-            when (val out = vault.changeMode(newMode, currentPassphrase, newPassphrase, activity, biometricCopy)) {
-                VaultRepository.ChangeModeOutcome.Success -> {
-                    _currentMode.value = vault.currentMode
-                    _message.value = "Mode mis à jour."
-                }
-                VaultRepository.ChangeModeOutcome.AlreadyInThisMode ->
-                    _message.value = "C'est déjà ton mode actuel."
-                VaultRepository.ChangeModeOutcome.RequiresRekey ->
-                    _message.value = "Le mode parano nécessite une opération de re-chiffrement, à venir dans une future version."
-                is VaultRepository.ChangeModeOutcome.Failed ->
-                    _message.value = "Échec : ${out.reason}"
+            val out = vault.changeMode(newMode, currentPassphrase, newPassphrase, activity, biometricCopy)
+            if (out is VaultRepository.ChangeModeOutcome.Success) {
+                _currentMode.value = vault.currentMode
             }
+            _modeResult.value = out
         }
     }
+
+    /**
+     * The outcome of the last mode change, as a value rather than as prose —
+     * for the reason [passphraseResult] gives: the screen resolves the copy in
+     * the current language, the ViewModel must not freeze it at call time.
+     */
+    private val _modeResult = MutableStateFlow<VaultRepository.ChangeModeOutcome?>(null)
+    val modeResult: StateFlow<VaultRepository.ChangeModeOutcome?> = _modeResult.asStateFlow()
+
+    fun dismissModeResult() { _modeResult.value = null }
 
     fun exportToFile(passphrase: String, onReady: (java.io.File) -> Unit) {
         viewModelScope.launch {
@@ -276,6 +279,7 @@ fun SettingsScreen(
     var passphraseDialog by remember { mutableStateOf(false) }
     val changingPassphrase by vm.changingPassphrase.collectAsState()
     val passphraseResult by vm.passphraseResult.collectAsState()
+    val modeResult by vm.modeResult.collectAsState()
 
     // Decoy is available in every security mode — when set, the lock screen
     // always presents a PIN keypad and Keystore-only / biometric modes
@@ -657,6 +661,16 @@ fun SettingsScreen(
         )
     }
 
+    modeResult?.let { out ->
+        AlertDialog(
+            onDismissRequest = { vm.dismissModeResult() },
+            confirmButton = {
+                TextButton(onClick = { vm.dismissModeResult() }) { Text("OK") }
+            },
+            text = { Text(modeResultCopy(out)) },
+        )
+    }
+
     message?.let {
         AlertDialog(
             onDismissRequest = { vm.dismissMessage() },
@@ -690,6 +704,17 @@ private fun aliasLabel(v: AppAliasManager.Variant): String = stringResource(
         AppAliasManager.Variant.WEATHER -> R.string.alias_weather
     },
 )
+
+/** The last mode change, in words. See [SettingsViewModel.modeResult]. */
+@Composable
+private fun modeResultCopy(out: VaultRepository.ChangeModeOutcome): String =
+    when (out) {
+        VaultRepository.ChangeModeOutcome.Success -> stringResource(R.string.set_sec_mode_done)
+        VaultRepository.ChangeModeOutcome.AlreadyInThisMode -> stringResource(R.string.set_sec_mode_same)
+        VaultRepository.ChangeModeOutcome.RequiresRekey -> stringResource(R.string.set_sec_mode_rekey)
+        is VaultRepository.ChangeModeOutcome.Failed ->
+            stringResource(R.string.set_sec_mode_failed, out.reason)
+    }
 
 /** The last passphrase change, in words. See [SettingsViewModel.passphraseResult]. */
 @Composable

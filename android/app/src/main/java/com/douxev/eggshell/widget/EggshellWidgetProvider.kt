@@ -59,6 +59,7 @@ class EggshellWidgetProvider : AppWidgetProvider() {
         views.setTextViewText(R.id.widget_eyebrow, context.getString(R.string.widget_eyebrow))
         views.setTextViewText(R.id.widget_action_open, context.getString(R.string.widget_action_open))
         views.setTextViewText(R.id.widget_action_journal, context.getString(R.string.widget_action_journal))
+        paint(views, WidgetPalette.current(context))
 
         // Defense in depth: hide all real reminder text when a decoy PIN is
         // configured. The widget receiver should already be disabled via
@@ -164,6 +165,20 @@ class EggshellWidgetProvider : AppWidgetProvider() {
         return PendingIntent.getActivity(
             context, REQ_JOURNAL, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    /** The app's palette over the XML defaults; a no-op under the system theme. */
+    private fun paint(views: RemoteViews, palette: WidgetPalette?) {
+        WidgetPaint.card(views, palette, R.id.widget_root)
+        WidgetPaint.tonalPill(views, palette, R.id.widget_eyebrow, R.id.widget_action_journal)
+        WidgetPaint.filledPill(views, palette, R.id.widget_action_open)
+        WidgetPaint.onCard(views, palette, R.id.widget_title_1)
+        WidgetPaint.accentText(views, palette, R.id.widget_when_1)
+        WidgetPaint.muted(
+            views, palette,
+            R.id.widget_title_2, R.id.widget_when_2, R.id.widget_title_3, R.id.widget_when_3,
+            R.id.widget_empty,
         )
     }
 

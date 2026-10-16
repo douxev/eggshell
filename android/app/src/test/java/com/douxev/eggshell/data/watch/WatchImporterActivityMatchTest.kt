@@ -57,4 +57,23 @@ class WatchImporterActivityMatchTest {
         val withArchived = catalogue + activity(4, "Escalade", archived = true)
         assertNull(WatchImporter.matchActivity("Escalade", withArchived))
     }
+
+    /** Watches write English, catalogues are usually French. */
+    @Test
+    fun `an english watch word finds the french type`() {
+        assertEquals(1L, WatchImporter.matchActivity("Running", catalogue)?.id)
+        assertEquals(2L, WatchImporter.matchActivity("Biking", catalogue)?.id)
+        assertEquals(3L, WatchImporter.matchActivity("open_water_swimming", catalogue)?.id)
+    }
+
+    @Test
+    fun `accents and separators do not get in the way`() {
+        val withRoad = catalogue + activity(5, "Vélo de route")
+        assertEquals(2L, WatchImporter.matchActivity("velo", withRoad)?.id)
+    }
+
+    @Test
+    fun `an activity no family knows stays unmatched`() {
+        assertNull(WatchImporter.matchActivity("Escalade", catalogue))
+    }
 }

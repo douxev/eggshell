@@ -22,7 +22,19 @@ import uniffi.transition.StepDay
 @Singleton
 class SportRepository @Inject constructor(
     private val vault: VaultRepository,
+    private val mirrors: com.douxev.eggshell.widget.WidgetMirrorUpdater,
 ) {
+    /**
+     * Kept in step after every write. A widget configured to show content
+     * reads a mirror, not the vault — so an entry saved and not mirrored is a
+     * home screen quietly showing the previous state. Cheap when nobody opted
+     * in, which is the default, and never allowed to turn a successful write
+     * into a failure.
+     */
+    private suspend fun mirrorChanged() {
+        runCatching { mirrors.refresh() }
+    }
+
 
     // -- Activities ----------------------------------------------------------
 
@@ -44,7 +56,7 @@ class SportRepository @Inject constructor(
             vault.requireSession().updateSportActivity(
                 id, NewSportActivity(name = name, kind = kind, color = color),
             )
-        }
+        }.also { mirrorChanged() }
 
     suspend fun setActivityArchived(id: Long, archived: Boolean) = withContext(Dispatchers.IO) {
         vault.requireSession().setSportActivityArchived(id, archived)
@@ -60,7 +72,7 @@ class SportRepository @Inject constructor(
      */
     suspend fun deleteActivity(id: Long) = withContext(Dispatchers.IO) {
         vault.requireSession().deleteSportActivity(id)
-    }
+    }.also { mirrorChanged() }
 
     // -- Sessions ------------------------------------------------------------
 
@@ -98,7 +110,7 @@ class SportRepository @Inject constructor(
                 source = source,
             )
         )
-    }
+    }.also { mirrorChanged() }
 
     suspend fun updateSession(
         id: Long,
@@ -124,11 +136,11 @@ class SportRepository @Inject constructor(
                 source = source,
             ),
         )
-    }
+    }.also { mirrorChanged() }
 
     suspend fun deleteSession(id: Long) = withContext(Dispatchers.IO) {
         vault.requireSession().deleteSportSession(id)
-    }
+    }.also { mirrorChanged() }
 
     // -- Steps ---------------------------------------------------------------
 
@@ -142,12 +154,23 @@ class SportRepository @Inject constructor(
      */
     suspend fun recordSteps(day: java.time.LocalDate, steps: Long) = withContext(Dispatchers.IO) {
         vault.requireSession().recordSteps(dayKey(day), steps, System.currentTimeMillis())
-    }
+    }.also { mirrorChanged() }
+
+    /**
+     * [recordSteps] for several days in one go, with one mirror refresh at the
+     * end rather than one per day — the pedometer flushes up to a fortnight of
+     * totals at a time.
+     */
+    suspend fun recordStepDays(days: Map<java.time.LocalDate, Long>) = withContext(Dispatchers.IO) {
+        val session = vault.requireSession()
+        val now = System.currentTimeMillis()
+        days.forEach { (day, steps) -> session.recordSteps(dayKey(day), steps, now) }
+    }.also { mirrorChanged() }
 
     /** Overwrite a day outright — the only way to correct one downward. */
     suspend fun setSteps(day: java.time.LocalDate, steps: Long) = withContext(Dispatchers.IO) {
         vault.requireSession().setSteps(dayKey(day), steps, System.currentTimeMillis())
-    }
+    }.also { mirrorChanged() }
 
     suspend fun stepDays(from: java.time.LocalDate, to: java.time.LocalDate): List<StepDay> =
         withContext(Dispatchers.IO) {
@@ -163,6 +186,9 @@ class SportRepository @Inject constructor(
 
         /** A session read out of a file a watch exported. */
         const val SOURCE_WATCH = "watch"
+
+        /** A session imported from Health Connect (data/health). */
+        const val SOURCE_HEALTH = "health"
 
         /**
          * The `YYYY-MM-DD` key the core stores a day under.

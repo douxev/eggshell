@@ -168,6 +168,19 @@ class AlarmScheduler @Inject constructor(
         const val ACTION_SNOOZE_FIRE = "com.douxev.eggshell.SNOOZE_FIRE"
         /** Snooze delay: 30 minutes. */
         const val SNOOZE_MS = 30L * 60L * 1000L
+
+        /**
+         * The grouped medication reminder's actions — the same three as a
+         * single reminder, applied to every schedule in [EXTRA_SCHEDULE_IDS].
+         * See [MedReminderGroup].
+         */
+        const val ACTION_GROUP_MARK_TAKEN = "com.douxev.eggshell.GROUP_MARK_TAKEN"
+        const val ACTION_GROUP_MARK_SKIPPED = "com.douxev.eggshell.GROUP_MARK_SKIPPED"
+        const val ACTION_GROUP_SNOOZE = "com.douxev.eggshell.GROUP_SNOOZE"
+        /** The grouped notification was swiped away: close the group. */
+        const val ACTION_GROUP_DISMISSED = "com.douxev.eggshell.GROUP_DISMISSED"
+        const val EXTRA_SCHEDULE_IDS = "schedule_ids"
+        const val EXTRA_GROUP_KEY = "group_key"
         private const val TAG = "AlarmScheduler"
     }
 }

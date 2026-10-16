@@ -55,6 +55,7 @@ import uniffi.transition.SportActivity
 class SportSessionEditorViewModel @Inject constructor(
     private val repo: SportRepository,
     private val heartRate: com.douxev.eggshell.data.watch.HeartRateMonitor,
+    private val saved: androidx.lifecycle.SavedStateHandle,
 ) : ViewModel() {
 
     val heartRateState = heartRate.state
@@ -119,6 +120,53 @@ class SportSessionEditorViewModel @Inject constructor(
     private var avgHr: Long? = null
     private var maxHr: Long? = null
 
+    /**
+     * Where the session came from. Carried through an edit: fixing the note on
+     * a watch import used to relabel it "manual", and the source is what tells
+     * a later import which sessions are the user's own word.
+     */
+    private var source: String = SportRepository.SOURCE_MANUAL
+
+    /**
+     * A duration known to the second, and the minutes text it was shown as.
+     *
+     * The field holds whole minutes, but a watch import or the chronometer
+     * knows the seconds. As long as the field still shows what it was filled
+     * with, the exact figure is saved — editing the note of a 42 min 37 s run
+     * must not round it, and a 45-second import (shown as « 0 ») must stay
+     * savable. Typing a new number replaces it, as it should.
+     */
+    private var exact: Pair<String, Long>? = null
+
+    /**
+     * The chronometer: when it was started, or null. In the saved state, so a
+     * long session with the screen off survives the system reclaiming the
+     * activity.
+     */
+    val timerStartMs: StateFlow<Long?> = saved.getStateFlow(KEY_TIMER, null)
+
+    fun startTimer() {
+        val now = System.currentTimeMillis()
+        saved[KEY_TIMER] = now
+        // The session starts when the chronometer does.
+        _startedMs.value = now
+    }
+
+    fun stopTimer() {
+        val start = timerStartMs.value ?: return
+        saved[KEY_TIMER] = null
+        val seconds = ((System.currentTimeMillis() - start) / 1000).coerceAtLeast(1)
+        val text = ((seconds + 59) / 60).toString()
+        _minutes.value = text
+        exact = text to seconds
+    }
+
+    private fun durationS(): Long? {
+        val text = _minutes.value
+        exact?.let { (shown, seconds) -> if (text == shown) return seconds }
+        return text.toLongOrNull()?.times(60)
+    }
+
     fun load(id: Long?) {
         sessionId = id
         // A new session starts from nothing; an existing one keeps what it was
@@ -133,11 +181,14 @@ class SportSessionEditorViewModel @Inject constructor(
             repo.session(id)?.let { s ->
                 _activityId.value = s.activityId
                 _startedMs.value = s.startedMs
-                _minutes.value = (s.durationS / 60).toString()
+                val shown = (s.durationS / 60).toString()
+                _minutes.value = shown
+                exact = shown to s.durationS
                 _note.value = s.freeText.orEmpty()
                 distanceM = s.distanceM
                 avgHr = s.avgHr
                 maxHr = s.maxHr
+                source = s.source
             }
         }
     }
@@ -148,11 +199,13 @@ class SportSessionEditorViewModel @Inject constructor(
     fun onNote(v: String) { _note.value = v }
 
     /** True when there is a duration to save. A session with no length is not one. */
-    val canSave: Boolean get() = (_minutes.value.toLongOrNull() ?: 0L) > 0L
+    val canSave: Boolean get() = timerStartMs.value != null || (durationS() ?: 0L) > 0L
 
     suspend fun save(): Boolean {
-        val minutes = _minutes.value.toLongOrNull() ?: return false
-        if (minutes <= 0) return false
+        // Saving with the chronometer running stops it: that is the end of the session.
+        if (timerStartMs.value != null) stopTimer()
+        val duration = durationS() ?: return false
+        if (duration <= 0) return false
         val id = sessionId
         // Only for a session recorded here and now. Re-opening an old session
         // with a strap on must not rewrite the heart rate it was logged with.
@@ -165,7 +218,7 @@ class SportSessionEditorViewModel @Inject constructor(
                 repo.addSession(
                     activityId = _activityId.value,
                     startedMs = _startedMs.value,
-                    durationS = minutes * 60,
+                    durationS = duration,
                     note = _note.value,
                     distanceM = distanceM,
                     avgHr = avgHr,
@@ -176,11 +229,12 @@ class SportSessionEditorViewModel @Inject constructor(
                     id = id,
                     activityId = _activityId.value,
                     startedMs = _startedMs.value,
-                    durationS = minutes * 60,
+                    durationS = duration,
                     note = _note.value,
                     distanceM = distanceM,
                     avgHr = avgHr,
                     maxHr = maxHr,
+                    source = source,
                 )
             }
         }
@@ -196,6 +250,10 @@ class SportSessionEditorViewModel @Inject constructor(
             runCatching { repo.deleteSession(id) }
             onDone()
         }
+    }
+
+    private companion object {
+        const val KEY_TIMER = "sport_timer_start_ms"
     }
 }
 
@@ -213,6 +271,7 @@ fun SportSessionEditorScreen(
     val note by vm.note.collectAsState()
     val error by vm.error.collectAsState()
     val hrState by vm.heartRateState.collectAsState()
+    val timerStart by vm.timerStartMs.collectAsState()
     var confirmDelete by remember { mutableStateOf(false) }
 
     val hrPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -344,17 +403,30 @@ fun SportSessionEditorScreen(
                 )
             }
 
+            // The chronometer, for a session being done now: start it at the
+            // beginning, stop it at the end, and the duration fills itself in.
+            if (sessionId == null) {
+                item {
+                    ChronoCard(
+                        startedAt = timerStart,
+                        onStart = vm::startTimer,
+                        onStop = vm::stopTimer,
+                    )
+                }
+            }
+
             item {
                 OutlinedTextField(
                     value = minutes,
                     onValueChange = vm::onMinutes,
+                    enabled = timerStart == null,
                     label = { Text(stringResource(R.string.sport_field_duration)) },
                     suffix = { Text(stringResource(R.string.sport_duration_m, 0).substringAfter(' ')) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    isError = minutes.isNotEmpty() && !vm.canSave,
+                    isError = timerStart == null && minutes.isNotEmpty() && !vm.canSave,
                     supportingText = {
-                        if (minutes.isNotEmpty() && !vm.canSave) {
+                        if (timerStart == null && minutes.isNotEmpty() && !vm.canSave) {
                             Text(stringResource(R.string.sport_duration_required))
                         }
                     },
@@ -425,6 +497,7 @@ private fun HeartRateCard(
             when (state) {
                 is com.douxev.eggshell.data.watch.HeartRateMonitor.State.Live,
                 is com.douxev.eggshell.data.watch.HeartRateMonitor.State.Waiting,
+                is com.douxev.eggshell.data.watch.HeartRateMonitor.State.Reconnecting,
                 is com.douxev.eggshell.data.watch.HeartRateMonitor.State.Connecting,
                 is com.douxev.eggshell.data.watch.HeartRateMonitor.State.Scanning ->
                     TextButton(onClick = onDisconnect) {
@@ -438,6 +511,62 @@ private fun HeartRateCard(
     }
 }
 
+/**
+ * Start, stop, and the time in between.
+ *
+ * Computed from the start instant at every tick rather than counted up, so
+ * the figure stays right after the screen was off, the app in the background,
+ * or the activity rebuilt from its saved state.
+ */
+@Composable
+private fun ChronoCard(
+    startedAt: Long?,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+) {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(startedAt) {
+        while (startedAt != null) {
+            now = System.currentTimeMillis()
+            kotlinx.coroutines.delay(1_000)
+        }
+    }
+    EggCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.sport_timer_title),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    if (startedAt == null) stringResource(R.string.sport_timer_idle)
+                    else elapsedLabel((now - startedAt).coerceAtLeast(0) / 1000),
+                    style = if (startedAt == null) MaterialTheme.typography.bodySmall
+                    else MaterialTheme.typography.headlineSmall,
+                    color = if (startedAt == null) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            if (startedAt == null) {
+                TextButton(onClick = onStart) { Text(stringResource(R.string.sport_timer_start)) }
+            } else {
+                TextButton(onClick = onStop) { Text(stringResource(R.string.sport_timer_stop)) }
+            }
+        }
+    }
+}
+
+/** "4:07", "1:02:45". */
+internal fun elapsedLabel(seconds: Long): String {
+    val h = seconds / 3600
+    val m = (seconds % 3600) / 60
+    val s = seconds % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+}
+
 /** One line saying exactly where the connection has got to, or what went wrong. */
 @Composable
 private fun heartRateLabel(
@@ -449,9 +578,14 @@ private fun heartRateLabel(
         is com.douxev.eggshell.data.watch.HeartRateMonitor.State.Scanning ->
             stringResource(R.string.sport_hr_scanning)
         is com.douxev.eggshell.data.watch.HeartRateMonitor.State.Connecting ->
-            stringResource(R.string.sport_hr_connecting, state.name.orEmpty())
+            stringResource(
+                R.string.sport_hr_connecting,
+                state.name ?: stringResource(R.string.sport_hr_unnamed),
+            )
         is com.douxev.eggshell.data.watch.HeartRateMonitor.State.Waiting ->
             stringResource(R.string.sport_hr_waiting)
+        is com.douxev.eggshell.data.watch.HeartRateMonitor.State.Reconnecting ->
+            stringResource(R.string.sport_hr_reconnecting)
         is com.douxev.eggshell.data.watch.HeartRateMonitor.State.Live ->
             stringResource(R.string.sport_hr_live, state.bpm)
         is com.douxev.eggshell.data.watch.HeartRateMonitor.State.Failed -> stringResource(

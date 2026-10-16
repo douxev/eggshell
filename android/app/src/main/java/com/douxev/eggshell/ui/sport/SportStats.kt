@@ -82,3 +82,72 @@ object SportStats {
         toMs: Long,
     ): Int = sessions.count { it.startedMs >= fromMs && it.startedMs < toMs }
 }
+
+/**
+ * The step calendar's numbers — what a pedometer like Stepsy shows under its
+ * month: a total, an average, the goal days, a streak, a comparison.
+ *
+ * Same discipline as [SportStats]: pure, Android-free, tested. And one rule of
+ * its own — **a day with no record is not a day of zero steps.** The pedometer
+ * may have been off, the phone in a drawer; averaging those in as zeros would
+ * tell someone they walk less than they do. So averages run over the days that
+ * have a count. A streak is different: it is a run of days that reached the
+ * goal, and a day with no count did not.
+ */
+object StepStats {
+
+    data class Month(
+        val total: Long,
+        /** Mean over the days that have a count; 0 when none do. */
+        val average: Long,
+        val daysAtGoal: Int,
+        val best: Long,
+        val daysRecorded: Int,
+    )
+
+    fun month(steps: Map<LocalDate, Long>, goal: Int): Month {
+        val counted = steps.values.filter { it > 0 }
+        return Month(
+            total = counted.sum(),
+            average = if (counted.isEmpty()) 0 else counted.sum() / counted.size,
+            daysAtGoal = counted.count { goal > 0 && it >= goal },
+            best = counted.maxOrNull() ?: 0,
+            daysRecorded = counted.size,
+        )
+    }
+
+    /**
+     * Consecutive days at or above the goal, up to today.
+     *
+     * Today not there *yet* does not break it — the same rule as the session
+     * streak, for the same reason: at 9 a.m. nobody has reached their goal, and
+     * a counter that reads zero every morning is both wrong and discouraging.
+     */
+    fun goalStreak(steps: Map<LocalDate, Long>, goal: Int, today: LocalDate): Int {
+        if (goal <= 0) return 0
+        fun met(day: LocalDate) = (steps[day] ?: 0L) >= goal
+        var day = if (met(today)) today else today.minusDays(1)
+        var streak = 0
+        while (met(day)) {
+            streak++
+            day = day.minusDays(1)
+        }
+        return streak
+    }
+
+    /** The longest run of goal days in [steps]. */
+    fun bestGoalStreak(steps: Map<LocalDate, Long>, goal: Int): Int {
+        if (goal <= 0) return 0
+        val days = steps.filterValues { it >= goal }.keys
+        return SportStats.longestStreak(days)
+    }
+
+    /**
+     * How this month's average compares with last month's, in whole percent,
+     * or null when there is nothing to compare with — "+∞ %" helps nobody.
+     */
+    fun change(current: Long, previous: Long): Int? {
+        if (previous <= 0 || current <= 0) return null
+        return Math.round((current - previous) * 100.0 / previous).toInt()
+    }
+}

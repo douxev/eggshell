@@ -12,6 +12,8 @@ class EggshellApplication : Application() {
     @Inject lateinit var decoy: DecoyVerifier
     @Inject lateinit var widgetVisibility: WidgetVisibility
     @Inject lateinit var moduleShortcuts: com.douxev.eggshell.modules.ModuleShortcuts
+    @Inject lateinit var sportPrefs: com.douxev.eggshell.data.SportPrefs
+    @Inject lateinit var stepSync: dagger.Lazy<com.douxev.eggshell.data.StepSync>
 
     override fun onCreate() {
         super.onCreate()
@@ -29,5 +31,10 @@ class EggshellApplication : Application() {
         // off in Réglages. Rebuilding on every start means the launcher can
         // never keep advertising a module the user has since hidden.
         runCatching { moduleShortcuts.refresh(decoyActive) }
+        // The pedometer's worker, its 23:59 alarm and its receiver. Re-asserted
+        // on every start because an alarm does not survive a force-stop, and
+        // because a backup restored with the pedometer on arrives with none of
+        // them. Lazy: an app that does not count steps never builds the graph.
+        if (sportPrefs.pedometer.value) runCatching { stepSync.get().ensureScheduled() }
     }
 }

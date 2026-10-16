@@ -25,6 +25,13 @@ data class ImportedWorkout(
     val activityHint: String?,
     /** What the exporter called it. Used as the session note, never invented. */
     val title: String?,
+    /**
+     * Average and peak heart rate, when the file carries them — per trackpoint
+     * (TCX `HeartRateBpm`, GPX `gpxtpx:hr`) or per lap. Null otherwise, and
+     * null rather than a number the vault would refuse (outside 20–300).
+     */
+    val avgHr: Long? = null,
+    val maxHr: Long? = null,
 )
 
 /**
@@ -52,7 +59,17 @@ data class ImportedWorkout(
 object WorkoutFileParser {
 
     /** Suffixes worth offering in a file picker. */
-    val SUPPORTED_EXTENSIONS = listOf("gpx", "tcx")
+    val SUPPORTED_EXTENSIONS = listOf("gpx", "tcx", "fit")
+
+    /**
+     * Whether [bytes] are a FIT file: a 12- or 14-byte header whose bytes 8–11
+     * spell ".FIT". Decided from the content, like the XML formats.
+     */
+    fun isFit(bytes: ByteArray): Boolean =
+        bytes.size >= 12 &&
+            (bytes[0].toInt() == 12 || bytes[0].toInt() == 14) &&
+            bytes[8] == '.'.code.toByte() && bytes[9] == 'F'.code.toByte() &&
+            bytes[10] == 'I'.code.toByte() && bytes[11] == 'T'.code.toByte()
 
     private const val DISALLOW_DOCTYPE =
         "http://apache.org/xml/features/disallow-doctype-decl"
@@ -118,6 +135,23 @@ object WorkoutFileParser {
          */
         private var inTrackpoint = false
 
+        /**
+         * Open elements, innermost last. Heart rate hides in a `<Value>` whose
+         * meaning depends on its parent — `AverageHeartRateBpm`,
+         * `MaximumHeartRateBpm`, a trackpoint's `HeartRateBpm` — so the parent
+         * has to be known when the value closes.
+         */
+        private val open = ArrayDeque<String>()
+
+        // Heart rate, shared by both formats.
+        private var hrSum = 0L
+        private var hrCount = 0L
+        private var hrPeak = 0L
+        private var lapSeconds = 0.0
+        private var lapAvg: Long? = null
+        private var lapWeighted = 0.0
+        private var lapWeight = 0.0
+
         // GPX
         private var gpxName: String? = null
         private var gpxType: String? = null
@@ -132,16 +166,23 @@ object WorkoutFileParser {
 
         override fun startElement(uri: String?, local: String?, qName: String, attrs: Attributes) {
             text.setLength(0)
-            when (tag(qName)) {
+            val name = tag(qName)
+            open.addLast(name)
+            when (name) {
                 "activity" -> {
                     inActivity = true
                     tcxSport = attrs.getValue("Sport")
                     tcxStart = null
                     tcxSeconds = 0.0
                     tcxMetres = 0.0
+                    resetHeartRate()
                 }
-                "lap" -> if (inActivity && tcxStart == null) {
-                    tcxStart = parseTime(attrs.getValue("StartTime"))
+                "lap" -> {
+                    if (inActivity && tcxStart == null) {
+                        tcxStart = parseTime(attrs.getValue("StartTime"))
+                    }
+                    lapSeconds = 0.0
+                    lapAvg = null
                 }
                 "trk" -> {
                     inTrack = true
@@ -150,6 +191,14 @@ object WorkoutFileParser {
                     gpxFirst = null
                     gpxLast = null
                     gpxMetres = 0.0
+                    lastLat = null
+                    lastLon = null
+                    resetHeartRate()
+                }
+                // A new segment is a new stretch of recording — after a pause,
+                // or a GPS that dropped out. The straight line across the gap
+                // was never travelled and must not count as distance.
+                "trkseg" -> {
                     lastLat = null
                     lastLon = null
                 }
@@ -168,11 +217,39 @@ object WorkoutFileParser {
         override fun endElement(uri: String?, local: String?, qName: String) {
             val value = text.toString().trim()
             text.setLength(0)
-            when (tag(qName)) {
+            val name = tag(qName)
+            if (open.lastOrNull() == name) open.removeLast()
+            val parent = open.lastOrNull()
+            when (name) {
+                // -- Heart rate (TCX) --------------------------------------
+                "value" -> {
+                    val bpm = value.toDoubleOrNull()?.toLong()
+                    if (bpm != null) when (parent) {
+                        "heartratebpm" -> if (inTrackpoint) sample(bpm)
+                        "averageheartratebpm" -> if (!inTrackpoint) lapAvg = bpm
+                        "maximumheartratebpm" -> if (!inTrackpoint && bpm in HR_RANGE) {
+                            hrPeak = maxOf(hrPeak, bpm)
+                        }
+                    }
+                }
+                // -- Heart rate (GPX extensions) ---------------------------
+                "hr", "heartrate" -> if (inTrack && pendingLat != null) {
+                    value.toDoubleOrNull()?.toLong()?.let(::sample)
+                }
+
                 // -- TCX ---------------------------------------------------
                 "id" -> if (inActivity && tcxStart == null) tcxStart = parseTime(value)
                 "totaltimeseconds" -> if (inActivity) {
-                    tcxSeconds += value.toDoubleOrNull() ?: 0.0
+                    val seconds = value.toDoubleOrNull() ?: 0.0
+                    tcxSeconds += seconds
+                    lapSeconds += seconds
+                }
+                "lap" -> {
+                    val avg = lapAvg
+                    if (avg != null && avg in HR_RANGE && lapSeconds > 0) {
+                        lapWeighted += avg * lapSeconds
+                        lapWeight += lapSeconds
+                    }
                 }
                 // Laps only — see inTrackpoint.
                 "distancemeters" -> if (inActivity && !inTrackpoint) {
@@ -188,6 +265,8 @@ object WorkoutFileParser {
                             distanceM = tcxMetres.takeIf { it > 0 },
                             activityHint = tcxSport,
                             title = null,
+                            avgHr = averageHeartRate(),
+                            maxHr = hrPeak.takeIf { it in HR_RANGE },
                         )
                     }
                     inActivity = false
@@ -227,6 +306,8 @@ object WorkoutFileParser {
                             distanceM = gpxMetres.takeIf { it > 0 },
                             activityHint = gpxType,
                             title = gpxName,
+                            avgHr = averageHeartRate(),
+                            maxHr = hrPeak.takeIf { it in HR_RANGE },
                         )
                     }
                     inTrack = false
@@ -236,7 +317,39 @@ object WorkoutFileParser {
 
         /** Local name, lowercased: exporters differ on case and on prefixes. */
         private fun tag(qName: String) = qName.substringAfter(':').lowercase()
+
+        private fun resetHeartRate() {
+            hrSum = 0
+            hrCount = 0
+            hrPeak = 0
+            lapWeighted = 0.0
+            lapWeight = 0.0
+        }
+
+        /** One per-point reading. Outside what a heart does, it is noise. */
+        private fun sample(bpm: Long) {
+            if (bpm !in HR_RANGE) return
+            hrSum += bpm
+            hrCount++
+            hrPeak = maxOf(hrPeak, bpm)
+        }
+
+        /**
+         * Per-point readings when the file has them — the finer source — and
+         * otherwise the laps' own averages, weighted by how long each lap was.
+         */
+        private fun averageHeartRate(): Long? {
+            val avg = when {
+                hrCount > 0 -> hrSum / hrCount
+                lapWeight > 0 -> Math.round(lapWeighted / lapWeight)
+                else -> return null
+            }
+            return avg.takeIf { it in HR_RANGE }
+        }
     }
+
+    /** What the vault accepts for a session's heart rate (`0017_sport.sql`). */
+    private val HR_RANGE = 20L..300L
 
     /**
      * ISO-8601, which is what both formats specify and what every exporter
@@ -249,12 +362,13 @@ object WorkoutFileParser {
         return try {
             Instant.parse(value).toEpochMilli()
         } catch (_: DateTimeParseException) {
-            // Some exporters omit the zone. Read those as UTC rather than
-            // dropping the workout: being an hour or two out on the start time
-            // is a smaller lie than pretending the session never happened.
+            // Some exporters omit the zone. Those are local times in practice —
+            // a watch writes the time it showed — so read them in the phone's
+            // timezone; UTC put every such session one or two hours out.
             try {
                 java.time.LocalDateTime.parse(value)
-                    .toInstant(java.time.ZoneOffset.UTC)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toInstant()
                     .toEpochMilli()
             } catch (_: DateTimeParseException) {
                 null

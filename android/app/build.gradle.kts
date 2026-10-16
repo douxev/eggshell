@@ -59,8 +59,8 @@ android {
         // Reminder for the next release: Play enforces strictly monotonic
         // versionCode across all tracks. Bump versionCode every upload,
         // even for a same-day re-build, otherwise Play refuses the AAB.
-        versionCode = 22
-        versionName = "2.3.2"
+        versionCode = 24
+        versionName = "3.0.0"
 
         ndk {
             abiFilters += targetAbis
@@ -322,6 +322,15 @@ dependencies {
     // blobs, so the app stays clean of F-Droid anti-features.
     implementation(libs.pdfbox.android)
     implementation(libs.tesseract4android)
+
+    // Health Connect, read-only: workouts, steps, heart rate and distance that
+    // a watch or another app already put there, imported into the vault on an
+    // explicit opt-in. The client is AndroidX and Apache 2.0, with no Play
+    // Services in its graph; it only reaches the Health Connect provider (a
+    // system module from Android 14, an app before). Where there is none —
+    // a de-Googled phone, Android 8 — the card says so and nothing else
+    // changes, so the build stays the same for every store.
+    implementation(libs.androidx.health.connect.client)
 
     // JVM unit tests. No Robolectric and no Compose test rule: the rules worth
     // pinning here are plain Kotlin (which folder a new note lands in, whether

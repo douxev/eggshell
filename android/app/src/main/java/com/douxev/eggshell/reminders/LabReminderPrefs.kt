@@ -107,6 +107,15 @@ class LabReminderPrefs(context: Context) {
         }.commit()
     }
 
+    /**
+     * Forget every reminder — the wipe path. The labels are the user's own
+     * words (« Bilan E2 »), and a self-destruct that cancelled the alarms but
+     * left them on disk was not one.
+     */
+    fun wipe() {
+        prefs.edit().clear().commit()
+    }
+
     fun nextId(): Long = (all().maxOfOrNull { it.id } ?: 0L) + 1L
 
     private fun key(name: String, id: Long) = "${name}_$id"

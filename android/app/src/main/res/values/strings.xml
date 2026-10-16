@@ -78,7 +78,6 @@
     <!-- Liste -->
     <string name="med_list_title">Médics</string>
     <string name="med_list_empty">Aucun traitement enregistré. Ajoute-en un avec le bouton ci-dessous.</string>
-    <string name="med_add">Ajouter</string>
 
     <!-- Création -->
     <string name="med_add_title">Nouveau traitement</string>
@@ -554,36 +553,72 @@
     <string name="widget_minutes">%1$d min</string>
     <string name="widget_hours">%1$d h</string>
     <string name="widget_days">%1$d j</string>
-    <string name="meds_widget_config_title">Widget Traitements</string>
-    <string name="meds_widget_config_rows">Nombre de prises affichées</string>
-    <string name="meds_widget_config_hint">Ce widget lit les mêmes informations que tes notifications de rappel — rien de plus n\'est écrit en dehors du coffre. Il fonctionne donc aussi en mode parano.</string>
+    <!-- Réglage du widget Traitements : quels traitements il liste. Les noms
+         viennent du coffre, donc le choix n'est possible que l'app ouverte. -->
+    <string name="meds_widget_target_label">Quels traitements</string>
+    <string name="meds_widget_target_all">Tous</string>
+    <string name="meds_widget_target_locked">Ouvre l\'app puis reviens pour choisir un traitement précis.</string>
+    <string name="meds_widget_no_meds">Aucun traitement pour l\'instant.</string>
 
     <!-- ===== Widget Notes ===== -->
     <string name="notes_widget_description">Tes dernières notes, un dossier, ou une note précise — au choix à l\'installation du widget.</string>
-    <string name="notes_widget_locked">Ouvre l\'app pour voir tes notes.</string>
-    <string name="notes_widget_config_title">Widget Notes</string>
-    <string name="notes_widget_config_show">Afficher mes notes sur l\'écran d\'accueil</string>
-    <string name="notes_widget_config_warning">Ce que le widget affiche doit être lisible sans ton mot de passe : le titre et la première ligne des notes concernées sont recopiés hors du coffre (chiffrés, mais ouvrables sans ta phrase secrète). Rien n\'est recopié tant que cette option est désactivée, et tout est effacé dès que l\'app se verrouille.</string>
-    <string name="notes_widget_config_paranoid">En mode parano, rien ne peut être recopié hors du coffre — le widget reste un simple raccourci. C\'est la promesse de ce mode.</string>
-    <string name="notes_widget_config_rows">Nombre de notes affichées</string>
     <string name="notes_widget_config_target">Quoi afficher</string>
     <string name="notes_widget_target_recent">Dernières notes</string>
     <string name="notes_widget_target_folder">Un dossier</string>
-    <string name="notes_widget_target_locked">Ouvre l\'app puis reviens pour choisir un dossier.</string>
+    <string name="notes_widget_target_note">Une seule note</string>
+    <string name="notes_widget_target_locked">Ouvre l\'app puis reviens pour choisir un dossier ou une note.</string>
+    <string name="notes_widget_no_folders">Aucun dossier pour l\'instant.</string>
+    <string name="notes_widget_no_notes">Aucune note pour l\'instant.</string>
+    <string name="notes_widget_note_warning">Pour une note seule, c\'est le début de son contenu (600 caractères au plus) qui est recopié hors du coffre, pas seulement sa première ligne.</string>
 
     <!-- ===== Widgets de module : contenu ===== -->
     <string name="widget_content_locked">Ouvre l\'app pour voir ce module.</string>
+    <!-- Le widget Analyses ne dépend jamais du coffre : vide, il n'y a
+         simplement rien de prévu. -->
+    <string name="widget_labs_empty">Aucun bilan prévu.</string>
     <string name="widget_appointment_generic">Rendez-vous</string>
     <string name="widget_bleeding_last">Dernier saignement</string>
+    <!-- La tuile du widget Menstruations : le jour du cycle, J1 étant le
+         premier jour des derniers saignements notés. -->
+    <string name="widget_bleeding_day">J%1$d</string>
+    <plurals name="widget_bleeding_days_30">
+        <item quantity="one">%1$d jour noté sur 30 j</item>
+        <item quantity="other">%1$d jours notés sur 30 j</item>
+    </plurals>
     <string name="widget_dream_untitled">Rêve sans titre</string>
-    <string name="widget_gauge_mood">Humeur %1$d</string>
-    <string name="widget_gauge_energy">Énergie %1$d</string>
-    <string name="widget_weight_trend">%1$s %2$s sur 30 j</string>
+    <string name="widget_dream_lucid">lucide</string>
+    <plurals name="widget_dreams_month">
+        <item quantity="one">%1$d nuit notée ce mois-ci</item>
+        <item quantity="other">%1$d nuits notées ce mois-ci</item>
+    </plurals>
+    <string name="widget_next_reminder">Prochain rappel</string>
+    <string name="widget_photos_last">dernière %1$s</string>
+    <string name="widget_voice_last">dernier %1$s</string>
+    <plurals name="widget_journal_week">
+        <item quantity="one">%1$d entrée sur 7 j</item>
+        <item quantity="other">%1$d entrées sur 7 j</item>
+    </plurals>
+    <string name="widget_journal_mood_avg">humeur moy. %1$s</string>
+    <!-- Ce que le sélecteur de widgets du lanceur dit de chacun. -->
+    <string name="widget_desc_journal">Les jauges de ta dernière entrée, et ta semaine en un coup d\'œil.</string>
+    <string name="widget_desc_sport">Tes séances de la semaine, ta série, tes pas du jour et ta prochaine séance.</string>
+    <string name="widget_desc_appointments">Tes prochains rendez-vous, avec leur date.</string>
+    <string name="widget_desc_bleeding">Le jour du cycle et les jours notés sur les 30 derniers jours.</string>
+    <string name="widget_desc_photos">Combien de photos, la dernière, et le prochain rappel.</string>
+    <string name="widget_desc_voice">Combien d\'extraits, le dernier, et le prochain rappel.</string>
+    <string name="widget_desc_dreams">Ton dernier rêve, les nuits notées ce mois-ci, et le prochain rappel.</string>
+    <string name="widget_desc_labs">Tes prochains bilans à prévoir.</string>
     <string name="widget_config_title">Widget %1$s</string>
     <string name="widget_config_show">Afficher ce module sur l\'écran d\'accueil</string>
-    <string name="widget_config_warning">Ce que le widget affiche doit être lisible sans ton mot de passe : ces quelques lignes sont recopiées hors du coffre (chiffrées, mais ouvrables sans ta phrase secrète). Rien n\'est recopié tant que cette option est désactivée, et tout est effacé dès que l\'app se verrouille.</string>
+    <string name="widget_config_warning">Ce que le widget affiche doit être lisible sans ton mot de passe : ces quelques lignes sont recopiées hors du coffre (chiffrées, mais ouvrables sans ta phrase secrète). Rien n\'est recopié tant que cette option est désactivée. Ces lignes restent affichées quand l\'app est verrouillée — c\'est tout l\'intérêt d\'un widget — et sont effacées dès que tu désactives l\'option, retires le widget, passes en mode parano ou configures un PIN de leurre.</string>
     <string name="widget_config_paranoid">En mode parano, rien ne peut être recopié hors du coffre — le widget reste un simple raccourci. C\'est la promesse de ce mode.</string>
     <string name="widget_config_rows">Nombre de lignes</string>
+    <!-- Analyses : le nom de chaque bilan est un texte que tu as écrit, et la
+         notification ne le montre jamais. L'afficher sur l'écran d'accueil
+         demande donc le même accord que le contenu des autres widgets. -->
+    <string name="widget_config_labs_show">Afficher le nom de mes bilans</string>
+    <string name="widget_config_labs_warning">Sans cette option, le widget écrit seulement « Bilan à prévoir » et la date, comme la notification. Avec, le nom que tu as donné à chaque bilan s\'affiche sur l\'écran d\'accueil, lisible par toute personne qui voit ton téléphone, même verrouillé.</string>
+    <string name="widget_config_labs_paranoid">En mode parano, le widget n\'affiche jamais le nom de tes bilans — seulement « Bilan à prévoir » et la date.</string>
     <string name="widget_config_offvault">Ce widget lit les mêmes informations que tes notifications de rappel — rien de plus n\'est écrit en dehors du coffre. Il fonctionne donc aussi en mode parano.</string>
 
     <plurals name="widget_photos_count">
@@ -594,6 +629,10 @@
         <item quantity="one">%1$d extrait</item>
         <item quantity="other">%1$d extraits</item>
     </plurals>
+    <!-- Au-delà de ce que le widget lit d'un coup, il dit « 500+ » plutôt
+         qu'un nombre exact qu'il ne connaît pas. -->
+    <string name="widget_photos_count_capped">%1$d+ photos</string>
+    <string name="widget_voice_count_capped">%1$d+ extraits</string>
 
     <!-- ===== Rappels de séance (sport) ===== -->
     <string name="sport_reminder_title">C\'est l\'heure</string>
@@ -604,14 +643,23 @@
     <string name="reminders_sport_dialog_title">Nouveau rappel de séance</string>
     <string name="reminders_sport_edit_dialog_title">Modifier le rappel de séance</string>
 
-    <plurals name="widget_sport_week">
-        <item quantity="one">%1$d séance cette semaine</item>
-        <item quantity="other">%1$d séances cette semaine</item>
+    <string name="reminders_sport_default_label">Séance de sport</string>
+
+    <string name="widget_sport_steps">%1$s pas aujourd\'hui</string>
+    <string name="widget_sport_steps_goal">objectif %1$s</string>
+    <string name="widget_sport_next_session">Prochaine séance</string>
+
+    <!-- Grouped medication reminders (option in the notification settings) -->
+    <plurals name="reminder_group_title">
+        <item quantity="one">Traitement à prendre</item>
+        <item quantity="other">%1$d traitements à prendre</item>
     </plurals>
-    <plurals name="widget_sport_streak">
-        <item quantity="one">%1$d jour d\'affilée</item>
-        <item quantity="other">%1$d jours d\'affilée</item>
+    <string name="reminder_action_group_taken">Tout pris</string>
+    <string name="reminder_action_group_skip">Tout passer</string>
+    <string name="settings_notif_grouped">Grouper les rappels de traitement</string>
+    <string name="settings_notif_grouped_sub">Les traitements prévus au même moment arrivent dans une seule notification, avec « Tout pris » et « Plus tard ».</string>
+    <plurals name="reminder_group_others">
+        <item quantity="one"> et %1$d autre</item>
+        <item quantity="other"> et %1$d autres</item>
     </plurals>
-    <string name="widget_sport_minutes">%1$d min de sport</string>
-    <string name="widget_sport_steps">%1$d pas aujourd\'hui</string>
 </resources>

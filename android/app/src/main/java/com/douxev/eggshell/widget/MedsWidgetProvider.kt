@@ -39,12 +39,14 @@ class MedsWidgetProvider : ModuleWidgetProvider(AppModule.Meds) {
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         // Launchers reuse widget ids. A row left behind is not litter — it is
         // the next widget placed here silently inheriting this one\'s target.
-        runCatching { WidgetConfigPrefs(context).remove(appWidgetIds) }
+        WidgetMirrorUpdater.forget(context, appWidgetIds)
         super.onDeleted(context, appWidgetIds)
     }
 
     override fun render(context: Context, manager: AppWidgetManager, widgetId: Int) {
         val views = RemoteViews(context.packageName, R.layout.widget_meds)
+        val palette = WidgetPalette.current(context)
+        WidgetPaint.card(views, palette, R.id.meds_widget_root)
 
         if (runCatching { isDecoyActive(context) }.getOrDefault(false)) {
             // Say nothing and offer nothing to tap, exactly as the base class
@@ -74,6 +76,10 @@ class MedsWidgetProvider : ModuleWidgetProvider(AppModule.Meds) {
             R.id.meds_widget_title,
             pendingIntent(context, ModuleDeepLink.openIntent(context, module), REQ_OPEN),
         )
+        WidgetPaint.onCard(views, palette, R.id.meds_widget_title)
+        WidgetPaint.muted(views, palette, R.id.meds_widget_empty)
+        WidgetPaint.icon(views, palette, R.id.meds_widget_icon)
+        WidgetPaint.filledPill(views, palette, R.id.meds_widget_action_add)
 
         val config = runCatching { WidgetConfigPrefs(context).get(widgetId) }
             .getOrDefault(WidgetConfigPrefs.Config())
@@ -89,7 +95,7 @@ class MedsWidgetProvider : ModuleWidgetProvider(AppModule.Meds) {
         } else {
             views.setViewVisibility(R.id.meds_widget_empty, View.GONE)
             ROW_IDS.forEachIndexed { index, ids ->
-                renderRow(context, views, ids, due.getOrNull(index), index)
+                renderRow(context, views, palette, ids, due.getOrNull(index), index)
             }
         }
 
@@ -99,6 +105,7 @@ class MedsWidgetProvider : ModuleWidgetProvider(AppModule.Meds) {
     private fun renderRow(
         context: Context,
         views: RemoteViews,
+        palette: WidgetPalette?,
         ids: RowIds,
         entry: ReminderPrefs.Entry?,
         index: Int,
@@ -108,6 +115,10 @@ class MedsWidgetProvider : ModuleWidgetProvider(AppModule.Meds) {
             return
         }
         views.setViewVisibility(ids.row, View.VISIBLE)
+        WidgetPaint.onCard(views, palette, ids.title)
+        WidgetPaint.muted(views, palette, ids.whenLabel)
+        WidgetPaint.filledPill(views, palette, ids.taken)
+        WidgetPaint.tonalPill(views, palette, ids.takenAt)
         views.setTextViewText(
             ids.title,
             // Null unless the user opted into a name or an alias, exactly as
@@ -184,7 +195,7 @@ class MedsWidgetProvider : ModuleWidgetProvider(AppModule.Meds) {
         context: Context,
         config: WidgetConfigPrefs.Config,
     ): List<ReminderPrefs.Entry> {
-        val wanted = config.targetId?.takeIf { config.targetKind == TARGET_MEDICATION }
+        val wanted = config.targetId?.takeIf { config.targetKind == WidgetMirrorUpdater.TARGET_MEDICATION }
         val floor = System.currentTimeMillis() - OVERDUE_WINDOW_MS
         return ReminderPrefs(context).all()
             .filter { wanted == null || it.medicationId == wanted }
@@ -203,7 +214,6 @@ class MedsWidgetProvider : ModuleWidgetProvider(AppModule.Meds) {
     )
 
     private companion object {
-        const val TARGET_MEDICATION = "medication"
         /** Row-action request codes, offset inside this module\'s REQ_STRIDE slice. */
         const val REQ_ROW_TAKEN = 10
         const val REQ_ROW_TAKEN_AT = 20

@@ -36,6 +36,38 @@ object WidgetRefresh {
         }
     }
 
+    /** Coalesces [refreshAllAsync] requests: at most one queued behind a running one. */
+    private val queued = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** One background thread; repaints are sequential anyway. */
+    private val worker: java.util.concurrent.ExecutorService by lazy {
+        java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+            Thread(task, "widget-repaint").apply { isDaemon = true }
+        }
+    }
+
+    /**
+     * [refreshAll], off the calling thread.
+     *
+     * For the vault's lock and unlock, which happen on the main thread — a lock
+     * runs inside `onUserLeaveHint` — while a repaint reads and unseals the
+     * reminder stores and every widget's configuration through the Keystore.
+     * Nothing about the transition needs the repaint to have finished: the
+     * mirror is not touched by a lock, so this only refreshes what is already
+     * there. Requests that arrive while one is waiting fold into it.
+     */
+    fun refreshAllAsync(context: Context) {
+        val app = context.applicationContext
+        if (!queued.compareAndSet(false, true)) return
+        runCatching {
+            worker.execute {
+                queued.set(false)
+                runCatching { refreshAll(app) }
+                    .onFailure { android.util.Log.e("WidgetRefresh", "async repaint failed", it) }
+            }
+        }.onFailure { queued.set(false) }
+    }
+
     /** Re-render only the widgets of one module. */
     fun refreshModule(context: Context, module: com.douxev.eggshell.modules.AppModule) {
         val app = context.applicationContext

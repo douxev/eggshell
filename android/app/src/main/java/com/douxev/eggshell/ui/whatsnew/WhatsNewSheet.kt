@@ -14,11 +14,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DirectionsRun
+import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -77,32 +77,32 @@ data class WhatsNewRelease(
  */
 object WhatsNewCatalog {
     val LATEST: WhatsNewRelease = WhatsNewRelease(
-        versionCode = 20,
-        versionName = "2.3.0",
+        versionCode = 24,
+        versionName = "3.0.0",
         titleRes = R.string.set_wn_title,
         highlights = listOf(
             WhatsNewHighlight(
-                icon = Icons.Filled.CheckCircle,
+                icon = Icons.Filled.DirectionsRun,
                 titleRes = R.string.set_wn_1_title,
                 subRes = R.string.set_wn_1_sub,
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.ShowChart,
+                icon = Icons.Filled.DirectionsWalk,
                 titleRes = R.string.set_wn_2_title,
                 subRes = R.string.set_wn_2_sub,
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Notifications,
+                icon = Icons.Filled.Widgets,
                 titleRes = R.string.set_wn_3_title,
                 subRes = R.string.set_wn_3_sub,
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Widgets,
+                icon = Icons.Filled.Notifications,
                 titleRes = R.string.set_wn_4_title,
                 subRes = R.string.set_wn_4_sub,
             ),
             WhatsNewHighlight(
-                icon = Icons.Filled.Bedtime,
+                icon = Icons.Filled.Key,
                 titleRes = R.string.set_wn_5_title,
                 subRes = R.string.set_wn_5_sub,
             ),

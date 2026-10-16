@@ -49,8 +49,25 @@ class NotifContentPrefs @Inject constructor(
         _mode.value = mode
     }
 
+    /**
+     * « Grouper les rappels de traitement »: medication reminders due within
+     * the same few minutes arrive as one notification ([MedReminderGroup])
+     * instead of one each. Off by default — the single-reminder behaviour is
+     * what everyone has today, and the change is the user's to make. Lives
+     * here because it is the same question as [mode]: what a medication
+     * reminder looks like.
+     */
+    private val _grouped = MutableStateFlow(prefs.getBoolean(KEY_GROUPED, false))
+    val grouped: StateFlow<Boolean> = _grouped.asStateFlow()
+
+    fun setGrouped(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_GROUPED, enabled).apply()
+        _grouped.value = enabled
+    }
+
     companion object {
         private const val PREFS_NAME = "transition_notif_content_prefs"
         private const val KEY_MODE = "mode"
+        private const val KEY_GROUPED = "grouped"
     }
 }

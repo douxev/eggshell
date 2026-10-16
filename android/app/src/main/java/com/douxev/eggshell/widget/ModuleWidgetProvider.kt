@@ -64,6 +64,8 @@ abstract class ModuleWidgetProvider(internal val module: AppModule) : AppWidgetP
 
     protected open fun render(context: Context, manager: AppWidgetManager, widgetId: Int) {
         val views = RemoteViews(context.packageName, R.layout.widget_module)
+        val palette = WidgetPalette.current(context)
+        WidgetPaint.card(views, palette, R.id.module_widget_root)
         val decoyed = runCatching { isDecoyActive(context) }.getOrDefault(false)
 
         if (decoyed) {
@@ -84,6 +86,9 @@ abstract class ModuleWidgetProvider(internal val module: AppModule) : AppWidgetP
         )
         views.setImageViewResource(R.id.module_widget_icon, module.iconRes)
         views.setViewVisibility(R.id.module_widget_icon, View.VISIBLE)
+        WidgetPaint.onCard(views, palette, R.id.module_widget_title)
+        WidgetPaint.muted(views, palette, R.id.module_widget_subtitle)
+        WidgetPaint.icon(views, palette, R.id.module_widget_icon)
 
         // The card body opens the module. The « + » gets its own PendingIntent
         // and the root gets none: several launchers collapse child taps into
@@ -104,6 +109,7 @@ abstract class ModuleWidgetProvider(internal val module: AppModule) : AppWidgetP
                 R.id.module_widget_action_add,
                 pendingIntent(context, ModuleDeepLink.addIntent(context, module), REQ_ADD),
             )
+            WidgetPaint.filledPill(views, palette, R.id.module_widget_action_add)
         } else {
             views.setViewVisibility(R.id.module_widget_action_add, View.GONE)
         }
@@ -133,6 +139,22 @@ abstract class ModuleWidgetProvider(internal val module: AppModule) : AppWidgetP
         SecurePrefs.get(context.applicationContext, "transition_vault_prefs")
             .contains("decoy_salt")
 
+    /**
+     * Whether this vault's mode allows anything opt-in on the home screen.
+     *
+     * Checked at draw time as well as at write time. The mirror is erased on
+     * the move to paranoid mode, and the opt-ins revoked; this is the third
+     * lock on the same door, for the one case the other two cannot cover — a
+     * row or a consent that survived them anyway (a kill between the two
+     * writes, a build that did not know to ask).
+     */
+    protected fun optInAllowed(context: Context): Boolean =
+        runCatching {
+            WidgetContentMirror.writable(
+                com.douxev.eggshell.security.VaultPrefs(context.applicationContext).mode,
+            )
+        }.getOrDefault(false)
+
     protected companion object {
         const val TAG = "ModuleWidget"
         const val REQ_OPEN = 0
@@ -150,8 +172,9 @@ abstract class ModuleWidgetProvider(internal val module: AppModule) : AppWidgetP
 /** Modules whose « + » has a screen of its own to land on. */
 internal val AppModule.hasCaptureScreen: Boolean
     get() = when (this) {
-        // Photos and Voix capture from inside their own screen and Poids opens
-        // a dialog over its, so none of the three has a route to push.
+        // Photos and Voix capture from inside their own screen, so neither has
+        // a route to push. Poids has no widget at all; listed so the `when`
+        // stays exhaustive.
         AppModule.Photos, AppModule.Voice, AppModule.Weight -> false
         else -> true
     }
@@ -168,6 +191,9 @@ internal val AppModule.hasCaptureScreen: Boolean
  * and building the second by reflection would depend on R8 keeping a
  * constructor nothing in Kotlin visibly calls. Constructing them directly is
  * also what [EggshellWidgetProvider.broadcastRefresh] already does.
+ *
+ * Poids has no widget: one number and a thirty-day delta was not worth a card,
+ * and the Courbes screen is one tap away through the Analyses widget.
  */
 internal fun moduleWidgets(context: Context): List<Pair<ComponentName, ModuleWidgetProvider>> =
     listOf(
@@ -177,7 +203,6 @@ internal fun moduleWidgets(context: Context): List<Pair<ComponentName, ModuleWid
         AppointmentsWidgetProvider(),
         NotesWidgetProvider(),
         DreamsWidgetProvider(),
-        WeightWidgetProvider(),
         BleedingWidgetProvider(),
         PhotosWidgetProvider(),
         VoiceWidgetProvider(),

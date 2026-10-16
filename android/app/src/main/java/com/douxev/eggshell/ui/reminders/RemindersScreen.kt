@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Medication
@@ -371,6 +372,7 @@ fun RemindersScreen(
                     LabReminderPrefs.CATEGORY_VOICE -> R.string.reminders_voice_default_label
                     LabReminderPrefs.CATEGORY_JOURNAL -> R.string.reminders_journal_default_label
                     LabReminderPrefs.CATEGORY_DREAM -> R.string.reminders_dream_default_label
+                    LabReminderPrefs.CATEGORY_SPORT -> R.string.reminders_sport_default_label
                     else -> R.string.reminders_lab_default_label
                 }
             )
@@ -453,6 +455,7 @@ private fun LazyListScope.categorySection(
 }
 
 private fun labIconFor(category: String): ImageVector = when (category) {
+    LabReminderPrefs.CATEGORY_SPORT -> Icons.Filled.DirectionsRun
     LabReminderPrefs.CATEGORY_PHOTO -> Icons.Filled.PhotoCamera
     LabReminderPrefs.CATEGORY_VOICE -> Icons.Filled.GraphicEq
     LabReminderPrefs.CATEGORY_JOURNAL -> Icons.Filled.EditNote
@@ -600,8 +603,9 @@ private fun MedReminderRow(
     }
 }
 
+/** One non-medication reminder. Shared with the sport module's own screen. */
 @Composable
-private fun LabReminderCard(
+internal fun LabReminderCard(
     entry: LabReminderPrefs.Entry,
     icon: ImageVector,
     priority: Boolean,
@@ -701,9 +705,10 @@ private fun ReminderCard(
     }
 }
 
+/** Create or edit a non-medication reminder. Shared with the sport module. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AddLabReminderDialog(
+internal fun AddLabReminderDialog(
     titleRes: Int,
     defaultLabel: String,
     initialEntry: LabReminderPrefs.Entry? = null,

@@ -31,12 +31,22 @@ class HeartRateParserTest {
 
     /**
      * The mistake this test exists for: a uint16 packet read as uint8 yields
-     * its low byte. 0x9E is 158 — a completely ordinary heart rate, and wrong.
+     * its low byte. 0x2C is 44 — a plausible resting heart rate, and wrong.
      */
     @Test
     fun `a uint16 reading is not truncated to its low byte`() {
-        val sample = HeartRateParser.parse(bytes(0x01, 0x9E, 0x01))!!
-        assertEquals(414, sample.bpm)
+        val sample = HeartRateParser.parse(bytes(0x01, 0x2C, 0x01))!!
+        assertEquals(300, sample.bpm)
+    }
+
+    /**
+     * Outside what the vault accepts for a session (20–300 bpm). One such
+     * packet used to make the session impossible to save; now it is dropped.
+     */
+    @Test
+    fun `an impossible heart rate is dropped`() {
+        assertNull(HeartRateParser.parse(bytes(0x01, 0x9E, 0x01))) // 414
+        assertNull(HeartRateParser.parse(bytes(0x00, 12)))
     }
 
     @Test

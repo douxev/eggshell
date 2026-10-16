@@ -80,6 +80,11 @@
     <string name="set_sec_change_pass_same">C’est déjà ton mot de passe actuel.</string>
     <string name="set_sec_change_pass_na">Ce mode n’utilise pas de mot de passe.</string>
     <string name="set_sec_change_pass_failed">Échec : %1$s</string>
+    <!-- Résultat d'un changement de mode de sécurité. -->
+    <string name="set_sec_mode_done">Mode mis à jour.</string>
+    <string name="set_sec_mode_same">C\'est déjà ton mode actuel.</string>
+    <string name="set_sec_mode_rekey">Passer en mode parano, ou en sortir, demande de rechiffrer tout le coffre. L\'app ne sait pas encore le faire.</string>
+    <string name="set_sec_mode_failed">Échec : %1$s</string>
     <string name="set_sec_section_pins">Code d’accès et PIN de leurre</string>
     <string name="set_sec_section_masking">Icône et nom de l’app</string>
     <string name="set_sec_masking_hint">Ce que ton écran d’accueil affiche. Le changement prend effet tout de suite.</string>
@@ -105,18 +110,18 @@
     <!-- 2.1.0. Réécrites à chaque version : seule LATEST est jamais affichée,
          donc garder les entrées d’une version passée ne ferait que des chaînes
          mortes que les traductions devraient suivre. -->
-    <string name="set_wn_1_title">Rattraper une prise manquée</string>
-    <string name="set_wn_1_sub">Touche une prise « manquée » : l’heure est déjà remplie d’après ton retard habituel, et reste modifiable avant de valider.</string>
-    <string name="set_wn_2_title">Courbes d’analyses repensées</string>
-    <string name="set_wn_2_sub">Les niveaux sont enfin chiffrés sur l’axe, les dates gradées, et tu peux pincer pour zoomer et faire glisser. Touche un point pour sa valeur exacte.</string>
-    <string name="set_wn_3_title">Rappels : un seul endroit</string>
-    <string name="set_wn_3_sub">Créer, modifier, mettre en pause et supprimer, depuis la fiche du traitement. Un rappel en pause peut enfin être supprimé.</string>
-    <string name="set_wn_4_title">Raccourcis et widgets par module</string>
-    <string name="set_wn_4_sub">Un appui long sur l’icône ouvre le module voulu, et chaque module a son widget. Tout disparaît si un PIN leurre ou une icône déguisée est actif.</string>
-    <string name="set_wn_5_title">Carnet de rêves</string>
-    <string name="set_wn_5_sub">Il est là. Un calendrier des nuits, des tags pour regrouper les rêves qui se ressemblent, des notes vocales transcrites sur ton téléphone, et des curseurs de sommeil. Ce que tu y notes alimente « Ce qui va ensemble », dans Corrélations.</string>
-    <string name="set_wn_6_title">Corrections importantes</string>
-    <string name="set_wn_6_sub">Un plantage possible au démarrage sur Android 8, les valeurs à rallonge sur les courbes, le clavier qui recouvrait les champs en bas des formulaires, et l’app qui ne changeait pas de langue sans redémarrer.</string>
+    <string name="set_wn_1_title">Module Sport</string>
+    <string name="set_wn_1_sub">Tes séances, tes types d’activité, une montre ou une ceinture cardio en Bluetooth standard avec un chrono, et l’import de ta montre : fichiers .fit, .gpx ou .tcx, ou directement depuis Health Connect. Désactivé par défaut : active-le dans Réglages › Modules.</string>
+    <string name="set_wn_2_title">Un podomètre qui compte vraiment</string>
+    <string name="set_wn_2_sub">Tes pas sont relevés même app fermée, sans notification permanente, et rangés sur le bon jour, redémarrage compris. Ils bougent en direct sur l’écran Sport, chaque jour se corrige d’un appui, et le mois se résume en dessous du calendrier.</string>
+    <string name="set_wn_3_title">Des widgets qui montrent quelque chose</string>
+    <string name="set_wn_3_sub">Chaque widget peut afficher son contenu si tu l’y autorises, widget par widget, jamais en mode parano. Le journal montre ses jauges, Notes une note entière, Sport tes pas du jour — et tout suit le thème de l’app.</string>
+    <string name="set_wn_4_title">Rappels groupés</string>
+    <string name="set_wn_4_sub">Les traitements prévus au même moment peuvent arriver dans une seule notification, avec « Tout pris » et « Plus tard » : à activer dans Réglages, sous le contenu des notifications. Et des rappels de séance depuis le module Sport.</string>
+    <string name="set_wn_5_title">Changer de phrase secrète</string>
+    <string name="set_wn_5_sub">Depuis Réglages › Sécurité, y compris en mode parano où tout est rechiffré — sans rien perdre si l’app est interrompue en route.</string>
+    <string name="set_wn_6_sub">Créer une note ne faisait rien. Le widget Analyses n’affiche plus tes libellés sans ton accord, et l’effacement complet efface enfin tout. Le widget Poids est retiré.</string>
+    <string name="set_wn_6_title">Corrections</string>
 
     <!-- ============ Ressources ============ -->
     <string name="set_resources_intro">Des sites, des lignes d’écoute et des associations. Le lien s’ouvre dans ton navigateur — rien ne passe par eggshell.</string>

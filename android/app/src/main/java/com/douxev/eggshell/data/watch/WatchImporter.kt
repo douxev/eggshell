@@ -44,11 +44,44 @@ class WatchImporter @Inject constructor(
      * picked by mistake should cost a glance rather than a cleanup.
      */
     suspend fun preview(uri: Uri): Preview = withContext(Dispatchers.IO) {
-        val workouts = context.contentResolver.openInputStream(uri)?.use {
-            WorkoutFileParser.parse(it)
-        }.orEmpty()
+        val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
+            // Bounded: a workout file is kilobytes to a few megabytes. Anything
+            // past this is not one, and must not be pulled whole into memory.
+            val out = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                out.write(buffer, 0, n)
+                if (out.size() > MAX_FILE_BYTES) return@use null
+            }
+            out.toByteArray()
+        }
+        val workouts = bytes?.let(::parse).orEmpty()
         Preview(workouts = workouts, duplicates = alreadyPresent(workouts))
     }
+
+    /**
+     * GPX and TCX are XML and parsed here; `.fit` is binary and decoded by the
+     * Rust core, once for both apps. Which one a file is comes from its bytes,
+     * not its name — exports arrive named `activity(3)`, `.xml`, or nothing.
+     */
+    private fun parse(bytes: ByteArray): List<ImportedWorkout> =
+        if (WorkoutFileParser.isFit(bytes)) {
+            runCatching { uniffi.transition.parseFitWorkouts(bytes) }.getOrDefault(emptyList()).map {
+                ImportedWorkout(
+                    startedMs = it.startedMs,
+                    durationS = it.durationS,
+                    distanceM = it.distanceM,
+                    activityHint = it.sport,
+                    title = it.title,
+                    avgHr = it.avgHr,
+                    maxHr = it.maxHr,
+                )
+            }
+        } else {
+            runCatching { WorkoutFileParser.parse(bytes.inputStream()) }.getOrDefault(emptyList())
+        }
 
     /**
      * Write the workouts, matching each to one of the user's own activity types.
@@ -71,6 +104,8 @@ class WatchImporter @Inject constructor(
                     durationS = workout.durationS,
                     note = workout.title,
                     distanceM = workout.distanceM,
+                    avgHr = workout.avgHr,
+                    maxHr = workout.maxHr,
                     source = SportRepository.SOURCE_WATCH,
                 )
             }.onSuccess { written++ }
@@ -98,6 +133,9 @@ class WatchImporter @Inject constructor(
     }
 
     companion object {
+        /** Past this a file is not a workout export; see [preview]. */
+        private const val MAX_FILE_BYTES = 64L * 1024 * 1024
+
         /**
          * Which of the user's activity types a workout belongs to, if any.
          *
@@ -118,11 +156,42 @@ class WatchImporter @Inject constructor(
             hint: String?,
             activities: List<SportActivity>,
         ): SportActivity? {
-            val needle = hint?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+            val needle = normalize(hint ?: return null).takeIf { it.isNotEmpty() } ?: return null
             val live = activities.filterNot { it.archived }
-            return live.firstOrNull { it.name.lowercase() == needle }
-                ?: live.firstOrNull { needle.contains(it.name.lowercase()) }
-                ?: live.firstOrNull { it.name.lowercase().contains(needle) }
+                .map { it to normalize(it.name) }
+                .filter { (_, name) -> name.isNotEmpty() }
+            live.firstOrNull { (_, name) -> name == needle }?.let { return it.first }
+            live.firstOrNull { (_, name) -> needle.contains(name) }?.let { return it.first }
+            live.firstOrNull { (_, name) -> name.contains(needle) }?.let { return it.first }
+            // Watches speak English ("Running", "Biking"), the catalogue is
+            // usually in French (« Course à pied », « Vélo »): go through the
+            // family both words belong to.
+            val family = FAMILIES.firstOrNull { words -> words.any { needle.contains(it) } }
+                ?: return null
+            return live.firstOrNull { (_, name) -> family.any { name.contains(it) } }?.first
         }
+
+        /** Lowercase, accents off, separators to spaces: « Vélo_route » ≈ "velo route". */
+        private fun normalize(text: String): String =
+            java.text.Normalizer.normalize(text.trim().lowercase(), java.text.Normalizer.Form.NFD)
+                .replace(Regex("\\p{Mn}+"), "")
+                .replace(Regex("[_\\-]+"), " ")
+
+        /**
+         * The words exporters and people use for the same activity, normalised.
+         * Matched by containment, so keep each word specific enough not to
+         * appear inside an unrelated one.
+         */
+        private val FAMILIES: List<List<String>> = listOf(
+            listOf("running", "run", "jogging", "footing", "course", "trail"),
+            listOf("biking", "cycling", "bike", "ride", "velo", "cyclisme", "vtt"),
+            listOf("walking", "walk", "marche", "hiking", "hike", "randonnee", "rando"),
+            listOf("swimming", "swim", "natation", "nage", "piscine"),
+            listOf("strength", "weight", "musculation", "muscu", "renfo"),
+            listOf("rowing", "aviron"),
+            listOf("yoga"),
+            listOf("elliptical", "elliptique"),
+            listOf("ski"),
+        )
     }
 }

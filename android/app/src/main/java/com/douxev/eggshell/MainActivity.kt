@@ -300,6 +300,8 @@ class AppRootViewModel @Inject constructor(
     private val moduleShortcuts: com.douxev.eggshell.modules.ModuleShortcuts,
     private val decoy: com.douxev.eggshell.security.DecoyVerifier,
     private val widgetMirrors: com.douxev.eggshell.widget.WidgetMirrorUpdater,
+    private val steps: com.douxev.eggshell.data.StepSync,
+    private val health: com.douxev.eggshell.data.health.HealthConnectSync,
 ) : ViewModel() {
 
     enum class Route { Onboarding, Unlock, RecoverySetup, Home }
@@ -414,12 +416,21 @@ class AppRootViewModel @Inject constructor(
                 // also catches the end of onboarding, where both the module
                 // selection and the icon choice were just made.
                 runCatching { moduleShortcuts.refresh(decoyActive = decoy.hasDecoyPin) }
-                // Fill the widget content mirror for any instance that opted
-                // in. It is emptied whenever the vault locks, so a real unlock
-                // is the only thing that can put anything back — without this,
-                // an opted-in widget would show its "open the app" line until
-                // the next note was edited.
+                // Refresh the widget content mirror for any instance that
+                // opted in. The mirror survives a lock, but it can only be
+                // rebuilt from an open vault — without this, an opted-in widget
+                // would keep showing what was true at the last edit.
                 //
+                // Pour the pedometer's sealed ledger into the now-open vault —
+                // everything counted in the background since the last unlock —
+                // and take a fresh reading on the way. Before the mirror
+                // refresh, so a Sport widget shows the steps just poured.
+                runCatching { steps.sampleAndFlush() }
+                // Health Connect import, if the user turned it on: queued on its
+                // own scope, so neither the route nor the widgets wait on it,
+                // and it never throws back into this path. Only ever reached
+                // with a real session — the decoy PIN never routes here.
+                health.syncInBackground()
                 // Last, and after the orphan sweeps: it reads the vault, and
                 // there is no reason to make the route to Home wait on it.
                 runCatching { widgetMirrors.refresh() }

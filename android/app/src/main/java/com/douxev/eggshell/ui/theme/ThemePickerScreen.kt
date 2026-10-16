@@ -57,11 +57,22 @@ import kotlinx.coroutines.flow.asStateFlow
 
 @HiltViewModel
 class ThemePickerViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val prefs: ThemePrefs,
     private val units: HormoneUnitPrefs,
 ) : ViewModel() {
     val selected: StateFlow<AppTheme> = prefs.theme
-    fun pick(theme: AppTheme) = prefs.set(theme)
+
+    /**
+     * Also repaints the widgets: they wear the app's palette (WidgetPalette),
+     * and a launcher keeps the last card it was handed until something
+     * replaces it — without this the home screen would change theme at the
+     * next unlock rather than now.
+     */
+    fun pick(theme: AppTheme) {
+        prefs.set(theme)
+        runCatching { com.douxev.eggshell.widget.WidgetRefresh.refreshAll(context) }
+    }
 
     /** Sampled on entry: `HormoneUnitPrefs` is plain prefs, not a flow. */
     private val _estradiolUnit = MutableStateFlow(units.getEffective("estradiol"))

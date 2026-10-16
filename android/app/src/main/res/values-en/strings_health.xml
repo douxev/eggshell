@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ===== Import card (Sport › Types and pedometer) ===== -->
+    <string name="health_card_sub">Import your workouts, steps, heart rate and distance recorded by your watch or another app. Read-only: nothing is ever written to Health Connect.</string>
+    <string name="health_switch">Import from Health Connect</string>
+    <string name="health_sync_now">Sync now</string>
+    <string name="health_why">What is read, and why</string>
+    <string name="health_last_sync">Last sync: %1$s</string>
+    <string name="health_never_synced">Not synced yet.</string>
+    <string name="health_syncing">Syncing…</string>
+    <string name="health_unavailable">Health Connect is not available on this phone.</string>
+    <string name="health_needs_provider">Health Connect needs to be installed or updated for the import to work.</string>
+    <string name="health_install">Install Health Connect</string>
+    <string name="health_not_permitted">Health Connect gave access to no data. You can ask again, or choose what you share in Health Connect.</string>
+    <string name="health_grant">Allow access</string>
+    <string name="health_refused">No access granted: the import stays off.</string>
+    <string name="health_failed">The sync failed: %1$s</string>
+    <string name="health_nothing_new">Nothing new.</string>
+    <string name="health_imported">Imported: %1$s, %2$s.</string>
+    <plurals name="health_sessions">
+        <item quantity="one">%1$d workout</item>
+        <item quantity="other">%1$d workouts</item>
+    </plurals>
+    <plurals name="health_step_days">
+        <item quantity="one">%1$d day of steps</item>
+        <item quantity="other">%1$d days of steps</item>
+    </plurals>
+
+    <!-- ===== "What is read, and why" screen ===== -->
+    <string name="health_rationale_title">Health Connect</string>
+    <string name="health_rationale_lead">The Sport module can read some Health Connect data, if you allow it. Here is exactly which, and what becomes of it.</string>
+    <string name="health_rationale_what_title">What is read</string>
+    <string name="health_rationale_what_body">Your workouts (type, start, duration, title), your steps day by day, and your heart rate and distance during those workouts. Nothing else: not your route, not your sleep, no other health data.</string>
+    <string name="health_rationale_why_title">Why</string>
+    <string name="health_rationale_why_body">To fill the Sport module without typing everything again: the workouts your watch recorded, and your step calendar. Heart rate and distance are only used to complete each workout (average, maximum, kilometres).</string>
+    <string name="health_rationale_where_title">Where it goes</string>
+    <string name="health_rationale_where_body">Nowhere but your phone, in the app\'s encrypted vault. There is no account and no server, and the app does not even ask for Internet access. Reading only happens while the app is open and unlocked.</string>
+    <string name="health_rationale_readonly_title">Read-only</string>
+    <string name="health_rationale_readonly_body">The app never writes to Health Connect and never deletes anything from it.</string>
+    <string name="health_rationale_stop_title">Stopping</string>
+    <string name="health_rationale_stop_body">Turn off « Import from Health Connect » in Sport › Types and pedometer, or remove access from Health Connect. What was already imported stays in your vault until you delete it.</string>
+    <string name="health_rationale_policy">Privacy policy</string>
+    <string name="health_rationale_policy_url">https://douxev.github.io/eggshell/en/</string>
+    <string name="health_rationale_close">Close</string>
+</resources>

@@ -78,6 +78,10 @@
     <string name="set_sec_change_pass_same">That is already your current password.</string>
     <string name="set_sec_change_pass_na">This mode does not use a password.</string>
     <string name="set_sec_change_pass_failed">Failed: %1$s</string>
+    <string name="set_sec_mode_done">Mode updated.</string>
+    <string name="set_sec_mode_same">This is already your current mode.</string>
+    <string name="set_sec_mode_rekey">Switching to or from paranoid mode means re-encrypting the whole vault. The app cannot do that yet.</string>
+    <string name="set_sec_mode_failed">Failed: %1$s</string>
     <string name="set_sec_section_pins">Access code and decoy PIN</string>
     <string name="set_sec_section_masking">App icon and name</string>
     <string name="set_sec_masking_hint">What your home screen shows. The change takes effect right away.</string>
@@ -100,18 +104,18 @@
 
     <!-- ============ What’s new ============ -->
     <string name="set_wn_title">What’s new</string>
-    <string name="set_wn_1_title">Catch up a missed dose</string>
-    <string name="set_wn_1_sub">Tap a “missed” dose: the time is already filled in from how late you usually are, and stays editable before you confirm.</string>
-    <string name="set_wn_2_title">Rebuilt analyses curves</string>
-    <string name="set_wn_2_sub">Levels are finally written on the axis, dates are graduated, and you can pinch to zoom and drag to scroll. Tap a point for its exact value.</string>
-    <string name="set_wn_3_title">Reminders, in one place</string>
-    <string name="set_wn_3_sub">Create, edit, pause and delete, from the treatment itself. A paused reminder can finally be deleted.</string>
-    <string name="set_wn_4_title">Per-module shortcuts and widgets</string>
-    <string name="set_wn_4_sub">Long-press the icon to open a module, and every module has its own widget. Both vanish while a decoy PIN or a disguised icon is active.</string>
-    <string name="set_wn_5_title">Dream journal</string>
-    <string name="set_wn_5_sub">It is here. A calendar of nights, tags to group dreams that resemble each other, voice notes transcribed on your phone, and sleep sliders. What you record feeds “What goes together”, under Correlations.</string>
-    <string name="set_wn_6_title">Important fixes</string>
-    <string name="set_wn_6_sub">A possible crash at startup on Android 8, run-on values on the curves, the keyboard covering fields at the bottom of forms, and the app not changing language without a restart.</string>
+    <string name="set_wn_1_title">Sport module</string>
+    <string name="set_wn_1_sub">Your sessions, your activity types, a watch or chest strap over standard Bluetooth with a timer, and import from your watch: .fit, .gpx or .tcx files, or straight from Health Connect. Off by default: turn it on under Settings › Modules.</string>
+    <string name="set_wn_2_title">A pedometer that really counts</string>
+    <string name="set_wn_2_sub">Your steps are read even with the app closed, with no permanent notification, and filed on the right day, reboots included. They move live on the Sport screen, any day can be corrected with a tap, and the month is summed up below the calendar.</string>
+    <string name="set_wn_3_title">Widgets that show something</string>
+    <string name="set_wn_3_sub">Every widget can show its content if you allow it, widget by widget, never in paranoid mode. Journal shows its gauges, Notes a whole note, Sport today’s steps — and all of them follow the app’s theme.</string>
+    <string name="set_wn_4_title">Grouped reminders</string>
+    <string name="set_wn_4_sub">Medications due at the same time can arrive as a single notification, with “All taken” and “Later”: turn it on in Settings, under notification content. And session reminders from the Sport module.</string>
+    <string name="set_wn_5_title">Change your passphrase</string>
+    <string name="set_wn_5_sub">Under Settings › Security, including in paranoid mode where everything is re-encrypted — with nothing lost if the app is interrupted midway.</string>
+    <string name="set_wn_6_sub">Creating a note did nothing. The Labs widget no longer shows your labels without your consent, and the full wipe finally wipes everything. The Weight widget is gone.</string>
+    <string name="set_wn_6_title">Fixes</string>
 
     <!-- ============ Resources ============ -->
     <string name="set_resources_intro">Websites, helplines and associations. The link opens in your browser — nothing goes through eggshell.</string>

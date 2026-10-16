@@ -38,7 +38,19 @@ import uniffi.transition.NewDreamAudio
 class DreamsRepository @Inject constructor(
     private val vault: VaultRepository,
     @ApplicationContext private val context: Context,
+    private val mirrors: com.douxev.eggshell.widget.WidgetMirrorUpdater,
 ) {
+    /**
+     * Kept in step after every write. A widget configured to show content
+     * reads a mirror, not the vault — so an entry saved and not mirrored is a
+     * home screen quietly showing the previous state. Cheap when nobody opted
+     * in, which is the default, and never allowed to turn a successful write
+     * into a failure.
+     */
+    private suspend fun mirrorChanged() {
+        runCatching { mirrors.refresh() }
+    }
+
     private val audioDir: File by lazy {
         File(context.filesDir, "dream_audio").apply { mkdirs() }
     }
@@ -84,7 +96,7 @@ class DreamsRepository @Inject constructor(
                 updatedMs = now,
             )
         )
-    }
+    }.also { mirrorChanged() }
 
     /**
      * In-place update, which is what keeps the id stable — and the id is what
@@ -101,7 +113,7 @@ class DreamsRepository @Inject constructor(
         vault.requireSession().updateDream(
             id, nightMs, title, body, lucid, System.currentTimeMillis(),
         )
-    }
+    }.also { mirrorChanged() }
 
     suspend fun delete(id: Long) = withContext(Dispatchers.IO) {
         // Read the paths before the row goes: the cascade drops the audio rows,
@@ -110,7 +122,7 @@ class DreamsRepository @Inject constructor(
             .getOrDefault(emptyList())
         vault.requireSession().deleteDream(id)
         paths.forEach { runCatching { wipe(File(it)) } }
-    }
+    }.also { mirrorChanged() }
 
     // -- Tags ----------------------------------------------------------------
 

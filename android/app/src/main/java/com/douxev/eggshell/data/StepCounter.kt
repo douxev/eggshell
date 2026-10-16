@@ -1,13 +1,15 @@
 package com.douxev.eggshell.data
 
 import android.content.Context
-import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Build
+import android.provider.Settings
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.time.LocalDate
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -15,63 +17,70 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Daily step totals from the device\'s own hardware counter.
+ * The device's own hardware step counter, read once on demand.
  *
  * `TYPE_STEP_COUNTER`, not `TYPE_STEP_DETECTOR`. The counter is maintained by a
  * low-power co-processor and read on demand; the detector fires an event per
  * step and would wake the CPU thousands of times a day to compute a number the
  * hardware is already keeping. There is no foreground service and no permanent
- * notification: the counter is read when the app is open and by the periodic
- * worker, which is enough for a daily total and costs nothing between reads.
+ * notification: [StepSync] reads this from a periodic worker, an alarm just
+ * before midnight and the shutdown broadcast, which is enough to place every
+ * step on the right day and costs nothing between reads.
  *
- * # The reboot problem
- *
- * The counter reports steps **since the device last booted**, and resets to
- * zero on every reboot. So a raw reading is meaningless on its own — what
- * matters is how much it has grown since the last time we looked.
- *
- * This class keeps the last raw reading and the boot it belonged to. A reading
- * lower than the last one means the device rebooted, and the delta is the whole
- * new reading rather than a negative number. The daily total in the vault only
- * ever moves up ([SportRepository.recordSteps] takes the max), so even if this
- * bookkeeping were wrong the day could not be erased — two independent guards,
- * because losing a day of someone\'s activity to an off-by-one is exactly the
- * silent kind of loss this app must not have.
- *
- * The bookkeeping lives in plain prefs rather than the vault: it has to survive
- * a reboot and be readable before any unlock, and a raw counter value says
- * nothing about anyone.
+ * This class only talks to the sensor. What a reading *means* — the reboot
+ * rule, which day it belongs to — is [StepMath], pure and tested; where it is
+ * kept until the vault opens is [StepLedger].
  */
 @Singleton
 class StepCounter @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
 
-    private val prefs: SharedPreferences = SecurePrefs.get(context, PREFS_NAME)
+    /**
+     * One reading: the raw cumulative value, the boot it belongs to, and when
+     * that boot happened (wall clock).
+     */
+    data class Reading(val raw: Long, val boot: Int?, val bootMs: Long)
 
     private val sensorManager: SensorManager?
         get() = context.getSystemService(SensorManager::class.java)
 
-    /** Whether this device can count steps at all. */
+    /**
+     * Whether this device has a step counter at all.
+     *
+     * Asked of the package manager, not the sensor list: from Android 10 the
+     * sensor list hides the counter from an app that lacks ACTIVITY_RECOGNITION,
+     * so a revoked permission used to read as "this phone cannot count steps" —
+     * the wrong thing to tell someone whose fix is one tap away.
+     */
     val isAvailable: Boolean
-        get() = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) != null
+        get() = context.packageManager.hasSystemFeature(PackageManager.FEATURE_SENSOR_STEP_COUNTER) ||
+            sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) != null
+
+    /** ACTIVITY_RECOGNITION is a runtime permission from API 29; below, none is needed. */
+    val hasPermission: Boolean
+        get() = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.ACTIVITY_RECOGNITION,
+            ) == PackageManager.PERMISSION_GRANTED
 
     /**
-     * Read the counter once and return how many steps have accrued since the
-     * previous read, or null when the sensor is unavailable or does not answer.
+     * Read the counter once, or null when it is unavailable, not permitted, or
+     * does not answer within [timeoutMs].
      *
      * Null is not zero, and callers must not treat it as one: "the sensor said
      * nothing" and "you did not move" are different facts, and writing the
      * second when the first is true is how a day gets flattened.
      */
-    suspend fun readDelta(): Long? {
+    suspend fun read(timeoutMs: Long = READ_TIMEOUT_MS): Reading? {
+        if (!hasPermission) return null
         val manager = sensorManager ?: return null
         val sensor = manager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) ?: return null
 
-        // The counter only emits on change; a device that has been still since
-        // boot may never deliver. Bounded so a quiet sensor cannot hang a
-        // caller — SENSOR_DELAY_FASTEST makes it prompt when it does answer.
-        val raw = withTimeoutOrNull(READ_TIMEOUT_MS) {
+        // An on-change sensor reports its current value when it is activated,
+        // so this normally answers at once. Bounded anyway, so a sensor hub
+        // that never answers cannot hang a worker or the shutdown broadcast.
+        val raw = withTimeoutOrNull(timeoutMs) {
             suspendCancellableCoroutine<Long?> { cont ->
                 val listener = object : SensorEventListener {
                     override fun onSensorChanged(event: SensorEvent) {
@@ -81,47 +90,62 @@ class StepCounter @Inject constructor(
 
                     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
                 }
-                manager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_FASTEST)
+                val registered = runCatching {
+                    manager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_FASTEST)
+                }.getOrDefault(false)
+                if (!registered && cont.isActive) cont.resume(null)
                 cont.invokeOnCancellation { manager.unregisterListener(listener) }
             }
         } ?: return null
-
-        return consume(raw)
+        return Reading(
+            raw = raw,
+            boot = bootCount(),
+            bootMs = System.currentTimeMillis() - android.os.SystemClock.elapsedRealtime(),
+        )
     }
 
     /**
-     * Turn a raw cumulative reading into a delta, and remember it.
+     * Follow the counter live, for as long as a screen shows it.
      *
-     * Internal and pure enough to test: this is where the reboot rule lives,
-     * and a mistake in it is invisible — the number still looks like a step
-     * count.
+     * Not a service and not a background listener: the Sport screen opens this
+     * when it becomes visible and closes it when it is not, so the number moves
+     * as the person walks with the screen in front of them and nothing at all
+     * runs once it is gone. Nothing is written from here — the readings that
+     * count are still [StepSync]'s; this only feeds the display.
+     *
+     * @return a handle to close, or null when the sensor is unavailable.
      */
-    internal fun consume(raw: Long): Long {
-        val previous = prefs.getLong(KEY_LAST_RAW, -1L)
-        prefs.edit().putLong(KEY_LAST_RAW, raw).apply()
-        return when {
-            // First ever read: we have no baseline, so nothing can be
-            // attributed yet. Claiming the whole counter would credit the user
-            // with every step since their last reboot, possibly days of them.
-            previous < 0 -> 0L
-            // Counter went backwards: the device rebooted. Everything it reports
-            // now has happened since.
-            raw < previous -> raw
-            else -> raw - previous
+    fun listen(onRaw: (Long) -> Unit): AutoCloseable? {
+        if (!hasPermission) return null
+        val manager = sensorManager ?: return null
+        val sensor = manager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) ?: return null
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                event.values.firstOrNull()?.toLong()?.let(onRaw)
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
         }
+        val registered = runCatching {
+            manager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+        }.getOrDefault(false)
+        if (!registered) return null
+        return AutoCloseable { manager.unregisterListener(listener) }
     }
 
-    /** Forget the baseline — used when the user turns the pedometer off. */
-    fun reset() {
-        prefs.edit().remove(KEY_LAST_RAW).apply()
-    }
-
-    /** The local day a reading should be credited to. */
-    fun today(): LocalDate = LocalDate.now()
+    /**
+     * How many times this device has booted, or null where the platform does
+     * not keep the count. Stored next to each reading, it is what tells a
+     * reboot apart from a counter that merely grew — see [StepMath.delta].
+     */
+    private fun bootCount(): Int? = runCatching {
+        Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1)
+    }.getOrNull()?.takeIf { it >= 0 }
 
     companion object {
-        private const val PREFS_NAME = "transition_step_counter"
-        private const val KEY_LAST_RAW = "last_raw"
-        private const val READ_TIMEOUT_MS = 3_000L
+        const val READ_TIMEOUT_MS = 5_000L
+
+        /** The shutdown broadcast leaves little time; a reading late is a reading lost. */
+        const val SHUTDOWN_TIMEOUT_MS = 2_000L
     }
 }

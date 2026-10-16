@@ -15,6 +15,8 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelUuid
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
@@ -58,6 +60,12 @@ class HeartRateMonitor @Inject constructor(
         data class Live(val name: String?, val bpm: Int) : State
         /** Connected but no reading yet — a strap warming up, or not being worn. */
         data class Waiting(val name: String?) : State
+        /**
+         * The link dropped mid-session — out of range for a moment, a strap
+         * pulled off — and the monitor is waiting for the same sensor to come
+         * back. The session's average and peak so far are kept.
+         */
+        data class Reconnecting(val name: String?) : State
         data class Failed(val reason: Reason) : State
     }
 
@@ -76,8 +84,23 @@ class HeartRateMonitor @Inject constructor(
     val averageBpm: Int? get() = accumulator.average
     val maxBpm: Int? get() = accumulator.max
 
-    private var gatt: BluetoothGatt? = null
-    private var scanning = false
+    // Written from Bluetooth binder threads as well as the main one.
+    @Volatile private var gatt: BluetoothGatt? = null
+    @Volatile private var scanning = false
+
+    /** Set once notifications are on: from then, a drop means "reconnect". */
+    @Volatile private var sessionEstablished = false
+
+    /** Reconnections that failed at once (GATT 133 and friends) in a row. */
+    @Volatile private var quickFailures = 0
+
+    private val main = Handler(Looper.getMainLooper())
+    private val scanTimeout = Runnable {
+        if (scanning) {
+            stopScan()
+            _state.value = State.Failed(Reason.NOT_FOUND)
+        }
+    }
 
     private val adapter: BluetoothAdapter?
         get() = context.getSystemService(BluetoothManager::class.java)?.adapter
@@ -108,6 +131,10 @@ class HeartRateMonitor @Inject constructor(
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
+            // Results already queued when the scan was stopped still arrive.
+            // Without this guard a second one opened a second GATT connection
+            // and leaked the first — one of the handful of slots the phone has.
+            if (!scanning) return
             // First sensor advertising the service wins. A chooser would be
             // better with several in range, and is worth adding once anyone
             // actually has two — picking the nearest is not obviously right
@@ -126,15 +153,11 @@ class HeartRateMonitor @Inject constructor(
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
-                BluetoothProfile.STATE_CONNECTED -> runCatching { g.discoverServices() }
-                BluetoothProfile.STATE_DISCONNECTED -> {
-                    // Only a surprise if we were live. A disconnect after stop()
-                    // is the expected end of a session, not a failure to report.
-                    if (_state.value !is State.Idle) {
-                        _state.value = State.Failed(Reason.DISCONNECTED)
-                    }
-                    close()
+                BluetoothProfile.STATE_CONNECTED -> {
+                    quickFailures = 0
+                    runCatching { g.discoverServices() }
                 }
+                BluetoothProfile.STATE_DISCONNECTED -> onDropped(g)
             }
         }
 
@@ -144,8 +167,8 @@ class HeartRateMonitor @Inject constructor(
                 .getService(UUID.fromString(HeartRateParser.SERVICE_UUID))
                 ?.getCharacteristic(UUID.fromString(HeartRateParser.MEASUREMENT_UUID))
             if (characteristic == null) {
-                _state.value = State.Failed(Reason.UNSUPPORTED)
                 close()
+                _state.value = State.Failed(Reason.UNSUPPORTED)
                 return
             }
             runCatching {
@@ -158,6 +181,7 @@ class HeartRateMonitor @Inject constructor(
                 )
                 if (ccc != null) writeCcc(g, ccc)
             }
+            sessionEstablished = true
             _state.value = State.Waiting(deviceName(g.device))
         }
 
@@ -184,6 +208,42 @@ class HeartRateMonitor @Inject constructor(
         _state.value = State.Live(deviceName(g.device), sample.bpm)
     }
 
+    /**
+     * The link went down. After [stop] that is the expected end; before the
+     * session was established it is a failed connection; in the middle of a
+     * session it is a strap out of range for a moment, and the monitor waits
+     * for the same sensor to come back rather than ending the session — the
+     * previous build gave up on the first dropout and the rest of the workout
+     * went unrecorded.
+     */
+    @SuppressLint("MissingPermission")
+    private fun onDropped(g: BluetoothGatt) {
+        if (_state.value is State.Idle) {
+            close()
+            return
+        }
+        val device = g.device
+        close()
+        val adapterOn = adapter?.isEnabled == true
+        when {
+            !adapterOn -> _state.value = State.Failed(Reason.BLUETOOTH_OFF)
+            !sessionEstablished -> _state.value = State.Failed(Reason.DISCONNECTED)
+            // A reconnection that keeps failing straight away (the sensor was
+            // switched off, the bond was dropped) must not loop for ever.
+            quickFailures >= MAX_QUICK_FAILURES -> _state.value = State.Failed(Reason.DISCONNECTED)
+            else -> {
+                quickFailures++
+                _state.value = State.Reconnecting(deviceName(device))
+                // autoConnect: the stack waits, without a timeout and at low
+                // duty cycle, for the device to advertise again.
+                gatt = runCatching {
+                    device.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
+                }.getOrNull()
+                if (gatt == null) _state.value = State.Failed(Reason.DISCONNECTED)
+            }
+        }
+    }
+
     @Suppress("DEPRECATION")
     @SuppressLint("MissingPermission")
     private fun writeCcc(g: BluetoothGatt, ccc: BluetoothGattDescriptor) {
@@ -203,10 +263,18 @@ class HeartRateMonitor @Inject constructor(
     /**
      * Look for a sensor and connect to the first one found.
      *
-     * Filtered on the Heart Rate Service so the scan sees only devices that
-     * advertise it — that is both faster and narrower than scanning everything
-     * and filtering afterwards, which would hand this app a list of every BLE
-     * device around the user.
+     * A sensor the phone is already connected to — a strap another app opened,
+     * a watch paired for heart-rate broadcast — does not advertise, so a scan
+     * cannot see it; those are tried first, from the system's own list of
+     * connected devices, when their cached services include the Heart Rate
+     * Service.
+     *
+     * Then a scan, filtered on the Heart Rate Service so it sees only devices
+     * that advertise it — faster and narrower than scanning everything and
+     * filtering afterwards, which would hand this app a list of every BLE
+     * device around the user — and bounded: after [SCAN_TIMEOUT_MS] with
+     * nothing found it stops and says so, where the previous build kept the
+     * radio scanning at full duty for as long as the screen stayed open.
      */
     @SuppressLint("MissingPermission")
     fun start() {
@@ -219,6 +287,17 @@ class HeartRateMonitor @Inject constructor(
             _state.value = State.Failed(Reason.BLUETOOTH_OFF)
             return
         }
+        // A fresh start after a failure or a stop: forget the old link.
+        stopScan()
+        close()
+        sessionEstablished = false
+        quickFailures = 0
+
+        connectedSensor()?.let {
+            connect(it)
+            return
+        }
+
         val scanner = adapter.bluetoothLeScanner
         if (scanner == null) {
             _state.value = State.Failed(Reason.BLUETOOTH_OFF)
@@ -242,8 +321,22 @@ class HeartRateMonitor @Inject constructor(
         if (started) {
             scanning = true
             _state.value = State.Scanning
+            main.removeCallbacks(scanTimeout)
+            main.postDelayed(scanTimeout, SCAN_TIMEOUT_MS)
         }
     }
+
+    /**
+     * A device already connected at the GATT level whose cached service list
+     * includes the Heart Rate Service, if the system knows of one.
+     */
+    @SuppressLint("MissingPermission")
+    private fun connectedSensor(): BluetoothDevice? = runCatching {
+        val hrs = ParcelUuid(UUID.fromString(HeartRateParser.SERVICE_UUID))
+        context.getSystemService(BluetoothManager::class.java)
+            ?.getConnectedDevices(BluetoothProfile.GATT)
+            ?.firstOrNull { device -> device.uuids?.contains(hrs) == true }
+    }.getOrNull()
 
     @SuppressLint("MissingPermission")
     private fun connect(device: BluetoothDevice) {
@@ -271,6 +364,7 @@ class HeartRateMonitor @Inject constructor(
 
     @SuppressLint("MissingPermission")
     private fun stopScan() {
+        main.removeCallbacks(scanTimeout)
         if (!scanning) return
         scanning = false
         runCatching { adapter?.bluetoothLeScanner?.stopScan(scanCallback) }
@@ -282,5 +376,11 @@ class HeartRateMonitor @Inject constructor(
         gatt = null
         runCatching { g.disconnect() }
         runCatching { g.close() }
+    }
+
+    private companion object {
+        /** Long enough for a strap that advertises every few seconds. */
+        const val SCAN_TIMEOUT_MS = 20_000L
+        const val MAX_QUICK_FAILURES = 3
     }
 }

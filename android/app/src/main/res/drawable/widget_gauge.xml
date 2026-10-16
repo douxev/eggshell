@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A gauge for the module widgets: a rounded track and a rounded fill, the
+    home-screen version of the bars the journal draws beside each entry.
+
+    The two layers carry the framework ids so ProgressBar's progress and
+    progress-background tints land on the right one — that is how a row gets
+    the colour of the metric it shows (WidgetPaint.gauge).
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape android:shape="rectangle">
+            <corners android:radius="100dp"/>
+            <solid android:color="@color/widget_track"/>
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <clip>
+            <shape android:shape="rectangle">
+                <corners android:radius="100dp"/>
+                <solid android:color="@color/widget_accent"/>
+            </shape>
+        </clip>
+    </item>
+</layer-list>

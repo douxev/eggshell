@@ -29,7 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 @Singleton
 class FeaturesPrefs @Inject constructor(
-    @ApplicationContext context: Context,
+    @ApplicationContext private val context: Context,
 ) {
     private val prefs: SharedPreferences =
         SecurePrefs.get(context, PREFS_NAME)
@@ -101,46 +101,55 @@ class FeaturesPrefs @Inject constructor(
     fun setSport(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_SPORT, enabled).apply()
         _sport.value = enabled
+        syncWidgets()
     }
 
     fun setMedications(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_MEDS, enabled).apply()
         _medications.value = enabled
+        syncWidgets()
     }
 
     fun setJournal(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_JOURNAL, enabled).apply()
         _journal.value = enabled
+        syncWidgets()
     }
 
     fun setHormones(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_HORMONES, enabled).apply()
         _hormones.value = enabled
+        syncWidgets()
     }
 
     fun setWeightTracking(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_WEIGHT, enabled).apply()
         _weightTracking.value = enabled
+        syncWidgets()
     }
 
     fun setPhotoTab(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_PHOTO, enabled).apply()
         _photoTab.value = enabled
+        syncWidgets()
     }
 
     fun setVoiceTab(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_VOICE, enabled).apply()
         _voiceTab.value = enabled
+        syncWidgets()
     }
 
     fun setNotes(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_NOTES, enabled).apply()
         _notes.value = enabled
+        syncWidgets()
     }
 
     fun setBleeding(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_BLEEDING, enabled).apply()
         _bleeding.value = enabled
+        syncWidgets()
     }
 
     /**
@@ -153,11 +162,23 @@ class FeaturesPrefs @Inject constructor(
     fun setDreams(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_DREAMS, enabled).apply()
         _dreams.value = enabled
+        syncWidgets()
     }
 
     fun setAppointments(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_APPOINTMENTS, enabled).apply()
         _appointments.value = enabled
+        syncWidgets()
+    }
+
+    /**
+     * A module switched off takes its home-screen widget out of the picker, the
+     * way it already takes its launcher shortcut away; switched on, the widget
+     * comes back. The decoy keeps precedence — see ModuleWidgetSync. Best
+     * effort: a widget that cannot be toggled must never fail the setting.
+     */
+    private fun syncWidgets() {
+        runCatching { com.douxev.eggshell.widget.ModuleWidgetSync.apply(context) }
     }
 
     companion object {

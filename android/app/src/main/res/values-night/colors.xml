@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The lavender dark palette, for the widgets under the « Système » theme.
+
+    Resolved by the launcher, not by the app: a widget is inflated in the
+    launcher's process against the launcher's configuration, so these take
+    over the moment the phone switches to dark mode — with no repaint needed
+    and no app process involved. Keep every name in step with values/colors.xml.
+-->
+<resources>
+    <color name="widget_bg">#211F25</color>
+    <color name="widget_on_bg">#E6E0E9</color>
+    <color name="widget_accent">#D4BBFF</color>
+    <color name="widget_accent_container">#523689</color>
+    <color name="widget_on_accent">#3B1C71</color>
+    <color name="widget_on_accent_container">#EBDDFF</color>
+    <color name="widget_muted">#CAC4CF</color>
+    <color name="widget_track">#36343A</color>
+    <color name="widget_role_primary">#D4BBFF</color>
+    <color name="widget_role_error">#FFB4AB</color>
+    <color name="widget_role_tertiary">#FFB1C7</color>
+    <color name="widget_role_secondary">#CDC2DB</color>
+    <color name="widget_role_success">#A6D3A0</color>
+</resources>

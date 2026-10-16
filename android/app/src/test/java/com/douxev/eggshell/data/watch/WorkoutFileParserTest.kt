@@ -162,12 +162,16 @@ class WorkoutFileParserTest {
         assertEquals(12 * 60L, parse(broken).single().durationS)
     }
 
-    /** Some exporters omit the zone. An hour out beats losing the session. */
+    /**
+     * Some exporters omit the zone. Those are the time the watch showed, so
+     * they are read in the phone's timezone — not dropped, and not as UTC,
+     * which put every such session an hour or two out.
+     */
     @Test
-    fun `a timestamp with no zone is read as UTC rather than dropped`() {
-        assertNotNull(WorkoutFileParser.parseTime("2026-09-03T07:00:00"))
+    fun `a timestamp with no zone is read as local time rather than dropped`() {
         assertEquals(
-            WorkoutFileParser.parseTime("2026-09-03T07:00:00Z"),
+            java.time.LocalDateTime.of(2026, 9, 3, 7, 0)
+                .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(),
             WorkoutFileParser.parseTime("2026-09-03T07:00:00"),
         )
     }
@@ -203,5 +207,93 @@ class WorkoutFileParserTest {
         // fine, silently reading the file is not.
         val result = runCatching { parse(xxe) }
         result.getOrNull()?.let { assertTrue(it.isEmpty()) }
+    }
+
+    // -- Heart rate -------------------------------------------------------------
+
+    private val tcxWithHeartRate = """
+        <TrainingCenterDatabase>
+          <Activities>
+            <Activity Sport="Biking">
+              <Id>2026-09-03T07:30:00Z</Id>
+              <Lap StartTime="2026-09-03T07:30:00Z">
+                <TotalTimeSeconds>600</TotalTimeSeconds>
+                <AverageHeartRateBpm><Value>120</Value></AverageHeartRateBpm>
+                <MaximumHeartRateBpm><Value>150</Value></MaximumHeartRateBpm>
+              </Lap>
+              <Lap StartTime="2026-09-03T07:40:00Z">
+                <TotalTimeSeconds>1200</TotalTimeSeconds>
+                <AverageHeartRateBpm><Value>150</Value></AverageHeartRateBpm>
+                <MaximumHeartRateBpm><Value>171</Value></MaximumHeartRateBpm>
+              </Lap>
+            </Activity>
+          </Activities>
+        </TrainingCenterDatabase>
+    """.trimIndent()
+
+    /** The laps' averages, weighted by how long each lap lasted. */
+    @Test
+    fun `tcx lap heart rate is averaged by lap duration`() {
+        val w = parse(tcxWithHeartRate).single()
+        assertEquals(140L, w.avgHr) // (120×600 + 150×1200) / 1800
+        assertEquals(171L, w.maxHr)
+    }
+
+    @Test
+    fun `gpx trackpoint heart rate is read from the garmin extension`() {
+        val gpx = """
+            <gpx xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
+              <trk><trkseg>
+                <trkpt lat="48.0" lon="2.0"><time>2026-09-03T07:00:00Z</time>
+                  <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>100</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions>
+                </trkpt>
+                <trkpt lat="48.001" lon="2.0"><time>2026-09-03T07:10:00Z</time>
+                  <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>140</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions>
+                </trkpt>
+                <trkpt lat="48.002" lon="2.0"><time>2026-09-03T07:20:00Z</time>
+                  <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>255</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions>
+                </trkpt>
+              </trkseg></trk>
+            </gpx>
+        """.trimIndent()
+        val w = parse(gpx).single()
+        assertEquals(165L, w.avgHr)
+        assertEquals(255L, w.maxHr)
+    }
+
+    @Test
+    fun `a file without heart rate imports without one`() {
+        assertNull(parse(garminTcx).first().avgHr)
+    }
+
+    /** The straight line across a recording gap was never travelled. */
+    @Test
+    fun `distance does not bridge two track segments`() {
+        val gpx = """
+            <gpx><trk>
+              <trkseg>
+                <trkpt lat="48.0" lon="2.0"><time>2026-09-03T07:00:00Z</time></trkpt>
+                <trkpt lat="48.001" lon="2.0"><time>2026-09-03T07:01:00Z</time></trkpt>
+              </trkseg>
+              <trkseg>
+                <trkpt lat="49.0" lon="2.0"><time>2026-09-03T08:00:00Z</time></trkpt>
+                <trkpt lat="49.001" lon="2.0"><time>2026-09-03T08:01:00Z</time></trkpt>
+              </trkseg>
+            </trk></gpx>
+        """.trimIndent()
+        val metres = parse(gpx).single().distanceM!!
+        assertTrue("got $metres", metres in 200.0..250.0)
+    }
+
+    // -- FIT detection ------------------------------------------------------------
+
+    /** The 12- and 14-byte headers real watches write (decoding is the core's job). */
+    @Test
+    fun `a fit header is recognised from its bytes, whatever the file is called`() {
+        fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
+        assertTrue(WorkoutFileParser.isFit(bytes(0x0C, 0x10, 0x64, 0x00, 0xF5, 0x02, 0, 0, 0x2E, 0x46, 0x49, 0x54)))
+        assertTrue(WorkoutFileParser.isFit(bytes(0x0E, 0x10, 0xEE, 0x07, 0x28, 0x12, 0, 0, 0x2E, 0x46, 0x49, 0x54, 0x11, 0xA9)))
+        assertTrue(!WorkoutFileParser.isFit("<?xml version=\"1.0\"?><gpx/>".toByteArray()))
+        assertTrue(!WorkoutFileParser.isFit(ByteArray(4)))
     }
 }

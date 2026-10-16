@@ -430,6 +430,12 @@ fun HomeNavHost(
                     onAddSession = { nav.navigate(Routes.SPORT_SESSION_NEW) },
                     onOpenSession = { id -> nav.navigate("sport/session?id=$id") },
                     onManageActivities = { nav.navigate(Routes.SPORT_ACTIVITIES) },
+                    onOpenReminders = { nav.navigate(Routes.SPORT_REMINDERS) },
+                )
+            }
+            composable(Routes.SPORT_REMINDERS) {
+                com.douxev.eggshell.ui.sport.SportRemindersScreen(
+                    onBack = { nav.popBackStack() },
                 )
             }
             composable(
@@ -559,6 +565,7 @@ object Routes {
     const val SPORT_SESSION = "sport/session?id={id}"
     const val SPORT_SESSION_NEW = "sport/session?id=-1"
     const val SPORT_ACTIVITIES = "sport/activities"
+    const val SPORT_REMINDERS = "sport/reminders"
 
     const val SETTINGS = "settings"
     const val SETTINGS_MODULES = "settings/modules"

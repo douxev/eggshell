@@ -49,22 +49,26 @@ class VaultRepository @Inject constructor(
         set(value) {
             field = value
             _unlocked.value = value != null
-            // Withdraw, then repaint, on every transition.
+            // A transition repaints the widgets and erases nothing.
             //
-            // The lock direction is the one that matters, and it needs both
-            // halves. Emptying the mirror alone changes nothing on screen: a
-            // launcher keeps the last RemoteViews it was handed until something
-            // replaces them, so the note titles would sit on the home screen
-            // for hours after the app locked, straight through the screen-off
-            // the user locked it with. Repainting alone would redraw them from
-            // a mirror that is still full.
+            // The opt-in widget mirror outlives a lock on purpose: a widget is
+            // read from the home screen, which is to say while the app is
+            // locked, and a mirror emptied at every lock showed « open the app »
+            // every time anyone looked. What erases it is the consent going —
+            // an opt-out, paranoid mode, a decoy, a wipe — each handled where it
+            // happens (see WidgetMirrorUpdater). Paranoid never has a mirror to
+            // keep: nothing is written to it in that mode.
             //
-            // The plain store rather than WidgetMirrorUpdater: the updater
+            // The epoch bump makes a rebuild still reading the session that just
+            // ended drop what it read instead of committing it. Cheap, and safe
+            // on the main thread. The repaint is not: it unseals stores through
+            // the Keystore, and a lock runs in onUserLeaveHint — so it goes to a
+            // background thread.
+            //
+            // Plain widget classes rather than WidgetMirrorUpdater: the updater
             // depends on this class, so reaching for it here would be a cycle.
-            if (value == null) {
-                runCatching { com.douxev.eggshell.widget.WidgetContentMirror(context).clear() }
-            }
-            runCatching { com.douxev.eggshell.widget.WidgetRefresh.refreshAll(context) }
+            com.douxev.eggshell.widget.WidgetContentMirror.sessionChanged()
+            runCatching { com.douxev.eggshell.widget.WidgetRefresh.refreshAllAsync(context) }
         }
 
     /**
@@ -252,11 +256,9 @@ class VaultRepository @Inject constructor(
         // Paranoid promises that nothing usable survives without the
         // passphrase, and the widget content mirror is openable with the
         // Keystore key alone. Any opt-in that predates this mode was consented
-        // to under a different promise, so it is withdrawn rather than honoured.
-        runCatching {
-            com.douxev.eggshell.widget.WidgetConfigPrefs(context).revokeAllContent()
-            com.douxev.eggshell.widget.WidgetContentMirror(context).clear()
-        }
+        // to under a different promise, so it is withdrawn rather than honoured
+        // — consent and rows both, and the widgets repainted.
+        com.douxev.eggshell.widget.WidgetMirrorUpdater.revokeAllOptIns(context)
     }
 
     // -- change mode ---------------------------------------------------------
@@ -517,11 +519,15 @@ class VaultRepository @Inject constructor(
      * 1. Verify the current passphrase — a typo must cost nothing.
      * 2. Commit the new salt to the *pending* slot, durably, **before** any
      *    byte moves. It is the only record of what the file would answer to.
-     * 3. Close the session. SQLCipher rekeys in place and an open connection
-     *    would carry on reading pages with the retired key.
+     * 3. Close the session — destroy it, not merely drop the reference. SQLCipher
+     *    rekeys in place, and a connection left open until the garbage
+     *    collector gets to it would carry on reading pages with the retired key.
      * 4. Rekey. If the process dies inside it, [unlock] finds the vault opens
      *    with one salt or the other and finishes or discards accordingly.
      * 5. Promote the pending salt to active, then reopen.
+     *
+     * A failure is settled by asking the file which key it answers to, never by
+     * assuming the bytes did not move: see [settleFailedRekey].
      *
      * `NonCancellable` because steps 2-5 are one indivisible unit from the
      * user's side. The caller is a ViewModel scope that dies with its screen,
@@ -532,6 +538,31 @@ class VaultRepository @Inject constructor(
         current: String,
         new: String,
     ): ChangePassphraseOutcome = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+        // A previous change can still be in the pending slot: the database
+        // moved, but replaying the media renames failed, so unlock opened the
+        // vault through the pending salt and left it there to retry. That slot
+        // is then the only record of the key the database answers to, and step
+        // 2 below would overwrite it — after which no salt on disk opens the
+        // vault. So settle it first, and refuse rather than overwrite.
+        prefs.pendingKdfMaterial()?.let { pending ->
+            val opensViaPending = runCatching {
+                VaultKey.deriveFromPassphrase(
+                    current, pending.salt, pending.mCostKib, pending.tCost, pending.pCost,
+                ).also { uniffi.transition.vaultVerifyKey(dbPath, it) }
+            }.isSuccess
+            if (opensViaPending) {
+                val finished = runCatching { uniffi.transition.finishPendingRekey(dbPath) }.isSuccess
+                if (!finished || !prefs.promotePendingKdf()) {
+                    return@withContext ChangePassphraseOutcome.Failed(
+                        "the previous passphrase change is still being finished"
+                    )
+                }
+            }
+            // Otherwise the active salt has to be the live one, which the
+            // verification below decides; the pending slot is then a leftover
+            // that unlock would have discarded, and step 2 may replace it.
+        }
+
         val kdf = prefs.kdfMaterial()
             ?: return@withContext ChangePassphraseOutcome.Failed("missing kdf params")
         val oldKey = try {
@@ -552,9 +583,20 @@ class VaultRepository @Inject constructor(
 
         _busy.value = true
         lockRequestedWhileBusy = false
+        val previous = session
         session = null
+        // Destroyed rather than left to the garbage collector: its connection
+        // is still open on the file the rekey is about to rewrite. A call that
+        // is already in flight keeps the Rust object alive until it returns;
+        // anything that tries to use this session afterwards fails loudly
+        // instead of reading or writing under the retired key.
+        runCatching { previous?.destroy() }
         try {
-            val report = uniffi.transition.rekeyVault(dbPath, oldKey, newKey)
+            val report = try {
+                uniffi.transition.rekeyVault(dbPath, oldKey, newKey)
+            } catch (t: Throwable) {
+                return@withContext settleFailedRekey(t, oldKey, newKey)
+            }
             if (!prefs.promotePendingKdf()) {
                 // The bytes have already moved and only the new passphrase opens
                 // them. Refusing to record that would be the data loss, so this
@@ -564,26 +606,75 @@ class VaultRepository @Inject constructor(
                     "vault re-encrypted but the new salt could not be saved"
                 )
             }
-            if (!lockRequestedWhileBusy) session = Vault(dbPath, newKey)
+            // Outside the rekey's failure handling on purpose: a reopen that
+            // throws here happens after everything moved and was recorded, and
+            // must not be mistaken for a rekey that never happened. The user
+            // simply meets the unlock screen, where the new passphrase works.
+            if (!lockRequestedWhileBusy) runCatching { session = Vault(dbPath, newKey) }
             ChangePassphraseOutcome.Success(mediaLeftBehind = report.blobsUnreadable)
-        } catch (t: Throwable) {
-            // The database never moved: the staged media is unreadable litter
-            // and the pending salt describes a passphrase that was never used.
-            runCatching { uniffi.transition.discardPendingRekey(dbPath) }
-            prefs.clearPendingKdf()
-            if (!lockRequestedWhileBusy) {
-                runCatching {
-                    session = Vault(
-                        dbPath,
-                        VaultKey.deriveFromPassphrase(
-                            current, kdf.salt, kdf.mCostKib, kdf.tCost, kdf.pCost,
-                        ),
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    /**
+     * Decide what a failed [uniffi.transition.rekeyVault] left behind, by asking
+     * the database which key it answers to.
+     *
+     * The exception alone cannot say whether the bytes moved: `rekey_vault`
+     * re-encrypts the database first and *then* renames the staged media over
+     * the originals, so it can fail after the database is already under the new
+     * key. Treating that like a failure before it — discard the staging, forget
+     * the pending salt — would delete the only readable copies of the media and
+     * the only record of the salt the database now answers to: the vault gone,
+     * under either passphrase. So:
+     *
+     * - **The new key opens it.** The database moved. Replay the renames
+     *   ([uniffi.transition.finishPendingRekey], idempotent) and promote the
+     *   pending salt only once they all landed. If they did not, the pending
+     *   slot stays: unlock's fallback finds the new key through it and replays
+     *   them again. The staging is never discarded on this branch.
+     * - **Only the old key opens it.** Nothing moved: the staged media is
+     *   litter and the pending salt names a passphrase never used. This is the
+     *   only branch that discards.
+     * - **Neither.** Touch nothing. The pending salt and the staged files are
+     *   exactly the evidence a later unlock needs to settle it.
+     */
+    private fun settleFailedRekey(
+        failure: Throwable,
+        oldKey: VaultKey,
+        newKey: VaultKey,
+    ): ChangePassphraseOutcome {
+        fun opens(key: VaultKey) =
+            runCatching { uniffi.transition.vaultVerifyKey(dbPath, key) }.isSuccess
+
+        return when {
+            opens(newKey) -> {
+                val mediaSettled = runCatching { uniffi.transition.finishPendingRekey(dbPath) }.isSuccess
+                val promoted = mediaSettled && prefs.promotePendingKdf()
+                if (!lockRequestedWhileBusy) runCatching { session = Vault(dbPath, newKey) }
+                if (promoted) {
+                    // Every byte moved and is recorded: the change happened, the
+                    // failure was in a step that has now been replayed. The
+                    // unreadable-media count was lost with the exception.
+                    ChangePassphraseOutcome.Success(mediaLeftBehind = 0u)
+                } else {
+                    ChangePassphraseOutcome.Failed(
+                        "vault re-encrypted; media still being moved, finished at next unlock: " +
+                            describe(failure)
                     )
                 }
             }
-            ChangePassphraseOutcome.Failed(describe(t))
-        } finally {
-            _busy.value = false
+            opens(oldKey) -> {
+                runCatching { uniffi.transition.discardPendingRekey(dbPath) }
+                prefs.clearPendingKdf()
+                if (!lockRequestedWhileBusy) runCatching { session = Vault(dbPath, oldKey) }
+                ChangePassphraseOutcome.Failed(describe(failure))
+            }
+            else -> ChangePassphraseOutcome.Failed(
+                "vault answers to neither passphrase; left untouched for the next unlock: " +
+                    describe(failure)
+            )
         }
     }
 
@@ -674,7 +765,9 @@ class VaultRepository @Inject constructor(
      *   change had already staged is unreadable litter — drop it, and forget the
      *   passphrase that never came into force.
      * - **Pending wins.** The database did move and only the media renames were
-     *   outstanding. Replay them, and promote the salt to active.
+     *   outstanding. Replay them, and promote the salt to active once they
+     *   have all landed — until then the pending slot is what brings the next
+     *   unlock back here to try again.
      *
      * Returns null when neither opens the vault, i.e. the passphrase is wrong.
      * Nothing is settled in that case: a typo must not decide the question.
@@ -698,8 +791,14 @@ class VaultRepository @Inject constructor(
             return key
         }
         pending?.let(::candidate)?.let { key ->
-            runCatching { uniffi.transition.finishPendingRekey(dbPath) }
-            prefs.promotePendingKdf()
+            // Promote only once every staged blob is in place. Promoting first
+            // dropped the pending slot — the only thing that sends the next
+            // unlock back here — so a replay that failed once was never tried
+            // again, and the media it had not renamed stayed sealed under a
+            // key nothing would ever use. Unpromoted, the next unlock still
+            // finds the vault through this branch and retries.
+            val finished = runCatching { uniffi.transition.finishPendingRekey(dbPath) }.isSuccess
+            if (finished) prefs.promotePendingKdf()
             return key
         }
         return null
@@ -903,8 +1002,20 @@ class VaultRepository @Inject constructor(
         }
         runCatching {
             labReminders.all().forEach { alarms.cancelLab(it.id) }
+            labReminders.wipe()
         }
         runCatching { pendingDoses.clear() }
+        runCatching { com.douxev.eggshell.reminders.MedReminderGroup(context).wipe() }
+        // The pedometer's sealed ledger: per-day step counts waiting for a
+        // vault that is about to stop existing.
+        runCatching {
+            StepLedger(context, com.douxev.eggshell.security.MetadataObfuscator()).wipe()
+        }
+        // The widget mirror holds vault content in the clear-to-the-Keystore,
+        // and it no longer empties itself on lock — so a wipe has to take it,
+        // and the per-widget consents with it: they point at notes, folders
+        // and medications of a vault that is about to stop existing.
+        com.douxev.eggshell.widget.WidgetMirrorUpdater.eraseAll(context)
         prefs.wipe()
         runCatching { keystore.delete() }
         runCatching { keystoreBio.delete() }
@@ -914,6 +1025,12 @@ class VaultRepository @Inject constructor(
         // as orphan files indefinitely.
         runCatching { context.filesDir.resolve("photos").deleteRecursively() }
         runCatching { context.filesDir.resolve("voice").deleteRecursively() }
+        // Note images and dream recordings live in folders of their own, and
+        // were left behind — with decrypted copies possibly in the cache.
+        for (dir in listOf("note_images", "dream_audio")) {
+            runCatching { context.filesDir.resolve(dir).deleteRecursively() }
+            runCatching { context.cacheDir.resolve(dir).deleteRecursively() }
+        }
     }
 
     /**
@@ -935,6 +1052,10 @@ class VaultRepository @Inject constructor(
         // Drop the (now-stale) open session; the next unlock opens the restored
         // DB. Recreate the Keystore key so the wrap below is fresh.
         session = null
+        // The widget rows describe the vault being replaced. The consents stay
+        // — they are about the widgets, not the data — and the next unlock
+        // fills them again from the restored vault.
+        com.douxev.eggshell.widget.WidgetMirrorUpdater.withdraw(context)
         // Build and commit the new state BEFORE destroying the old aliases —
         // the rule this file already states at applyNewMode, and broke here.
         // Deleting first meant that any throw in the next few lines (a Keystore

@@ -42,7 +42,7 @@ Encrypted SQLite database (SQLCipher), biometric or PIN unlock, and a
   with your endocrinologist.
 - **Privacy** — local encryption, decoy mode (icon + decoy screen), icon
   alias, content masking in the recents/background.
-- **Widget** — your next dose visible from the home screen.
+- **Widgets** — one per module, in the app's own theme. Each stays a plain door until you turn its content on, widget by widget: your next doses with a « taken » button, your last journal entry's gauges, a single note, your sport week…
 
 ## Screenshots
 

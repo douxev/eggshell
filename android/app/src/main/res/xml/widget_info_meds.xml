@@ -17,6 +17,10 @@
       content — a dose logged, a schedule edited, an alarm firing, a lock —
       pushes a repaint through WidgetRefresh instead.
 
+    widgetFeatures="reconfigurable" (Android 9+, ignored before) lets a launcher
+    offer the configuration again from the placed widget, so an opt-in can be
+    given or withdrawn without removing and re-adding the card.
+
     No android:previewLayout, as before: one the launcher can't rasterise can
     crash the picker, and the system default preview is the safe choice.
 -->
@@ -28,6 +32,7 @@
     android:updatePeriodMillis="0"
     android:initialLayout="@layout/widget_meds"
     android:configure="com.douxev.eggshell.widget.WidgetConfigActivity"
+    android:widgetFeatures="reconfigurable"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:description="@string/meds_widget_description"/>

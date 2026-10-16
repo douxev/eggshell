@@ -59,6 +59,40 @@ class WidgetMirrorCodecTest {
         assertEquals(mirror, WidgetMirrorCodec.decode(WidgetMirrorCodec.encode(mirror)))
     }
 
+    /**
+     * The drawing fields — tile text, gauge value and colour role — ride along
+     * with the text, and a tile of "12\nSEPT." holds a newline, which is the
+     * row separator.
+     */
+    @Test
+    fun `a gauge row round-trips with its badge, progress and role`() {
+        val gauge = WidgetContentMirror.Row(
+            title = "Humeur", subtitle = "", targetId = 4L,
+            badge = "12\nSEPT.", progress = 7, max = 10, accent = 3,
+        )
+        val mirror = mapOf(2 to listOf(gauge, row("plain")))
+        assertEquals(mirror, WidgetMirrorCodec.decode(WidgetMirrorCodec.encode(mirror)))
+    }
+
+    /**
+     * A row written before the drawing fields existed: three fields only. It
+     * must still read as a plain line, with no tile and no gauge, rather than
+     * be dropped as corrupt.
+     */
+    @Test
+    fun `a three-field row from an older build reads with defaults`() {
+        val b64 = { s: String -> java.util.Base64.getEncoder().encodeToString(s.toByteArray()) }
+        val decoded = WidgetMirrorCodec.decode("1\n${b64("Titre")},${b64("ligne")},9")
+        val row = decoded.getValue(1).single()
+        assertEquals("Titre", row.title)
+        assertEquals("ligne", row.subtitle)
+        assertEquals(9L, row.targetId)
+        assertEquals("", row.badge)
+        assertEquals(-1, row.progress)
+        assertEquals(0, row.max)
+        assertEquals(0, row.accent)
+    }
+
     @Test
     fun `an empty mirror encodes and decodes to nothing`() {
         assertTrue(WidgetMirrorCodec.decode(WidgetMirrorCodec.encode(emptyMap())).isEmpty())

@@ -48,7 +48,17 @@ import uniffi.transition.VoiceClip
 class VoiceRepository @Inject constructor(
     private val vault: VaultRepository,
     @ApplicationContext private val context: Context,
+    private val mirrors: com.douxev.eggshell.widget.WidgetMirrorUpdater,
 ) {
+    /**
+     * Ask the widget mirror to catch up after a write. A queue push: the write
+     * never waits for it and never fails because of it — an opted-in Voix
+     * widget showing yesterday's count is the worst a failure here can do.
+     */
+    private fun mirrorChanged() {
+        mirrors.refresh()
+    }
+
     private val voiceDir: File by lazy {
         File(context.filesDir, "voice").apply { mkdirs() }
     }
@@ -142,7 +152,7 @@ class VoiceRepository @Inject constructor(
                 filePath = final.absolutePath,
                 pitchHz = pitchHz,
             )
-        )
+        ).also { mirrorChanged() }
     }
 
     /**
@@ -200,6 +210,7 @@ class VoiceRepository @Inject constructor(
     suspend fun delete(entry: VoiceClip) = withContext(Dispatchers.IO) {
         runCatching { File(entry.filePath).delete() }
         vault.requireSession().deleteVoiceClip(entry.id)
+        mirrorChanged()
     }
 
     /**

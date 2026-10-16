@@ -76,6 +76,7 @@ class SettingsBackup @Inject constructor(
             val editor = SecurePrefs.get(context, name).edit()
             for (key in entries.keys()) {
                 val cell = entries.optJSONObject(key) ?: continue
+                if (!restorable(name, key, cell)) continue
                 decodeInto(editor, key, cell)
             }
             editor.commit()
@@ -105,6 +106,30 @@ class SettingsBackup @Inject constructor(
         for (e in labPrefs.all()) {
             if (e.nextDueAtMs > now) runCatching { alarms.scheduleLab(e.id, e.nextDueAtMs) }
         }
+    }
+
+    /**
+     * Whether one backed-up value may be written back on this device.
+     *
+     * Everything in [PORTABLE_STORES] is snapshotted whole, so a backup always
+     * carries what the user had. Most of it restores as-is; the sport store is
+     * filtered, key by key, because two kinds of value in it must not travel:
+     *
+     * - **The pedometer switch.** It stands for a runtime permission
+     *   (ACTIVITY_RECOGNITION) granted on the *old* phone. Restored as « on »
+     *   on a phone that never granted it, it would be a pedometer that is on
+     *   and counts nothing — the state the switch's own code refuses to leave
+     *   anyone in. The new phone keeps its own answer until the user turns it
+     *   on there, which asks for the permission.
+     * - **Anything else the store learns to hold later** — a sensor baseline,
+     *   a last-read counter. Those describe one device's hardware and would
+     *   corrupt the step history on another. So the rule is an allow-list:
+     *   only the daily goal, and only as a number SportPrefs would accept.
+     */
+    private fun restorable(store: String, key: String, cell: JSONObject): Boolean {
+        if (store != SPORT_STORE) return true
+        if (key != SPORT_KEY_GOAL || cell.optString("t") != "i") return false
+        return cell.optInt("v", -1) in SportPrefs.MIN_GOAL..SportPrefs.MAX_GOAL
     }
 
     private fun JSONObject.optIntOrNull(key: String): Int? =
@@ -156,7 +181,14 @@ class SettingsBackup @Inject constructor(
             "transition_summary",
             "transition_voice_prefs",
             "transition_med_alias_prefs",
+            // The daily step goal. Restored through [restorable], which keeps
+            // the pedometer switch and anything device-bound out.
+            SPORT_STORE,
         )
+
+        const val SPORT_STORE = "transition_sport_prefs"
+        /** SportPrefs' own key for the daily goal; the store is SportPrefs'. */
+        const val SPORT_KEY_GOAL = "daily_goal"
 
         // Deliberately absent, and why:
         //
@@ -176,5 +208,13 @@ class SettingsBackup @Inject constructor(
         //                              written to the vault.
         //  whats_new / module_seen /   purely local UI bookkeeping.
         //  report_export
+        //  step ledger (sealed)        the pedometer's counter baseline belongs
+        //                              to this phone's sensor, and its pending
+        //                              days are flushed into the vault — which
+        //                              is what the backup carries.
+        //  transition_health_prefs     tied to this phone's Health Connect
+        //                              permission; on another device the user
+        //                              grants access again.
+        //  med reminder group          the notification currently showing.
     }
 }

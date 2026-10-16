@@ -16,11 +16,26 @@ class LabReminderManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val alarmScheduler: AlarmScheduler,
     private val priority: PriorityPrefs,
+    // A Provider, not the updater itself: it is only needed after a write, so
+    // the updater — and the vault behind it — is not built just because some
+    // screen listed the reminders.
+    private val mirrors: javax.inject.Provider<com.douxev.eggshell.widget.WidgetMirrorUpdater>,
 ) {
     private val prefs = LabReminderPrefs(context)
 
+    /**
+     * Repaint now, and let the content mirror catch up.
+     *
+     * The repaint is what the Analyses widget and the original reminder widget
+     * need — both read this store directly. The "next reminder" lines of the
+     * Photos, Voix, Rêves and Sport widgets read it at draw time too, so the
+     * repaint covers them; the mirror request is for everything else those
+     * widgets show next to it, which a reminder change can leave out of step
+     * (a widget opted in since the last rebuild, say). Queued, never awaited.
+     */
     private fun refreshWidget() {
         com.douxev.eggshell.widget.WidgetRefresh.refreshAll(context)
+        runCatching { mirrors.get().refresh() }
     }
 
     fun list(): List<LabReminderPrefs.Entry> = prefs.all()

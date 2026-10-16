@@ -35,6 +35,10 @@ pdfboxAndroid = "2.0.27.0"
 # 4.8.0+ ships 16 KB page-aligned native libs (libtesseract, libleptonica, …)
 tesseract4android = "4.9.0"
 exifinterface = "1.4.2"
+# Health Connect client. 1.1.0 is the newest stable line — everything after it
+# on Google Maven is a 1.2.0 alpha. Plain AndroidX (Apache 2.0): it talks to the
+# Health Connect provider over IPC and pulls in no Play Services.
+healthConnect = "1.1.0"
 junit = "4.13.2"
 # Test-only: runTest + StandardTestDispatcher, so a ViewModel's viewModelScope
 # is drained deterministically instead of racing the assertions.
@@ -69,6 +73,7 @@ androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfboxAndroid" }
 tesseract4android = { group = "com.github.adaptech-cz.Tesseract4Android", name = "tesseract4android", version.ref = "tesseract4android" }
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
+androidx-health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutinesTest" }
 

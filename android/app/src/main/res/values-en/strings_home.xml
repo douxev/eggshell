@@ -60,13 +60,11 @@
          without unlocking. -->
     <string name="module_widget_subtitle">Open module</string>
     <string name="module_widget_add">Add</string>
-    <string name="module_widget_description">Direct access to a module.</string>
     <string name="module_widget_label_meds">Medications</string>
     <string name="module_widget_label_journal">Journal</string>
     <string name="module_widget_label_labs">Labs</string>
     <string name="module_widget_label_appointments">Appointments</string>
     <string name="module_widget_label_notes">Notes</string>
-    <string name="module_widget_label_weight">Weight</string>
     <string name="module_widget_label_bleeding">Periods</string>
     <string name="module_widget_label_photos">Photos</string>
     <string name="module_widget_label_voice">Voice</string>
@@ -146,12 +144,10 @@
     <string name="sport_field_duration">Duration</string>
     <string name="sport_field_note">Notes</string>
     <string name="sport_field_when">Date and time</string>
-    <string name="sport_duration_fmt">%1$s</string>
     <string name="sport_duration_hm">%1$d h %2$02d</string>
     <string name="sport_duration_m">%1$d min</string>
     <string name="sport_no_activity">No type</string>
     <string name="sport_activities_title">Activity types</string>
-    <string name="sport_activities_manage">Manage types</string>
     <string name="sport_activity_new">New type</string>
     <string name="sport_activity_name">Name</string>
     <string name="sport_activity_kind">Category</string>
@@ -172,15 +168,14 @@
     <string name="sport_stat_week_time">of sport</string>
     <string name="sport_stat_streak">days in a row</string>
     <string name="sport_stat_best_streak">Best streak: %1$d days</string>
-    <string name="sport_stat_steps_today">%1$d steps today out of %2$d</string>
+    <string name="sport_stat_steps_today">%1$s steps today out of %2$s</string>
     <string name="sport_pedometer">Count my steps</string>
-    <string name="sport_pedometer_sub">Uses the device sensor. Nothing leaves the phone, and counting stops the moment you turn this off.</string>
+    <string name="sport_pedometer_sub">Uses the device sensor, even with the app closed, with no permanent notification. Nothing leaves the phone, and counting stops the moment you turn this off.</string>
     <string name="sport_steps_none">No steps recorded that day.</string>
-    <string name="sport_steps_count">%1$d steps</string>
+    <string name="sport_steps_count">%1$s steps</string>
 
-    <string name="sport_import">Import</string>
     <string name="sport_import_title">Import from your watch</string>
-    <string name="sport_import_empty">No sessions found in that file. Export a .gpx or .tcx from your watch\'s app.</string>
+    <string name="sport_import_empty">No sessions found in that file. Export a .fit, .gpx or .tcx from your watch\'s app.</string>
     <string name="sport_import_all_dupes">Those sessions are already recorded.</string>
     <string name="sport_import_confirm">Import</string>
     <plurals name="sport_import_found">
@@ -201,15 +196,62 @@
     <string name="sport_hr_title">Heart rate</string>
     <string name="sport_hr_connect">Connect</string>
     <string name="sport_hr_disconnect">Disconnect</string>
-    <string name="sport_hr_idle">Connect a chest strap, a ring, or your watch in broadcast mode. Nothing leaves the phone.</string>
+    <string name="sport_hr_idle">Connect a chest strap, a ring, or your watch with heart-rate broadcast on (Garmin, Polar, Coros, Suunto, Amazfit…). Apple Watch and most Wear OS watches do not broadcast. Nothing leaves the phone.</string>
     <string name="sport_hr_scanning">Looking for a sensor…</string>
     <string name="sport_hr_connecting">Connecting to %1$s…</string>
     <string name="sport_hr_waiting">Connected. Waiting for a first reading.</string>
     <string name="sport_hr_live">%1$d bpm</string>
     <string name="sport_hr_bluetooth_off">Bluetooth is off.</string>
     <string name="sport_hr_no_permission">Bluetooth permission denied.</string>
-    <string name="sport_hr_not_found">No sensor found. Check that it is broadcasting its heart rate.</string>
+    <string name="sport_hr_not_found">No sensor found in 20 seconds. Check that heart-rate broadcast is on for the watch, or that the strap is being worn, then try again.</string>
     <string name="sport_hr_disconnected">Sensor disconnected.</string>
     <string name="sport_hr_unsupported">This device cannot use that kind of sensor.</string>
     <string name="sport_hr_avg">%1$d bpm avg</string>
+    <string name="sport_link_reminders">Session reminders</string>
+    <string name="sport_link_reminders_none">No reminder set</string>
+    <plurals name="sport_link_reminders_count">
+        <item quantity="one">%1$d reminder set</item>
+        <item quantity="other">%1$d reminders set</item>
+    </plurals>
+    <string name="sport_link_import">Import from your watch</string>
+    <string name="sport_link_import_sub">A .fit, .gpx or .tcx file exported by your watch\'s app. Nothing is sent anywhere.</string>
+    <string name="sport_link_types">Activity types and pedometer</string>
+    <string name="sport_link_types_sub">Your session types, the step counter and the daily goal.</string>
+    <string name="sport_settings_title">Types and pedometer</string>
+    <string name="sport_pedometer_unavailable">This device has no step sensor.</string>
+    <string name="sport_goal_label">Daily goal</string>
+    <string name="sport_goal_custom">Other goal (steps)</string>
+    <string name="sport_goal_steps">%1$s steps</string>
+    <string name="sport_reminders_title">Session reminders</string>
+    <string name="sport_reminders_hint">A discreet notification at the time you choose, without saying what it is about. These reminders are also listed under Settings › Reminders.</string>
+
+    <!-- Pedometer: permission, day correction, month summary -->
+    <string name="sport_pedometer_no_permission">The “Physical activity” permission is denied: your steps are no longer counted.</string>
+    <string name="sport_pedometer_grant">Allow</string>
+    <string name="sport_steps_correct">Correct</string>
+    <string name="sport_steps_correct_label">Steps that day</string>
+    <string name="sport_steps_correct_failed">The correction could not be saved.</string>
+    <string name="sport_steps_month_empty">No steps counted this month.</string>
+    <string name="sport_steps_month_total">steps this month</string>
+    <string name="sport_steps_month_average">steps a day</string>
+    <plurals name="sport_steps_month_goal_days">
+        <item quantity="one">day at goal</item>
+        <item quantity="other">days at goal</item>
+    </plurals>
+    <string name="sport_steps_month_best">Best day: %1$s steps</string>
+    <string name="sport_steps_month_change">Average: %1$s%% compared with the previous month</string>
+    <plurals name="sport_steps_goal_streak">
+        <item quantity="one">%1$d day in a row at goal</item>
+        <item quantity="other">%1$d days in a row at goal</item>
+    </plurals>
+    <string name="sport_steps_goal_streak_best">best: %1$d</string>
+    <string name="sport_steps_year_total">This year: %1$s steps</string>
+
+    <!-- Session editor: reconnection and chronometer -->
+    <string name="sport_hr_reconnecting">Signal lost, reconnecting… The average measured so far is kept.</string>
+    <string name="sport_timer_title">Timer</string>
+    <string name="sport_timer_idle">Start it when the session begins: the duration fills itself in when you stop it.</string>
+    <string name="sport_timer_start">Start</string>
+    <string name="sport_timer_stop">Stop</string>
+    <string name="sport_hr_unnamed">your sensor</string>
 </resources>

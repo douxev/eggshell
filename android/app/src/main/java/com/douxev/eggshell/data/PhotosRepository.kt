@@ -25,7 +25,17 @@ import uniffi.transition.PhotoRecord
 class PhotosRepository @Inject constructor(
     private val vault: VaultRepository,
     @ApplicationContext private val context: Context,
+    private val mirrors: com.douxev.eggshell.widget.WidgetMirrorUpdater,
 ) {
+    /**
+     * Ask the widget mirror to catch up after a write. A queue push: the write
+     * never waits for it and never fails because of it — an opted-in Photos
+     * widget showing yesterday's count is the worst a failure here can do.
+     */
+    private fun mirrorChanged() {
+        mirrors.refresh()
+    }
+
     private val photosDir: File by lazy {
         File(context.filesDir, "photos").apply { mkdirs() }
     }
@@ -135,7 +145,7 @@ class PhotosRepository @Inject constructor(
         // 3. Now insert the DB row. If this throws we delete the file so we
         //    don't leave orphan ciphertext that the orphan scan would also
         //    have to clean up.
-        try {
+        val saved = try {
             session.addPhotoRecord(
                 NewPhotoRecord(
                     atMs = atMs ?: originalTimestamp(uri) ?: System.currentTimeMillis(),
@@ -148,6 +158,8 @@ class PhotosRepository @Inject constructor(
             final.delete()
             throw t
         }
+        mirrorChanged()
+        saved
     }
 
     suspend fun decryptToBytes(record: PhotoRecord): ByteArray = withContext(Dispatchers.IO) {
@@ -158,6 +170,7 @@ class PhotosRepository @Inject constructor(
     suspend fun delete(record: PhotoRecord) = withContext(Dispatchers.IO) {
         runCatching { File(record.filePath).delete() }
         vault.requireSession().deletePhotoRecord(record.id)
+        mirrorChanged()
     }
 
     /**

@@ -10,12 +10,27 @@
     <color name="ic_launcher_calculator_bg">#263238</color>
     <color name="ic_launcher_weather_bg">#4FC3F7</color>
 
-    <!-- Widget surface colours. Keeps the widget on-brand without depending
-         on Material 3 theme tokens (widgets can't import them). -->
-    <color name="widget_bg">#F4EDF4</color>
-    <color name="widget_on_bg">#1D1B20</color>
+    <!-- Widget colours: the lavender light palette, as plain resources.
+
+         These are what a widget shows under the « Système » theme, where the
+         launcher resolves them against its own night mode (values-night
+         carries the dark set), so a card follows a dark-mode switch that
+         happens while the app is not running. Every other theme is painted
+         over them at render time — see WidgetPalette. -->
+    <color name="widget_bg">#F2EBF6</color>
+    <color name="widget_on_bg">#1C1B1F</color>
     <color name="widget_accent">#6A4FA3</color>
-    <color name="widget_accent_container">#EADDFF</color>
+    <color name="widget_accent_container">#EBDDFF</color>
     <color name="widget_on_accent">#FFFFFF</color>
-    <color name="widget_muted">#7B7689</color>
+    <color name="widget_on_accent_container">#250059</color>
+    <color name="widget_muted">#49454E</color>
+    <!-- The empty part of a gauge. -->
+    <color name="widget_track">#E6DFEA</color>
+    <!-- The colour roles a gauge can be drawn in, in the order of
+         WidgetPalette.Role. -->
+    <color name="widget_role_primary">#6A4FA3</color>
+    <color name="widget_role_error">#BA1A1A</color>
+    <color name="widget_role_tertiary">#98455F</color>
+    <color name="widget_role_secondary">#635B70</color>
+    <color name="widget_role_success">#3F6A3F</color>
 </resources>

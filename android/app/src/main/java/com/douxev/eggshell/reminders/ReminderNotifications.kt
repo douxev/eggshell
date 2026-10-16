@@ -62,6 +62,82 @@ class ReminderNotifications @Inject constructor(
         )
     }
 
+    /**
+     * The grouped medication reminder: every schedule in [group] in one
+     * notification, with « Tout pris » / « Plus tard » / « Tout passer » applied
+     * to all of them ([MedReminderGroup]).
+     *
+     * [labels] are the members' opt-in names or aliases, null for those left
+     * generic (no alias given in alias mode, everything in generic mode). The
+     * named ones are listed and the others only counted — « Estradiol et 1
+     * autre » — the same as iOS. The lock-screen version stays generic.
+     */
+    fun showMedGroup(group: MedReminderGroup.Group, labels: List<String?>, priority: Boolean) {
+        val count = group.members.size
+        val title = context.resources.getQuantityString(R.plurals.reminder_group_title, count, count)
+        val named = labels.filterNotNull()
+        val unnamed = labels.size - named.size
+        val body = when {
+            named.isEmpty() -> context.getString(R.string.reminder_body)
+            unnamed == 0 -> named.joinToString(", ")
+            else -> named.joinToString(", ") +
+                context.resources.getQuantityString(R.plurals.reminder_group_others, unnamed, unnamed)
+        }
+        post(
+            notifId = GROUP_NOTIF_BASE + (group.key and ID_MASK),
+            title = title,
+            body = body,
+            priority = priority,
+            actions = listOf(
+                groupAction(group, AlarmScheduler.ACTION_GROUP_MARK_TAKEN, GROUP_TAKEN_BASE,
+                    android.R.drawable.checkbox_on_background, R.string.reminder_action_group_taken),
+                groupAction(group, AlarmScheduler.ACTION_GROUP_SNOOZE, GROUP_SNOOZE_BASE,
+                    android.R.drawable.ic_menu_recent_history, R.string.reminder_action_snooze),
+                groupAction(group, AlarmScheduler.ACTION_GROUP_MARK_SKIPPED, GROUP_SKIPPED_BASE,
+                    android.R.drawable.ic_menu_close_clear_cancel, R.string.reminder_action_group_skip),
+            ),
+            lines = named,
+            deleteIntent = groupIntent(group, AlarmScheduler.ACTION_GROUP_DISMISSED, GROUP_DISMISS_BASE),
+        )
+    }
+
+    fun cancelGroup(key: Int) {
+        val mgr = context.getSystemService(NotificationManager::class.java)
+        mgr.cancel(GROUP_NOTIF_BASE + (key and ID_MASK))
+    }
+
+    /** The single notification of a schedule, if one is showing. */
+    fun cancelMedNotification(scheduleId: Long) {
+        val mgr = context.getSystemService(NotificationManager::class.java)
+        mgr.cancel(MED_NOTIF_BASE + (scheduleId.toInt() and ID_MASK))
+    }
+
+    private fun groupIntent(group: MedReminderGroup.Group, action: String, base: Int): PendingIntent {
+        val intent = Intent(context, ReminderReceiver::class.java).apply {
+            this.action = action
+            putExtra(AlarmScheduler.EXTRA_SCHEDULE_IDS, group.members.toLongArray())
+            putExtra(AlarmScheduler.EXTRA_GROUP_KEY, group.key)
+        }
+        // UPDATE_CURRENT: the group grows while it is showing, and the action
+        // must carry everyone who joined, not just the first member.
+        return PendingIntent.getBroadcast(
+            context,
+            base + (group.key and ID_MASK),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun groupAction(
+        group: MedReminderGroup.Group,
+        action: String,
+        base: Int,
+        icon: Int,
+        labelRes: Int,
+    ): NotificationCompat.Action =
+        NotificationCompat.Action.Builder(icon, context.getString(labelRes), groupIntent(group, action, base))
+            .build()
+
     /** Used by lab/photo/voice/journal reminder alarms. The user's free-text
      *  label is deliberately NOT included — the lockscreen would otherwise show
      *  "Estradiol", "T4 libre"… in the clear, which defeats the privacy
@@ -104,6 +180,9 @@ class ReminderNotifications @Inject constructor(
         body: String,
         priority: Boolean,
         actions: List<NotificationCompat.Action>,
+        /** One line each in the expanded view (grouped reminders). */
+        lines: List<String> = emptyList(),
+        deleteIntent: PendingIntent? = null,
     ) {
         val mgr = context.getSystemService(NotificationManager::class.java)
         // Route through the launcher rather than MainActivity directly: with a
@@ -147,6 +226,15 @@ class ReminderNotifications @Inject constructor(
             .setContentIntent(pi)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(publicVersion)
+            // Only the grouped reminder carries a delete intent, and it is
+            // redrawn as members join: it must not buzz once per member.
+            .setOnlyAlertOnce(deleteIntent != null)
+        if (lines.size > 1) {
+            builder.setStyle(
+                NotificationCompat.InboxStyle().also { style -> lines.forEach { style.addLine(it) } }
+            )
+        }
+        deleteIntent?.let { builder.setDeleteIntent(it) }
         actions.forEach { builder.addAction(it) }
 
         // WearableExtender: hoist the first action as the primary one on the
@@ -279,5 +367,10 @@ class ReminderNotifications @Inject constructor(
         private const val MARK_SKIPPED_BASE = 0x0003_0000
         private const val MARK_SNOOZE_BASE = 0x0004_0000
         private const val APPOINTMENT_NOTIF_BASE = 0x0005_0000
+        private const val GROUP_NOTIF_BASE = 0x0006_0000
+        private const val GROUP_TAKEN_BASE = 0x0007_0000
+        private const val GROUP_SKIPPED_BASE = 0x0008_0000
+        private const val GROUP_SNOOZE_BASE = 0x0009_0000
+        private const val GROUP_DISMISS_BASE = 0x000A_0000
     }
 }

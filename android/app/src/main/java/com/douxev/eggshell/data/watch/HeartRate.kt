@@ -50,6 +50,13 @@ object HeartRateParser {
     const val MEASUREMENT_UUID = "00002a37-0000-1000-8000-00805f9b34fb"
     const val CCC_DESCRIPTOR_UUID = "00002902-0000-1000-8000-00805f9b34fb"
 
+    /**
+     * The range the vault accepts (`0017_sport.sql`: `avg_hr`/`max_hr BETWEEN
+     * 20 AND 300`). Kept identical on purpose — see [parse].
+     */
+    const val MIN_BPM = 20
+    const val MAX_BPM = 300
+
     private const val FLAG_UINT16 = 0x01
     private const val FLAG_ENERGY = 0x08
     private const val FLAG_RR = 0x10
@@ -95,8 +102,12 @@ object HeartRateParser {
 
         // A sensor that has lost contact reports 0. That is not a heart rate,
         // and averaging it in would drag the session's number toward zero for
-        // every second the strap was loose.
-        if (bpm <= 0) return null
+        // every second the strap was loose. The same goes for anything outside
+        // what a human heart does — a uint16 of garbage, a strap settling —
+        // and that bound is not only cosmetic: the vault refuses a session
+        // whose average or peak falls outside it, so one stray packet used to
+        // make the whole session impossible to save.
+        if (bpm !in MIN_BPM..MAX_BPM) return null
 
         return HeartRateSample(bpm = bpm, energyExpendedKJ = energy, rrIntervalsMs = rr)
     }
@@ -120,19 +131,25 @@ class HeartRateAccumulator {
     private var count = 0L
     private var peak = 0
 
+    /**
+     * Synchronized: samples arrive on a Bluetooth binder thread while the
+     * editor reads the summary on the main one.
+     */
+    @Synchronized
     fun add(bpm: Int) {
-        if (bpm <= 0) return
+        if (bpm !in HeartRateParser.MIN_BPM..HeartRateParser.MAX_BPM) return
         sum += bpm
         count++
         if (bpm > peak) peak = bpm
     }
 
     /** Null until at least one sample has arrived — never 0, which is a reading. */
-    val average: Int? get() = if (count == 0L) null else (sum / count).toInt()
-    val max: Int? get() = peak.takeIf { it > 0 }
-    val samples: Long get() = count
+    val average: Int? @Synchronized get() = if (count == 0L) null else (sum / count).toInt()
+    val max: Int? @Synchronized get() = peak.takeIf { it > 0 }
+    val samples: Long @Synchronized get() = count
 
     /** Start over. A new session must not inherit the previous one's numbers. */
+    @Synchronized
     fun reset() {
         sum = 0
         count = 0

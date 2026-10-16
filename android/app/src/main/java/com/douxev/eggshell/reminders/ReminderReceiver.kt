@@ -41,6 +41,8 @@ class ReminderReceiver : BroadcastReceiver() {
     @Inject lateinit var schedules: ScheduleRepository
     @Inject lateinit var medications: MedicationRepository
     @Inject lateinit var pendingDoses: PendingDosePrefs
+    @Inject lateinit var notifContent: NotifContentPrefs
+    @Inject lateinit var groups: MedReminderGroup
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
@@ -51,6 +53,72 @@ class ReminderReceiver : BroadcastReceiver() {
             AlarmScheduler.ACTION_MARK_SKIPPED -> handleMark(context, intent, status = "skipped")
             AlarmScheduler.ACTION_SNOOZE -> handleSnooze(context, intent)
             AlarmScheduler.ACTION_SNOOZE_FIRE -> handleSnoozeFire(context, intent)
+            AlarmScheduler.ACTION_GROUP_MARK_TAKEN -> handleGroupMark(context, intent, "taken")
+            AlarmScheduler.ACTION_GROUP_MARK_SKIPPED -> handleGroupMark(context, intent, "skipped")
+            AlarmScheduler.ACTION_GROUP_SNOOZE -> handleGroupSnooze(context, intent)
+            AlarmScheduler.ACTION_GROUP_DISMISSED ->
+                groups.close(intent.getIntExtra(AlarmScheduler.EXTRA_GROUP_KEY, -1))
+        }
+    }
+
+    /**
+     * Show a medication reminder: its own notification, or — with
+     * « Grouper les rappels de traitement » on — a place in the group that is
+     * open right now ([MedReminderGroup]).
+     */
+    private fun showMedReminder(context: Context, scheduleId: Long, displayLabel: String?) {
+        if (!notifContent.grouped.value) {
+            notifier.showMed(scheduleId, displayLabel, priority.isMedPriority(scheduleId))
+            return
+        }
+        val group = groups.join(scheduleId, System.currentTimeMillis())
+        val mirror = ReminderPrefs(context)
+        val labels = group.members.map { id ->
+            if (id == scheduleId) displayLabel else mirror.get(id)?.displayLabel
+        }
+        notifier.cancelMedNotification(scheduleId)
+        notifier.showMedGroup(group, labels, group.members.any { priority.isMedPriority(it) })
+    }
+
+    /**
+     * « Tout pris » / « Tout passer » on a grouped reminder: the single action,
+     * once per member, then one toast for the lot rather than one each.
+     * Members whose schedule has since been deleted are skipped.
+     */
+    private fun handleGroupMark(context: Context, intent: Intent, status: String) {
+        val ids = intent.getLongArrayExtra(AlarmScheduler.EXTRA_SCHEDULE_IDS) ?: return
+        val key = intent.getIntExtra(AlarmScheduler.EXTRA_GROUP_KEY, -1)
+        runCatching { notifier.cancelGroup(key) }
+        groups.close(key)
+        val mirror = ReminderPrefs(context)
+        val live = ids.filter { mirror.get(it) != null }
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val now = System.currentTimeMillis()
+                val outcomes = live.map { mark(context, it, status, now) }
+                toastFor(context, outcomes)
+                com.douxev.eggshell.widget.WidgetRefresh.refreshAll(context)
+            } finally {
+                pending.finish()
+            }
+        }
+    }
+
+    /** « Plus tard » on a grouped reminder: every member comes back together. */
+    private fun handleGroupSnooze(context: Context, intent: Intent) {
+        val ids = intent.getLongArrayExtra(AlarmScheduler.EXTRA_SCHEDULE_IDS) ?: return
+        val key = intent.getIntExtra(AlarmScheduler.EXTRA_GROUP_KEY, -1)
+        runCatching { notifier.cancelGroup(key) }
+        groups.close(key)
+        val at = System.currentTimeMillis() + AlarmScheduler.SNOOZE_MS
+        ids.forEach { alarmScheduler.scheduleSnooze(it, at) }
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(
+                context.applicationContext,
+                context.getString(com.douxev.eggshell.R.string.reminder_snoozed_toast),
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
         }
     }
 
@@ -86,7 +154,7 @@ class ReminderReceiver : BroadcastReceiver() {
         val scheduleId = intent.getLongExtra(AlarmScheduler.EXTRA_SCHEDULE_ID, -1L)
         if (scheduleId < 0) return
         val entry = ReminderPrefs(context).get(scheduleId) ?: return
-        notifier.showMed(scheduleId, entry.displayLabel, priority.isMedPriority(scheduleId))
+        showMedReminder(context, scheduleId, entry.displayLabel)
     }
 
     private fun handleMed(context: Context, intent: Intent) {
@@ -96,7 +164,7 @@ class ReminderReceiver : BroadcastReceiver() {
         val prefs = ReminderPrefs(context)
         val entry = prefs.get(scheduleId) ?: return
 
-        notifier.showMed(scheduleId, entry.displayLabel, priority.isMedPriority(scheduleId))
+        showMedReminder(context, scheduleId, entry.displayLabel)
 
         val now = System.currentTimeMillis()
         val nextDue = NextDueCalculator.nextDueAfter(
@@ -161,88 +229,104 @@ class ReminderReceiver : BroadcastReceiver() {
                 val now = intent.getLongExtra(AlarmScheduler.EXTRA_TAKEN_AT_MS, 0L)
                     .takeIf { it > 0L }
                     ?: System.currentTimeMillis()
-                if (vault.isUnlocked) {
-                    runCatching {
-                        val sched = vault.requireSession().listActiveSchedules()
-                            .firstOrNull { it.id == scheduleId }
-                        val med = sched?.let { medications.get(it.medicationId) }
-                        if (sched != null && med != null) {
-                            val taken = status == "taken"
-                            medications.logDose(
-                                uniffi.transition.NewDoseEvent(
-                                    medicationId = med.id,
-                                    takenAtMs = now,
-                                    dose = if (taken) med.defaultDose else null,
-                                    doseUnit = if (taken) med.defaultDoseUnit else null,
-                                    route = if (taken) med.route else null,
-                                    injectionSite = null,
-                                    notes = null,
-                                    status = status,
-                                    scheduledAtMs = DueOccurrence.nearest(
-                                        kind = sched.kind,
-                                        intervalMinutes = sched.intervalMinutes?.toInt(),
-                                        dailyHour = sched.dailyHour?.toInt(),
-                                        dailyMinute = sched.dailyMinute?.toInt(),
-                                        intervalDays = sched.intervalDays?.toInt(),
-                                        anchorMs = sched.nextDueAtMs,
-                                        atMs = now,
-                                    ),
-                                    scheduleId = scheduleId,
-                                )
-                            )
-                        }
-                        schedules.advanceToNextOccurrence(scheduleId)
-                    }
-                } else {
-                    // Vault locked: we can't touch the encrypted dose log, so
-                    // queue the tap (sealed at rest) and commit it on the next
-                    // real unlock. This works in every security mode, including
-                    // Paranoid / passphrase, since the queue defers all DB
-                    // writes. We need the medication id to log against later —
-                    // it lives in the plain alarm mirror, not the DB, and so
-                    // does the cadence we derive the prescribed time from.
-                    val entry = ReminderPrefs(context).get(scheduleId)
-                    val medId = entry?.medicationId ?: -1L
-                    val queued = medId >= 0 && pendingDoses.add(
-                        PendingDosePrefs.Pending(
-                            scheduleId = scheduleId,
-                            medicationId = medId,
-                            takenAtMs = now,
-                            status = status,
-                            scheduledAtMs = entry?.let {
-                                DueOccurrence.nearest(
-                                    kind = it.kind,
-                                    intervalMinutes = it.intervalMinutes,
-                                    dailyHour = it.dailyHour,
-                                    dailyMinute = it.dailyMinute,
-                                    intervalDays = it.intervalDays,
-                                    anchorMs = it.nextDueAtMs,
-                                    atMs = now,
-                                )
-                            },
-                        )
-                    )
-                    val toast = if (queued) {
-                        // Recorded — will be folded into the stats on unlock.
-                        com.douxev.eggshell.R.string.reminder_queued_toast
-                    } else {
-                        // Couldn't resolve the med or sealing failed: tell the
-                        // user to record it after unlocking rather than imply
-                        // it was saved.
-                        com.douxev.eggshell.R.string.reminder_locked_toast
-                    }
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        android.widget.Toast.makeText(
-                            context.applicationContext,
-                            context.getString(toast),
-                            android.widget.Toast.LENGTH_LONG,
-                        ).show()
-                    }
-                }
+                toastFor(context, listOf(mark(context, scheduleId, status, now)))
                 com.douxev.eggshell.widget.WidgetRefresh.refreshAll(context)
             } finally {
                 pending.finish()
             }
+        }
+    }
+
+    /** What a « Pris » / « Passer » did — decides the toast, if any. */
+    private enum class MarkOutcome { LOGGED, QUEUED, NOT_RECORDED }
+
+    /**
+     * Record one answer to one reminder: in the dose log when the vault is
+     * open, in the sealed queue when it is not. Shared by the single action
+     * and the grouped one, so « Tout pris » is exactly N × « Pris ».
+     */
+    private suspend fun mark(context: Context, scheduleId: Long, status: String, now: Long): MarkOutcome {
+        if (vault.isUnlocked) {
+            runCatching {
+                val sched = vault.requireSession().listActiveSchedules()
+                    .firstOrNull { it.id == scheduleId }
+                val med = sched?.let { medications.get(it.medicationId) }
+                if (sched != null && med != null) {
+                    val taken = status == "taken"
+                    medications.logDose(
+                        uniffi.transition.NewDoseEvent(
+                            medicationId = med.id,
+                            takenAtMs = now,
+                            dose = if (taken) med.defaultDose else null,
+                            doseUnit = if (taken) med.defaultDoseUnit else null,
+                            route = if (taken) med.route else null,
+                            injectionSite = null,
+                            notes = null,
+                            status = status,
+                            scheduledAtMs = DueOccurrence.nearest(
+                                kind = sched.kind,
+                                intervalMinutes = sched.intervalMinutes?.toInt(),
+                                dailyHour = sched.dailyHour?.toInt(),
+                                dailyMinute = sched.dailyMinute?.toInt(),
+                                intervalDays = sched.intervalDays?.toInt(),
+                                anchorMs = sched.nextDueAtMs,
+                                atMs = now,
+                            ),
+                            scheduleId = scheduleId,
+                        )
+                    )
+                }
+                schedules.advanceToNextOccurrence(scheduleId)
+            }
+            return MarkOutcome.LOGGED
+        }
+        // Vault locked: we can't touch the encrypted dose log, so queue the
+        // tap (sealed at rest) and commit it on the next real unlock. This
+        // works in every security mode, including Paranoid / passphrase, since
+        // the queue defers all DB writes. We need the medication id to log
+        // against later — it lives in the plain alarm mirror, not the DB, and
+        // so does the cadence we derive the prescribed time from.
+        val entry = ReminderPrefs(context).get(scheduleId)
+        val medId = entry?.medicationId ?: -1L
+        val queued = medId >= 0 && pendingDoses.add(
+            PendingDosePrefs.Pending(
+                scheduleId = scheduleId,
+                medicationId = medId,
+                takenAtMs = now,
+                status = status,
+                scheduledAtMs = entry?.let {
+                    DueOccurrence.nearest(
+                        kind = it.kind,
+                        intervalMinutes = it.intervalMinutes,
+                        dailyHour = it.dailyHour,
+                        dailyMinute = it.dailyMinute,
+                        intervalDays = it.intervalDays,
+                        anchorMs = it.nextDueAtMs,
+                        atMs = now,
+                    )
+                },
+            )
+        )
+        return if (queued) MarkOutcome.QUEUED else MarkOutcome.NOT_RECORDED
+    }
+
+    /**
+     * One toast for however many answers: "recorded, will be folded in on
+     * unlock" when everything was queued, "record it after unlocking" as soon
+     * as one could not be — never an implied save that did not happen.
+     */
+    private fun toastFor(context: Context, outcomes: List<MarkOutcome>) {
+        val toast = when {
+            MarkOutcome.NOT_RECORDED in outcomes -> com.douxev.eggshell.R.string.reminder_locked_toast
+            MarkOutcome.QUEUED in outcomes -> com.douxev.eggshell.R.string.reminder_queued_toast
+            else -> return
+        }
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(
+                context.applicationContext,
+                context.getString(toast),
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
         }
     }
 

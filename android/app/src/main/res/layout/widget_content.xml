@@ -1,23 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    The layout every content-bearing module widget uses.
+    The layout most content-bearing module widgets use: Notes, Analyses,
+    Rendez-vous, Menstruations, Photos, Voix, Rêves. Journal and Sport have a
+    layout each because what they show is not a list; Traitements has its own
+    because its rows carry action buttons.
 
-    One shape for all of them — icon, module name, « + », and up to four rows of
-    title + one line — because that is genuinely all they have in common and all
-    a home-screen card has room for. Traitements keeps a layout of its own: its
-    rows carry two action buttons, which nothing else does.
+    Icon, module name, « + », then up to four rows. A row is an optional
+    leading tile (a date as "12 / SEPT.", a cycle day as "J4", a count) beside
+    a title and a preview line. The tile is what makes a glance work: the
+    number is what someone looks for, and it is bigger than the words.
 
     Everything drawn here comes from WidgetContentMirror, written only for a
-    widget its owner explicitly turned on, never in paranoid mode, and emptied
-    the moment the vault locks. So these rows are blank most of the time by
-    design: no opt-in, or the app locked. The empty line carries the
-    explanation, and it is deliberately generic — "locked" says the app is shut,
-    not what is inside it.
+    widget its owner explicitly turned on, never in paranoid mode, kept across
+    a lock (the home screen is where it is read) and erased when that consent
+    goes. Analyses is the exception: it reads the off-vault reminder store,
+    under a generic title unless the widget was allowed to show its labels.
+    When there is nothing to draw the empty line says why, deliberately
+    generically — "open the app" says the mirror has not been filled, not
+    what is inside the module.
 
-    Plain LinearLayout/TextView only: RemoteViews supports a limited widget set
-    and this inflates identically across launchers. The root carries no click
-    handler, because several launchers collapse child taps into the parent's
-    PendingIntent when the parent has one.
+    The Notes widget in single-note mode uses only row 1 and raises the
+    preview's maxLines at render time, which is why that preview has no fixed
+    line count here.
+
+    Colours reference @color/widget_* so the « Système » theme follows the
+    launcher's night mode; every other theme is painted over at render time
+    (WidgetPalette). Plain LinearLayout/TextView only: RemoteViews supports a
+    limited widget set and this inflates identically across launchers. The
+    root carries no click handler, because several launchers collapse child
+    taps into the parent's PendingIntent when the parent has one.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/content_widget_root"
@@ -83,111 +94,203 @@
         android:id="@+id/content_row_1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="8dp"
         android:clickable="true"
         android:focusable="true"
-        android:orientation="vertical">
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
         <TextView
-            android:id="@+id/content_title_1"
-            android:layout_width="match_parent"
+            android:id="@+id/content_tile_1"
+            android:layout_width="46dp"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="@color/widget_on_bg"
-            android:textSize="14sp"/>
+            android:layout_marginEnd="10dp"
+            android:background="@drawable/widget_tile_bg"
+            android:gravity="center"
+            android:lineSpacingExtra="-2dp"
+            android:minHeight="40dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:textColor="@color/widget_on_accent_container"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone"/>
 
-        <TextView
-            android:id="@+id/content_preview_1"
-            android:layout_width="match_parent"
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="@color/widget_muted"
-            android:textSize="12sp"/>
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/content_title_1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_on_bg"
+                android:textSize="14sp"/>
+
+            <TextView
+                android:id="@+id/content_preview_1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:textColor="@color/widget_muted"
+                android:textSize="12sp"/>
+        </LinearLayout>
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/content_row_2"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="8dp"
         android:clickable="true"
         android:focusable="true"
-        android:orientation="vertical">
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
         <TextView
-            android:id="@+id/content_title_2"
-            android:layout_width="match_parent"
+            android:id="@+id/content_tile_2"
+            android:layout_width="46dp"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="@color/widget_on_bg"
-            android:textSize="14sp"/>
+            android:layout_marginEnd="10dp"
+            android:background="@drawable/widget_tile_bg"
+            android:gravity="center"
+            android:lineSpacingExtra="-2dp"
+            android:minHeight="40dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:textColor="@color/widget_on_accent_container"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone"/>
 
-        <TextView
-            android:id="@+id/content_preview_2"
-            android:layout_width="match_parent"
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="@color/widget_muted"
-            android:textSize="12sp"/>
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/content_title_2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_on_bg"
+                android:textSize="14sp"/>
+
+            <TextView
+                android:id="@+id/content_preview_2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:textColor="@color/widget_muted"
+                android:textSize="12sp"/>
+        </LinearLayout>
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/content_row_3"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="8dp"
         android:clickable="true"
         android:focusable="true"
-        android:orientation="vertical">
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
         <TextView
-            android:id="@+id/content_title_3"
-            android:layout_width="match_parent"
+            android:id="@+id/content_tile_3"
+            android:layout_width="46dp"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="@color/widget_on_bg"
-            android:textSize="14sp"/>
+            android:layout_marginEnd="10dp"
+            android:background="@drawable/widget_tile_bg"
+            android:gravity="center"
+            android:lineSpacingExtra="-2dp"
+            android:minHeight="40dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:textColor="@color/widget_on_accent_container"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone"/>
 
-        <TextView
-            android:id="@+id/content_preview_3"
-            android:layout_width="match_parent"
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="@color/widget_muted"
-            android:textSize="12sp"/>
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/content_title_3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_on_bg"
+                android:textSize="14sp"/>
+
+            <TextView
+                android:id="@+id/content_preview_3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:textColor="@color/widget_muted"
+                android:textSize="12sp"/>
+        </LinearLayout>
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/content_row_4"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="8dp"
         android:clickable="true"
         android:focusable="true"
-        android:orientation="vertical">
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
         <TextView
-            android:id="@+id/content_title_4"
-            android:layout_width="match_parent"
+            android:id="@+id/content_tile_4"
+            android:layout_width="46dp"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="@color/widget_on_bg"
-            android:textSize="14sp"/>
+            android:layout_marginEnd="10dp"
+            android:background="@drawable/widget_tile_bg"
+            android:gravity="center"
+            android:lineSpacingExtra="-2dp"
+            android:minHeight="40dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:textColor="@color/widget_on_accent_container"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone"/>
 
-        <TextView
-            android:id="@+id/content_preview_4"
-            android:layout_width="match_parent"
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="@color/widget_muted"
-            android:textSize="12sp"/>
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/content_title_4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_on_bg"
+                android:textSize="14sp"/>
+
+            <TextView
+                android:id="@+id/content_preview_4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:textColor="@color/widget_muted"
+                android:textSize="12sp"/>
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

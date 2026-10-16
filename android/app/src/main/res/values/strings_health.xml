@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Health Connect: the import card in Sport › Types et podomètre, and the
+    screen Health Connect opens when someone asks why this app wants access.
+    Tutoiement, like the rest of the app. The app's name is never written out:
+    it may be wearing a disguise.
+-->
+<resources>
+    <!-- ===== Carte d'import (Sport › Types et podomètre) ===== -->
+    <string name="health_card_sub">Importe tes séances, tes pas, ta fréquence cardiaque et la distance enregistrés par ta montre ou une autre app. Lecture seule : rien n\'est jamais écrit dans Health Connect.</string>
+    <string name="health_switch">Importer depuis Health Connect</string>
+    <string name="health_sync_now">Synchroniser maintenant</string>
+    <string name="health_why">Ce qui est lu, et pourquoi</string>
+    <string name="health_last_sync">Dernière synchronisation : %1$s</string>
+    <string name="health_never_synced">Pas encore synchronisé.</string>
+    <string name="health_syncing">Synchronisation…</string>
+    <string name="health_unavailable">Health Connect n\'est pas disponible sur ce téléphone.</string>
+    <string name="health_needs_provider">Health Connect doit être installé ou mis à jour pour que l\'import fonctionne.</string>
+    <string name="health_install">Installer Health Connect</string>
+    <string name="health_not_permitted">Health Connect n\'a donné accès à aucune donnée. Tu peux redemander l\'accès, ou choisir ce que tu partages dans Health Connect.</string>
+    <string name="health_grant">Autoriser l\'accès</string>
+    <string name="health_refused">Aucun accès accordé : l\'import reste désactivé.</string>
+    <string name="health_failed">La synchronisation a échoué : %1$s</string>
+    <string name="health_nothing_new">Rien de nouveau.</string>
+    <string name="health_imported">Importé : %1$s, %2$s.</string>
+    <plurals name="health_sessions">
+        <item quantity="one">%1$d séance</item>
+        <item quantity="other">%1$d séances</item>
+    </plurals>
+    <plurals name="health_step_days">
+        <item quantity="one">%1$d jour de pas</item>
+        <item quantity="other">%1$d jours de pas</item>
+    </plurals>
+
+    <!-- ===== Écran « Ce qui est lu, et pourquoi » =====
+         Ouvert par Health Connect depuis ses réglages d'autorisations, ou par
+         le lien de la carte. -->
+    <string name="health_rationale_title">Health Connect</string>
+    <string name="health_rationale_lead">Le module Sport peut lire certaines données de Health Connect, si tu l\'y autorises. Voici exactement lesquelles, et ce qu\'elles deviennent.</string>
+    <string name="health_rationale_what_title">Ce qui est lu</string>
+    <string name="health_rationale_what_body">Tes séances d\'exercice (type, début, durée, titre), tes pas jour par jour, ta fréquence cardiaque et la distance parcourue pendant ces séances. Rien d\'autre : ni ton itinéraire, ni ton sommeil, ni aucune autre donnée de santé.</string>
+    <string name="health_rationale_why_title">Pourquoi</string>
+    <string name="health_rationale_why_body">Pour remplir le module Sport sans tout ressaisir : les séances que ta montre a enregistrées, et ton calendrier de pas. La fréquence cardiaque et la distance servent seulement à compléter chaque séance (moyenne, maximum, kilomètres).</string>
+    <string name="health_rationale_where_title">Où ça va</string>
+    <string name="health_rationale_where_body">Nulle part ailleurs que sur ton téléphone, dans le coffre chiffré de l\'app. Il n\'y a ni compte ni serveur, et l\'app ne demande même pas l\'accès à Internet. La lecture se fait seulement quand l\'app est ouverte et déverrouillée.</string>
+    <string name="health_rationale_readonly_title">Lecture seule</string>
+    <string name="health_rationale_readonly_body">L\'app n\'écrit jamais dans Health Connect et n\'y efface rien.</string>
+    <string name="health_rationale_stop_title">Arrêter</string>
+    <string name="health_rationale_stop_body">Désactive « Importer depuis Health Connect » dans Sport › Types et podomètre, ou retire l\'accès depuis Health Connect. Ce qui a déjà été importé reste dans ton coffre jusqu\'à ce que tu le supprimes.</string>
+    <string name="health_rationale_policy">Politique de confidentialité</string>
+    <string name="health_rationale_policy_url">https://douxev.github.io/eggshell/</string>
+    <string name="health_rationale_close">Fermer</string>
+</resources>

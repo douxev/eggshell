@@ -56,24 +56,52 @@ class WidgetConfigPrefs(context: Context) {
     fun get(widgetId: Int): Config = all()[widgetId] ?: Config()
 
     fun put(widgetId: Int, config: Config) {
-        writeAll(all() + (widgetId to config))
+        synchronized(LOCK) { writeAll(all() + (widgetId to config)) }
     }
 
     fun remove(widgetIds: IntArray) {
+        if (widgetIds.isEmpty()) return
         val gone = widgetIds.toSet()
-        writeAll(all().filterKeys { it !in gone })
+        synchronized(LOCK) {
+            val current = all()
+            if (current.keys.none { it in gone }) return
+            writeAll(current.filterKeys { it !in gone })
+        }
+    }
+
+    /**
+     * Drop every row whose widget is no longer placed. Returns how many went.
+     *
+     * [onDeleted] is the normal way a row goes, but it is not the only way a
+     * widget disappears: a provider disabled by a module switch or a decoy, or
+     * removed by an update, takes its widgets with it and is never told. A
+     * launcher can then hand the same id to a new widget, which would inherit a
+     * consent it was never given. The caller passes the ids the system still
+     * knows about, and only when it could read all of them.
+     */
+    fun retainOnly(liveIds: Set<Int>): Int = synchronized(LOCK) {
+        val current = all()
+        val kept = current.filterKeys { it in liveIds }
+        if (kept.size == current.size) return 0
+        writeAll(kept)
+        current.size - kept.size
     }
 
     /**
      * Turn every instance back into a door.
      *
-     * Called when the vault moves to paranoid mode: the opt-in was given under
-     * a different promise, and silently honouring it afterwards would leave
-     * content on the home screen that the mode the user just chose says cannot
-     * be there.
+     * Called when the vault moves to paranoid mode and when a decoy PIN is
+     * set: the opt-in was given under a different promise, and silently
+     * honouring it afterwards would leave content on the home screen that the
+     * mode the user just chose says cannot be there.
      */
     fun revokeAllContent() {
-        writeAll(all().mapValues { (_, c) -> c.copy(showsContent = false) })
+        synchronized(LOCK) { writeAll(all().mapValues { (_, c) -> c.copy(showsContent = false) }) }
+    }
+
+    /** Forget every row. For a vault wipe: the widgets\' consents go with it. */
+    fun clearAll() {
+        synchronized(LOCK) { prefs.edit().remove(KEY_BLOB).commit() }
     }
 
     fun all(): Map<Int, Config> {
@@ -96,6 +124,9 @@ class WidgetConfigPrefs(context: Context) {
         const val DEFAULT_ROWS = 3
         private const val PREFS_NAME = "transition_widget_config"
         private const val KEY_BLOB = "cfg"
+
+        /** Every read-modify-write of the blob, in every instance, holds this. */
+        private val LOCK = Any()
     }
 }
 

@@ -45,6 +45,22 @@ object WidgetTime {
         )
     }
 
+    /**
+     * A date as the two lines of a leading tile: the day number over the
+     * month's short name, "12" over "SEPT.". Absolute, unlike everything else
+     * here, because a date does not drift — only the distance to it does, and
+     * that is what the line beside the tile carries.
+     */
+    fun dateTile(atMs: Long, locale: java.util.Locale = java.util.Locale.getDefault()): String {
+        val date = java.time.Instant.ofEpochMilli(atMs)
+            .atZone(java.time.ZoneId.systemDefault())
+            .toLocalDate()
+        val month = java.time.format.DateTimeFormatter.ofPattern("MMM", locale)
+            .format(date)
+            .uppercase(locale)
+        return "${date.dayOfMonth}\n$month"
+    }
+
     internal enum class Scale { MINUTES, HOURS, DAYS }
 
     /**

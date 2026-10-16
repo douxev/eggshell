@@ -107,6 +107,8 @@ class SettingsHubViewModel @Inject constructor(
 
     val theme: StateFlow<AppTheme> = themePrefs.theme
     val notifMode: StateFlow<NotifContentPrefs.Mode> = notifContent.mode
+    val notifGrouped: StateFlow<Boolean> = notifContent.grouped
+    fun setNotifGrouped(enabled: Boolean) = notifContent.setGrouped(enabled)
 
     private val _lockMode = MutableStateFlow(vault.currentMode)
     val lockMode: StateFlow<VaultPrefs.Mode?> = _lockMode.asStateFlow()
@@ -164,6 +166,7 @@ fun SettingsHubScreen(
     val enabled by vm.enabledModules.collectAsState()
     val theme by vm.theme.collectAsState()
     val notifMode by vm.notifMode.collectAsState()
+    val notifGrouped by vm.notifGrouped.collectAsState()
     val lockMode by vm.lockMode.collectAsState()
     val decoyOn by vm.decoyOn.collectAsState()
     val estradiolUnit by vm.estradiolUnit.collectAsState()
@@ -244,6 +247,8 @@ fun SettingsHubScreen(
                 NotifContentCard(
                     selected = notifMode,
                     onSelect = vm::setNotifMode,
+                    grouped = notifGrouped,
+                    onGrouped = vm::setNotifGrouped,
                 )
             }
             item {
@@ -310,6 +315,8 @@ private fun DoorRow(
 private fun NotifContentCard(
     selected: NotifContentPrefs.Mode,
     onSelect: (NotifContentPrefs.Mode) -> Unit,
+    grouped: Boolean,
+    onGrouped: (Boolean) -> Unit,
 ) {
     val options = listOf(
         NotifContentPrefs.Mode.GENERIC to R.string.set_notif_chip_generic,
@@ -379,6 +386,29 @@ private fun NotifContentCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+        // Whether reminders due together arrive together. Next to the content
+        // mode because it is the same question — what a medication reminder
+        // looks like — and the grouped one follows that mode for its names.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.settings_notif_grouped),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    stringResource(R.string.settings_notif_grouped_sub),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            androidx.compose.material3.Switch(checked = grouped, onCheckedChange = onGrouped)
         }
     }
 }

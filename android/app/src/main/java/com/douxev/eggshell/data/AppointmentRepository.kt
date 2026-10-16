@@ -19,7 +19,19 @@ import uniffi.transition.NewAppointment
 class AppointmentRepository @Inject constructor(
     private val vault: VaultRepository,
     private val alarmScheduler: AlarmScheduler,
+    private val mirrors: com.douxev.eggshell.widget.WidgetMirrorUpdater,
 ) {
+    /**
+     * Kept in step after every write. A widget configured to show content
+     * reads a mirror, not the vault — so an entry saved and not mirrored is a
+     * home screen quietly showing the previous state. Cheap when nobody opted
+     * in, which is the default, and never allowed to turn a successful write
+     * into a failure.
+     */
+    private suspend fun mirrorChanged() {
+        runCatching { mirrors.refresh() }
+    }
+
     suspend fun list(offset: Long = 0, limit: Long = 500): List<Appointment> =
         withContext(Dispatchers.IO) { vault.requireSession().listAppointments(offset, limit) }
 
@@ -30,18 +42,18 @@ class AppointmentRepository @Inject constructor(
         val saved = vault.requireSession().addAppointment(entry)
         syncReminder(saved.id, saved.reminderAtMs)
         saved
-    }
+    }.also { mirrorChanged() }
 
     suspend fun update(id: Long, entry: NewAppointment): Appointment = withContext(Dispatchers.IO) {
         val saved = vault.requireSession().updateAppointment(id, entry)
         syncReminder(saved.id, saved.reminderAtMs)
         saved
-    }
+    }.also { mirrorChanged() }
 
     suspend fun delete(id: Long) = withContext(Dispatchers.IO) {
         vault.requireSession().deleteAppointment(id)
         alarmScheduler.cancelAppointment(id)
-    }
+    }.also { mirrorChanged() }
 
     /**
      * Re-arm every future appointment reminder. Appointment alarms don't

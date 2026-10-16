@@ -74,13 +74,11 @@
          lisible sans déverrouiller. -->
     <string name="module_widget_subtitle">Ouvrir le module</string>
     <string name="module_widget_add">Ajouter</string>
-    <string name="module_widget_description">Accès direct à un module.</string>
     <string name="module_widget_label_meds">Médics</string>
     <string name="module_widget_label_journal">Journal</string>
     <string name="module_widget_label_labs">Analyses</string>
     <string name="module_widget_label_appointments">RDV</string>
     <string name="module_widget_label_notes">Notes</string>
-    <string name="module_widget_label_weight">Poids</string>
     <string name="module_widget_label_bleeding">Menstruations</string>
     <string name="module_widget_label_photos">Photos</string>
     <string name="module_widget_label_voice">Voix</string>
@@ -160,12 +158,10 @@
     <string name="sport_field_duration">Durée</string>
     <string name="sport_field_note">Notes</string>
     <string name="sport_field_when">Date et heure</string>
-    <string name="sport_duration_fmt">%1$s</string>
     <string name="sport_duration_hm">%1$d h %2$02d</string>
     <string name="sport_duration_m">%1$d min</string>
     <string name="sport_no_activity">Sans type</string>
     <string name="sport_activities_title">Types d\'activité</string>
-    <string name="sport_activities_manage">Gérer les types</string>
     <string name="sport_activity_new">Nouveau type</string>
     <string name="sport_activity_name">Nom</string>
     <string name="sport_activity_kind">Catégorie</string>
@@ -186,15 +182,14 @@
     <string name="sport_stat_week_time">de sport</string>
     <string name="sport_stat_streak">jours d\'affilée</string>
     <string name="sport_stat_best_streak">Meilleure série : %1$d jours</string>
-    <string name="sport_stat_steps_today">%1$d pas aujourd\'hui sur %2$d</string>
+    <string name="sport_stat_steps_today">%1$s pas aujourd\'hui sur %2$s</string>
     <string name="sport_pedometer">Compter mes pas</string>
-    <string name="sport_pedometer_sub">Utilise le capteur de l\'appareil. Rien ne sort du téléphone, et le comptage s\'arrête dès que tu désactives cette option.</string>
+    <string name="sport_pedometer_sub">Utilise le capteur de l\'appareil, y compris app fermée, sans notification permanente. Rien ne sort du téléphone, et le comptage s\'arrête dès que tu désactives cette option.</string>
     <string name="sport_steps_none">Aucun pas enregistré ce jour-là.</string>
-    <string name="sport_steps_count">%1$d pas</string>
+    <string name="sport_steps_count">%1$s pas</string>
 
-    <string name="sport_import">Importer</string>
     <string name="sport_import_title">Importer depuis ta montre</string>
-    <string name="sport_import_empty">Aucune séance trouvée dans ce fichier. Exporte un .gpx ou un .tcx depuis l\'app de ta montre.</string>
+    <string name="sport_import_empty">Aucune séance trouvée dans ce fichier. Exporte un .fit, un .gpx ou un .tcx depuis l\'app de ta montre.</string>
     <string name="sport_import_all_dupes">Ces séances sont déjà enregistrées.</string>
     <string name="sport_import_confirm">Importer</string>
     <plurals name="sport_import_found">
@@ -215,15 +210,63 @@
     <string name="sport_hr_title">Fréquence cardiaque</string>
     <string name="sport_hr_connect">Connecter</string>
     <string name="sport_hr_disconnect">Déconnecter</string>
-    <string name="sport_hr_idle">Connecte une ceinture, une bague ou ta montre en mode diffusion. Rien ne sort du téléphone.</string>
+    <string name="sport_hr_idle">Connecte une ceinture, une bague ou ta montre en mode « diffusion de la fréquence cardiaque » (Garmin, Polar, Coros, Suunto, Amazfit…). L\'Apple Watch et la plupart des montres Wear OS ne diffusent pas. Rien ne sort du téléphone.</string>
     <string name="sport_hr_scanning">Recherche d\'un capteur…</string>
     <string name="sport_hr_connecting">Connexion à %1$s…</string>
     <string name="sport_hr_waiting">Connecté. En attente d\'une première mesure.</string>
     <string name="sport_hr_live">%1$d bpm</string>
     <string name="sport_hr_bluetooth_off">Le Bluetooth est éteint.</string>
     <string name="sport_hr_no_permission">Autorisation Bluetooth refusée.</string>
-    <string name="sport_hr_not_found">Aucun capteur trouvé. Vérifie qu\'il diffuse bien sa fréquence cardiaque.</string>
+    <string name="sport_hr_not_found">Aucun capteur trouvé en 20 secondes. Vérifie que la diffusion de la fréquence cardiaque est activée sur la montre ou que la ceinture est bien portée, puis réessaie.</string>
     <string name="sport_hr_disconnected">Capteur déconnecté.</string>
     <string name="sport_hr_unsupported">Cet appareil ne gère pas ce type de capteur.</string>
     <string name="sport_hr_avg">%1$d bpm moy.</string>
+    <!-- Sport : les portes du module (rappels, import, types + podomètre). -->
+    <string name="sport_link_reminders">Rappels de séance</string>
+    <string name="sport_link_reminders_none">Aucun rappel programmé</string>
+    <plurals name="sport_link_reminders_count">
+        <item quantity="one">%1$d rappel programmé</item>
+        <item quantity="other">%1$d rappels programmés</item>
+    </plurals>
+    <string name="sport_link_import">Importer depuis ta montre</string>
+    <string name="sport_link_import_sub">Un fichier .fit, .gpx ou .tcx exporté par l\'app de ta montre. Rien n\'est envoyé nulle part.</string>
+    <string name="sport_link_types">Types d\'activité et podomètre</string>
+    <string name="sport_link_types_sub">Tes types de séance, le compteur de pas et l\'objectif quotidien.</string>
+    <string name="sport_settings_title">Types et podomètre</string>
+    <string name="sport_pedometer_unavailable">Cet appareil n\'a pas de capteur de pas.</string>
+    <string name="sport_goal_label">Objectif quotidien</string>
+    <string name="sport_goal_custom">Autre objectif (pas)</string>
+    <string name="sport_goal_steps">%1$s pas</string>
+    <string name="sport_reminders_title">Rappels de séance</string>
+    <string name="sport_reminders_hint">Une notification discrète à l\'heure choisie, sans dire de quoi il s\'agit. Tu retrouves aussi ces rappels dans Réglages › Rappels.</string>
+
+    <!-- Pedometer: permission, day correction, month summary -->
+    <string name="sport_pedometer_no_permission">L\'autorisation « Activité physique » est refusée : tes pas ne sont plus comptés.</string>
+    <string name="sport_pedometer_grant">Autoriser</string>
+    <string name="sport_steps_correct">Corriger</string>
+    <string name="sport_steps_correct_label">Nombre de pas ce jour-là</string>
+    <string name="sport_steps_correct_failed">La correction n\'a pas pu être enregistrée.</string>
+    <string name="sport_steps_month_empty">Aucun pas compté ce mois-ci.</string>
+    <string name="sport_steps_month_total">pas ce mois-ci</string>
+    <string name="sport_steps_month_average">pas par jour</string>
+    <plurals name="sport_steps_month_goal_days">
+        <item quantity="one">jour à l\'objectif</item>
+        <item quantity="other">jours à l\'objectif</item>
+    </plurals>
+    <string name="sport_steps_month_best">Meilleur jour : %1$s pas</string>
+    <string name="sport_steps_month_change">Moyenne : %1$s %% par rapport au mois précédent</string>
+    <plurals name="sport_steps_goal_streak">
+        <item quantity="one">%1$d jour d\'affilée à l\'objectif</item>
+        <item quantity="other">%1$d jours d\'affilée à l\'objectif</item>
+    </plurals>
+    <string name="sport_steps_goal_streak_best">record : %1$d</string>
+    <string name="sport_steps_year_total">Cette année : %1$s pas</string>
+
+    <!-- Session editor: reconnection and chronometer -->
+    <string name="sport_hr_reconnecting">Signal perdu, reconnexion… La moyenne déjà mesurée est conservée.</string>
+    <string name="sport_timer_title">Chronomètre</string>
+    <string name="sport_timer_idle">Lance-le au début de la séance : la durée se remplit toute seule à l\'arrêt.</string>
+    <string name="sport_timer_start">Démarrer</string>
+    <string name="sport_timer_stop">Arrêter</string>
+    <string name="sport_hr_unnamed">ton capteur</string>
 </resources>
